@@ -1,0 +1,22 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme (black / dark). -->
+    <style name="Base.Theme.CallQTV" parent="Theme.Material3.Dark.NoActionBar">
+        <!-- Force a black background across the app. -->
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+
+    <style name="Theme.CallQTV" parent="Base.Theme.CallQTV" >
+        <item name="alpha">1.0</item>
+        <!-- Keep a consistent black background for all windows. -->
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+
+ <!--   <style name="ChipStyle" parent="Widget.AppCompat.Button.Borderless">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">40dp</item>
+        <item name="android:layout_marginEnd">2dp</item>
+        <item name="android:background">@drawable/predefined_button_bg</item>
+        <item name="android:textColor">@color/black</item>
+        <item name="android:textSize">12dp</item>
+    </style>-->
+</resources>

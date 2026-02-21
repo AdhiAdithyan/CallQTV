@@ -1,0 +1,12 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme (black / dark). -->
+    <style name="Base.Theme.CallQTV" parent="Theme.Material3.Dark.NoActionBar">
+        <!-- Force a black background across the app at night as well. -->
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+
+    <style name="Theme.CallQTV" parent="Base.Theme.CallQTV" >
+        <item name="alpha">1.0</item>
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+</resources>
