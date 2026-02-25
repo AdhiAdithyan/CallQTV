@@ -158,9 +158,22 @@ class CustomerIdActivity : AppCompatActivity() {
             }
             is RegistrationState.Error -> {
                 AlertDialog(
+                    modifier = Modifier.fillMaxWidth(0.8f),
                     onDismissRequest = { registrationViewModel.resetState() },
                     title = { Text("Registration error") },
-                    text = { Text("${state.message}\n\nDeviceID:$deviceId") },
+                    text = {
+                        Column {
+                            Text(
+                                text = state.message,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Device ID: $deviceId",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    },
                     confirmButton = {
                         TextButton(onClick = { registrationViewModel.retryRegistrationFlow() }) { Text("Retry") }
                     },
@@ -171,9 +184,22 @@ class CustomerIdActivity : AppCompatActivity() {
             }
             is RegistrationState.ProductAuthRequired -> {
                 AlertDialog(
+                    modifier = Modifier.fillMaxWidth(0.8f),
                     onDismissRequest = { registrationViewModel.resetState() },
                     title = { Text("License status") },
-                    text = { Text("${state.status}\n\nDeviceID:$deviceId") },
+                    text = {
+                        Column {
+                            Text(
+                                text = state.status,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Device ID: $deviceId",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    },
                     confirmButton = {
                         TextButton(onClick = { registrationViewModel.startRegistrationFlow() }) { Text("Refresh") }
                     },
@@ -184,9 +210,22 @@ class CustomerIdActivity : AppCompatActivity() {
             }
             is RegistrationState.DeviceApprovalRequired -> {
                 AlertDialog(
+                    modifier = Modifier.fillMaxWidth(0.8f),
                     onDismissRequest = { registrationViewModel.resetState() },
                     title = { Text("Device approval required") },
-                    text = { Text("${state.status}\n\nDeviceID:$deviceId") },
+                    text = {
+                        Column {
+                            Text(
+                                text = state.status,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Device ID: $deviceId",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    },
                     confirmButton = {
                         TextButton(onClick = { registrationViewModel.startRegistrationFlow() }) { Text("Refresh") }
                     },
@@ -197,9 +236,22 @@ class CustomerIdActivity : AppCompatActivity() {
             }
             is RegistrationState.LicenseExpired -> {
                 AlertDialog(
+                    modifier = Modifier.fillMaxWidth(0.8f),
                     onDismissRequest = { registrationViewModel.resetState() },
                     title = { Text("License expired") },
-                    text = { Text("${state.status}\n\nDeviceID:$deviceId") },
+                    text = {
+                        Column {
+                            Text(
+                                text = state.status,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Device ID: $deviceId",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    },
                     confirmButton = {
                         TextButton(onClick = { registrationViewModel.startRegistrationFlow() }) { Text("Refresh") }
                     },
@@ -210,9 +262,22 @@ class CustomerIdActivity : AppCompatActivity() {
             }
             is RegistrationState.UpdateAvailable -> {
                 AlertDialog(
+                    modifier = Modifier.fillMaxWidth(0.8f),
                     onDismissRequest = { },
                     title = { Text("Update available") },
-                    text = { Text("A new version is available. Please update to continue.\n\nDeviceID:$deviceId") },
+                    text = {
+                        Column {
+                            Text(
+                                text = "A new version is available. Please update to continue.",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Device ID: $deviceId",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    },
                     confirmButton = {
                         TextButton(onClick = {
                             downloadViewModel.downloadApk(this, state.downloadURL, state.apkVersion)

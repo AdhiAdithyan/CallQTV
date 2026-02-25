@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.scale
 import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
@@ -1245,6 +1246,7 @@ fun AppearanceSettingsDialog(
     isCounterAnnouncementEnabled: Boolean?,
     companyName: String
 ) {
+    var showThemeColorPicker by remember { mutableStateOf(false) }
     var showCounterColorPicker by remember { mutableStateOf(false) }
     var showTokenColorPicker by remember { mutableStateOf(false) }
     var showClearConfirmDialog by remember { mutableStateOf(false) }
@@ -1266,11 +1268,17 @@ fun AppearanceSettingsDialog(
         }
     }
 
-    // Theme Dropdown
-    var expanded by remember { mutableStateOf(false) }
-    val currentThemeName = ThemeColorManager.themeColorOptions.find { it.hexCode == currentThemeHex }?.name ?: "Custom"
-
-    if (showCounterColorPicker) {
+    if (showThemeColorPicker) {
+        PresetThemeColorDialog(
+            title = "App Theme",
+            onColorSelected = {
+                onThemeSelected(it)
+                currentThemeHex = it
+                showThemeColorPicker = false
+            },
+            onDismiss = { showThemeColorPicker = false }
+        )
+    } else if (showCounterColorPicker) {
         PresetColorDialog(
             title = "Counter Background",
             onColorSelected = { 
@@ -1292,182 +1300,168 @@ fun AppearanceSettingsDialog(
         )
     } else {
         AlertDialog(
-            modifier = Modifier.fillMaxWidth(0.9f),
+            modifier = Modifier.fillMaxWidth(0.95f),
             onDismissRequest = onDismiss,
             title = { Text("Settings", style = MaterialTheme.typography.titleSmall) },
             text = {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(1.dp)
+                    verticalArrangement = Arrangement.spacedBy(0.dp)
                 ) {
-                    // 1. Device Info
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.5f))
-                    ) {
-                        Column(modifier = Modifier.padding(8.dp).fillMaxWidth()) {
-                            // Header: Icon + Company Name
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                androidx.compose.foundation.Image(
-                                    painter = painterResource(id = R.drawable.callq_tv_logo),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(32.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column {
-                                    Text(
-                                        text = companyName,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = "System Information",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
-                            
-                            InfoRow("Company ID", String.format("%04d", customerId))
-                            InfoRow("Device ID", macAddress)
-                            InfoRow("App Version", appVersion)
-                            if (daysUntilExpiry != null) {
-                                val expiryText = if (daysUntilExpiry <= 0) "Expired" else "Expires in $daysUntilExpiry days"
-                                val color = if (daysUntilExpiry <= 10) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-                                InfoRow("License", expiryText, color)
-                            }
-                            val tokenAnnText = if (isTokenAnnouncementEnabled == true) "Enabled" else "Disabled"
-                            val counterAnnText = if (isCounterAnnouncementEnabled == true) "Enabled" else "Disabled"
-                            InfoRow("Token announcement", tokenAnnText)
-                            InfoRow("Counter announcement", counterAnnText)
-                        }
-                    }
-
-                    HorizontalDivider()
-
-                    Text(
-                        "Appearance",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-
-                    // App theme + counter/token background in a single horizontal row
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Top
                     ) {
-                        Box(modifier = Modifier.weight(1.4f)) {
-                            ExposedDropdownMenuBox(
-                                expanded = expanded,
-                                onExpandedChange = { expanded = it },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                OutlinedTextField(
-                                    value = currentThemeName,
-                                    onValueChange = {},
-                                    readOnly = true,
-                                    label = { Text("App Theme") },
-                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-                                    modifier = Modifier
-                                        .menuAnchor()
-                                        .fillMaxWidth()
-                                        .clickable { expanded = !expanded }
+                        // Left column: Company / device details
+                        Column(
+                            modifier = Modifier.weight(1.2f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                                 )
-                                ExposedDropdownMenu(
-                                    expanded = expanded,
-                                    onDismissRequest = { expanded = false }
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .padding(4.dp)
+                                        .fillMaxWidth()
                                 ) {
-                                    ThemeColorManager.themeColorOptions.forEach { option ->
-                                        DropdownMenuItem(
-                                            text = { 
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .size(14.dp)
-                                                            .background(
-                                                                ThemeColorManager.getBackgroundBrush(option.hexCode),
-                                                                CircleShape
-                                                            )
-                                                    )
-                                                    Spacer(modifier = Modifier.width(4.dp))
-                                                    Text(
-                                                        option.name,
-                                                        style = MaterialTheme.typography.labelSmall
-                                                    )
-                                                }
-                                            },
-                                            onClick = {
-                                                onThemeSelected(option.hexCode)
-                                                currentThemeHex = option.hexCode
-                                                expanded = false
-                                            }
+                                    // Header: Icon + Company Name
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        androidx.compose.foundation.Image(
+                                            painter = painterResource(id = R.drawable.callq_tv_logo),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(32.dp)
                                         )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Column {
+                                            Text(
+                                                text = companyName,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                text = "System Information",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    }
+                                    HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+
+                                    InfoRow("Company ID", String.format("%04d", customerId))
+                                    InfoRow("Device ID", macAddress)
+                                    InfoRow("App Version", appVersion)
+                                    if (daysUntilExpiry != null) {
+                                        val expiryText =
+                                            if (daysUntilExpiry <= 0) "Expired" else "Expires in $daysUntilExpiry days"
+                                        val color =
+                                            if (daysUntilExpiry <= 10) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                                        InfoRow("License", expiryText, color)
+                                    }
+                                    val tokenAnnText =
+                                        if (isTokenAnnouncementEnabled == true) "Enabled" else "Disabled"
+                                    val counterAnnText =
+                                        if (isCounterAnnouncementEnabled == true) "Enabled" else "Disabled"
+                                    InfoRow("Token announcement", tokenAnnText)
+                                    InfoRow("Counter announcement", counterAnnText)
+                                }
+                            }
+                        }
+
+                        // Right column: Appearance + actions
+                        Column(
+                            modifier = Modifier.weight(0.8f),
+                            verticalArrangement = Arrangement.spacedBy(1.dp)
+                        ) {
+                            Text(
+                                "Appearance",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+
+                            // App theme, Counter BG, Token BG in a single vertical column
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Box(modifier = Modifier.fillMaxWidth()) {
+                                    ColorPickerButton("App Theme", currentThemeHex) {
+                                        showThemeColorPicker = true
+                                    }
+                                }
+
+                                Box(modifier = Modifier.fillMaxWidth()) {
+                                    ColorPickerButton("Counter BG", currentCounterHex) {
+                                        showCounterColorPicker = true
+                                    }
+                                }
+
+                                Box(modifier = Modifier.fillMaxWidth()) {
+                                    ColorPickerButton("Token BG", currentTokenHex) {
+                                        showTokenColorPicker = true
                                     }
                                 }
                             }
-                        }
 
-                        Box(modifier = Modifier.weight(0.8f)) {
-                            ColorPickerButton("Counter BG", currentCounterHex) { showCounterColorPicker = true }
-                        }
-
-                        Box(modifier = Modifier.weight(0.8f)) {
-                            ColorPickerButton("Token BG", currentTokenHex) { showTokenColorPicker = true }
-                        }
-                    }
-
-                    // Clear saved token details (with confirmation)
-                    HorizontalDivider()
-                    OutlinedButton(
-                        onClick = { showClearConfirmDialog = true },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Start,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                "Clear saved token details",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
-
-                    HorizontalDivider()
-
-                    // Time Format
-                    val viewModel = viewModel<com.softland.callqtv.viewmodel.TokenDisplayViewModel>()
-                    Row(
-                        modifier = Modifier.fillMaxWidth().clickable { 
-                            val newState = !is24Hour
-                            is24Hour = newState
-                            context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
-                                .edit().putBoolean("use_24_hour_format", newState).apply()
-                            viewModel.setTimeFormat(newState)
-                        },
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text("Time Format", style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                if (is24Hour) "24-Hour (14:30)" else "12-Hour (2:30 PM)",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.Gray
-                            )
-                        }
-                        Switch(
-                            checked = is24Hour,
-                            onCheckedChange = { 
-                                is24Hour = it 
-                                context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
-                                    .edit().putBoolean("use_24_hour_format", it).apply()
-                                viewModel.setTimeFormat(it)
+                            // Clear saved token details (with confirmation)
+                            HorizontalDivider()
+                            OutlinedButton(
+                                onClick = { showClearConfirmDialog = true },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.Start,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "Clear saved token details",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
                             }
-                        )
+
+                            HorizontalDivider()
+
+                            // Time Format
+                            val viewModel =
+                                viewModel<com.softland.callqtv.viewmodel.TokenDisplayViewModel>()
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        val newState = !is24Hour
+                                        is24Hour = newState
+                                        context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
+                                            .edit().putBoolean("use_24_hour_format", newState).apply()
+                                        viewModel.setTimeFormat(newState)
+                                    },
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text("Time Format", style = MaterialTheme.typography.bodyMedium)
+                                    Text(
+                                        if (is24Hour) "24-Hour (14:30)" else "12-Hour (2:30 PM)",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.Gray
+                                    )
+                                }
+                                Switch(
+                                    checked = is24Hour,
+                                    onCheckedChange = {
+                                        is24Hour = it
+                                        context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
+                                            .edit().putBoolean("use_24_hour_format", it).apply()
+                                        viewModel.setTimeFormat(it)
+                                    },
+                                    modifier = Modifier.scale(0.85f)
+                                )
+                            }
+                        }
                     }
                 }
             },
@@ -1525,15 +1519,15 @@ fun ColorPickerButton(label: String, hex: String, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        modifier = Modifier.width(130.dp)
+        border = BorderStroke(2.dp, MaterialTheme.colorScheme.outline),
+        modifier = Modifier.width(140.dp)
     ) {
         Row(modifier = Modifier.padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
                     .size(18.dp)
                     .background(ThemeColorManager.getBackgroundBrush(hex), RoundedCornerShape(4.dp))
-                    .border(1.dp, Color.Gray, RoundedCornerShape(4.dp))
+                    .border(2.dp, Color.Gray, RoundedCornerShape(4.dp))
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(label, fontSize = 11.sp)
@@ -1572,6 +1566,54 @@ fun PresetColorDialog(
                             modifier = Modifier.fillMaxSize().background(ThemeColorManager.getBackgroundBrush(option.hexCode))
                          )
                      }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun PresetThemeColorDialog(
+    title: String,
+    onColorSelected: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        modifier = Modifier.fillMaxWidth(0.9f),
+        onDismissRequest = onDismiss,
+        title = { Text(title, style = MaterialTheme.typography.titleSmall) },
+        text = {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(5),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                modifier = Modifier.heightIn(max = 300.dp)
+            ) {
+                items(ThemeColorManager.themeColorOptions) { option ->
+                    var focused by remember { mutableStateOf(false) }
+                    Surface(
+                        onClick = { onColorSelected(option.hexCode) },
+                        modifier = Modifier
+                            .aspectRatio(1f)
+                            .onFocusChanged { focused = it.isFocused },
+                        shape = RoundedCornerShape(8.dp),
+                        border = if (focused)
+                            BorderStroke(3.dp, MaterialTheme.colorScheme.primary)
+                        else
+                            BorderStroke(2.dp, Color.Gray)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(ThemeColorManager.getBackgroundBrush(option.hexCode))
+                        )
+                    }
                 }
             }
         },
