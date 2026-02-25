@@ -90,6 +90,20 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * Clear all persisted token history (e.g. from Settings). UI will show empty tokens until new ones arrive.
+     */
+    fun clearTokenHistory() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                tokenHistoryRepo.clearAll()
+                _tokensPerCounter.postValue(emptyMap())
+            } catch (e: Exception) {
+                android.util.Log.w("MqttViewModel", "Failed to clear token history: ${e.message}")
+            }
+        }
+    }
+
+    /**
      * Initialize or update an MQTT client for a specific broker.
      */
     fun initAndConnect(

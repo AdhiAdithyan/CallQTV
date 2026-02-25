@@ -25,7 +25,7 @@ object SemanticMqttParser {
         if (trimmedMessage.startsWith("$") && (trimmedMessage.endsWith("*") || trimmedMessage.length >= 24)) {
             try {
                 if (trimmedMessage.length >= 22) {
-                    val counterNum = trimmedMessage.substring(17, 18).trim()
+                    val counterNum = trimmedMessage.substring(16, 17).trim()
                     val tokenNum = trimmedMessage.substring(18, 22).trim()
                     
                     // Return counter ID and the token

@@ -25,18 +25,21 @@ fun AnimatedLoadingOverlay(message: String, isVisible: Boolean) {
         ) {
             Box(
                 modifier = Modifier
-                    .size(200.dp)
+                    .fillMaxWidth(0.7f) // use 70% of screen width to fit text
+                    .wrapContentHeight()
                     .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(16.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(16.dp)) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)
+                ) {
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = message, 
+                        text = message,
                         color = Color.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center
                     )
                 }

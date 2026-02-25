@@ -224,48 +224,57 @@ fun TokenDisplayScreen(
     LaunchedEffect(Unit) {
         mqttViewModel.tokenUpdateChannel.receiveAsFlow().collect { pair ->
             val (counterIdOrName, tokenLabel) = pair
-            
-            // 1. Process Update (Update Maps based on history logic)
-            // This triggers UI update immediately (via LiveData)
+
+            val currentConfig = latestConfigState.value
+            val currentCounters = latestCountersState.value
+
+            // 1. Drop any tokens whose counter does NOT match a buttonIndex
+            val mqttCounterIdx = counterIdOrName.toIntOrNull()
+            val actualCounter = currentCounters.find {
+                it.buttonIndex != null && it.buttonIndex == mqttCounterIdx
+            }
+
+            if (actualCounter == null) {
+                android.util.Log.d(
+                    "TokenDisplay",
+                    "Dropping token '$tokenLabel' for unknown counter '$counterIdOrName'"
+                )
+                return@collect
+            }
+
+            // 2. Update in‑memory history & UI for valid counters only
             val shouldAnnounce = mqttViewModel.processTokenUpdate(counterIdOrName, tokenLabel)
-            
-            if (shouldAnnounce) {
-                 // 2. Resolve Counter Name using latest counters list
-                 val currentCounters = latestCountersState.value
-                 val mqttCounterIdx = counterIdOrName.toIntOrNull()
-                 
-                 val actualCounter = currentCounters.find { 
-                     it.buttonIndex != null && it.buttonIndex == mqttCounterIdx
-                 }
-                 
-                 // If counter found, prepare announcement
-                 if (actualCounter != null) {
-                     val displayName = (actualCounter.name?.takeIf { it.isNotBlank() } 
-                         ?: actualCounter.defaultName?.takeIf { it.isNotBlank() }
-                         ?: "Counter ${actualCounter.buttonIndex}")
-        
-                     val currentConfig = latestConfigState.value
-                     
-                     if (currentConfig?.enableTokenAnnouncement == true) {
-                         val announcementCounterName = if (currentConfig.enableCounterAnnouncement == true) displayName else ""
-                         
-                         // 3. Announce and SUSPEND untill TTS callback completes
-                         suspendCancellableCoroutine<Unit> { continuation ->
-                             TokenAnnouncer.announceToken(
-                                 context = context,
-                                 audioLanguage = currentConfig.audioLanguage,
-                                 counterName = announcementCounterName,
-                                 tokenLabel = tokenLabel,
-                                 onDone = {
-                                     if (continuation.isActive) continuation.resume(Unit)
-                                 }
-                             )
-                         }
-                         mqttViewModel.markAsAnnounced(counterIdOrName, tokenLabel)
-                     }
-                 } else {
-                     android.util.Log.d("TokenDisplay", "Skipping announcement: No counter found matching ID '$counterIdOrName'")
-                 }
+            if (!shouldAnnounce) {
+                return@collect
+            }
+
+            // 3. Announce ONLY when enabled in configuration
+            if (currentConfig?.enableTokenAnnouncement == true) {
+                val displayName =
+                    (actualCounter.name?.takeIf { it.isNotBlank() }
+                        ?: actualCounter.defaultName?.takeIf { it.isNotBlank() }
+                        ?: "Counter ${actualCounter.buttonIndex}")
+
+                val announcementCounterName =
+                    if (currentConfig.enableCounterAnnouncement == true) {
+                        displayName
+                    } else {
+                        ""
+                    }
+
+                // Announce and suspend until TTS callback completes
+                suspendCancellableCoroutine<Unit> { continuation ->
+                    TokenAnnouncer.announceToken(
+                        context = context,
+                        audioLanguage = currentConfig.audioLanguage,
+                        counterName = announcementCounterName,
+                        tokenLabel = tokenLabel,
+                        onDone = {
+                            if (continuation.isActive) continuation.resume(Unit)
+                        }
+                    )
+                }
+                mqttViewModel.markAsAnnounced(counterIdOrName, tokenLabel)
             }
         }
     }
@@ -305,12 +314,28 @@ fun TokenDisplayScreen(
     }
 
     if (isLoading) {
-        AnimatedLoadingOverlay(message = "Loading TV configuration...", isVisible = true)
+        AnimatedLoadingOverlay(
+            message = "Loading TV configuration.\nPlease wait...",
+            isVisible = true
+        )
     } else if (isPendingApproval) {
         AlertDialog(
             onDismissRequest = { /* Prevent dismiss */ },
-            title = { Text("Device Awaiting Approval") },
-            text = { Text(errorMessage ?: "The device is awaiting approval from the administrator.") },
+            title = {
+                Text(
+                    "Device Awaiting Approval",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            },
+            text = {
+                Text(
+                    errorMessage
+                        ?: "This display is awaiting approval from the administrator.\n" +
+                           "Please contact support or tap Retry after approval.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Start
+                )
+            },
             confirmButton = {
                 Button(onClick = { viewModel.loadData(mqttViewModel) }) {
                     Text("Retry")
@@ -339,6 +364,7 @@ fun TokenDisplayScreen(
     // MQTT Retry Dialog - Move to the end so it always appears on top
     if (showMqttRetryDialog && mqttError.isNotBlank()) {
         AlertDialog(
+            modifier = Modifier.fillMaxWidth(0.8f),
             onDismissRequest = { showMqttRetryDialog = false },
             title = { 
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -349,9 +375,17 @@ fun TokenDisplayScreen(
             },
             text = { 
                 Column {
-                    Text("The display could not connect to the messaging server. Please check your network or broker settings.")
+                    Text(
+                        "The display could not connect to the messaging server.\n" +
+                        "Please check your network or broker settings, then tap Retry.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(text = "Error: $mqttError", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    Text(
+                        text = "Error: $mqttError",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
             },
             confirmButton = {
@@ -420,6 +454,7 @@ private fun TokenDisplayContent(
     onRefresh: () -> Unit
 ) {
     val viewModel = viewModel<com.softland.callqtv.viewmodel.TokenDisplayViewModel>()
+    val mqttViewModel = viewModel<MqttViewModel>()
     val context = LocalContext.current
     var is24HourPref by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) {
@@ -480,7 +515,13 @@ private fun TokenDisplayContent(
             macAddress = macAddress,
             appVersion = appVersion,
             daysUntilExpiry = daysUntilLicenseExpiry,
-            onRefresh = onRefresh
+            isTokenAnnouncementEnabled = config.enableTokenAnnouncement,
+            isCounterAnnouncementEnabled = config.enableCounterAnnouncement,
+            onRefresh = onRefresh,
+            onClearTokenHistoryAndRefresh = {
+                mqttViewModel.clearTokenHistory()
+                viewModel.loadData(mqttViewModel)
+            }
         )
 
         Spacer(modifier = Modifier.height(responsivePadding))
@@ -573,7 +614,10 @@ fun HeaderArea(
     macAddress: String,
     appVersion: String,
     daysUntilExpiry: Int?,
-    onRefresh: () -> Unit
+    isTokenAnnouncementEnabled: Boolean?,
+    isCounterAnnouncementEnabled: Boolean?,
+    onRefresh: () -> Unit,
+    onClearTokenHistoryAndRefresh: () -> Unit
 ) {
     var showThemeDialog by remember { mutableStateOf(false) }
 
@@ -587,9 +631,12 @@ fun HeaderArea(
             },
             onCounterBgChange = onCounterBgChange,
             onTokenBgChange = onTokenBgChange,
+            onClearTokenHistoryAndRefresh = onClearTokenHistoryAndRefresh,
             macAddress = macAddress,
             appVersion = appVersion,
             daysUntilExpiry = daysUntilExpiry,
+            isTokenAnnouncementEnabled = isTokenAnnouncementEnabled,
+            isCounterAnnouncementEnabled = isCounterAnnouncementEnabled,
             companyName = companyName
         )
     }
@@ -608,7 +655,7 @@ fun HeaderArea(
                 contentDescription = "App Logo",
                 modifier = Modifier
                     .align(Alignment.CenterStart)
-                    .height((if (isPortrait) 32 else 48).dp * scale),
+                    .height((if (isPortrait) 48 else 68).dp * scale),
                 contentScale = ContentScale.Fit
             )
         }
@@ -1190,13 +1237,17 @@ fun AppearanceSettingsDialog(
     onThemeSelected: (String) -> Unit,
     onCounterBgChange: (String) -> Unit,
     onTokenBgChange: (String) -> Unit,
+    onClearTokenHistoryAndRefresh: () -> Unit,
     macAddress: String,
     appVersion: String,
     daysUntilExpiry: Int?,
+    isTokenAnnouncementEnabled: Boolean?,
+    isCounterAnnouncementEnabled: Boolean?,
     companyName: String
 ) {
     var showCounterColorPicker by remember { mutableStateOf(false) }
     var showTokenColorPicker by remember { mutableStateOf(false) }
+    var showClearConfirmDialog by remember { mutableStateOf(false) }
 
     var currentCounterHex by remember { mutableStateOf("#FFFFFF") }
     var currentTokenHex by remember { mutableStateOf("#FFFFFF") }
@@ -1224,6 +1275,7 @@ fun AppearanceSettingsDialog(
             title = "Counter Background",
             onColorSelected = { 
                 onCounterBgChange(it)
+                currentCounterHex = it
                 showCounterColorPicker = false 
             },
             onDismiss = { showCounterColorPicker = false }
@@ -1233,36 +1285,38 @@ fun AppearanceSettingsDialog(
             title = "Token Background",
             onColorSelected = { 
                 onTokenBgChange(it)
+                currentTokenHex = it
                 showTokenColorPicker = false 
             },
             onDismiss = { showTokenColorPicker = false }
         )
     } else {
         AlertDialog(
+            modifier = Modifier.fillMaxWidth(0.9f),
             onDismissRequest = onDismiss,
-            title = { Text("Settings") },
+            title = { Text("Settings", style = MaterialTheme.typography.titleSmall) },
             text = {
                 Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(1.dp)
                 ) {
                     // 1. Device Info
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha=0.5f))
                     ) {
-                        Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(8.dp).fillMaxWidth()) {
                             // Header: Icon + Company Name
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 androidx.compose.foundation.Image(
                                     painter = painterResource(id = R.drawable.callq_tv_logo),
                                     contentDescription = null,
-                                    modifier = Modifier.size(48.dp)
+                                    modifier = Modifier.size(32.dp)
                                 )
-                                Spacer(modifier = Modifier.width(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Column {
                                     Text(
                                         text = companyName,
-                                        style = MaterialTheme.typography.titleMedium,
+                                        style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.Bold
                                     )
                                     Text(
@@ -1282,57 +1336,104 @@ fun AppearanceSettingsDialog(
                                 val color = if (daysUntilExpiry <= 10) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
                                 InfoRow("License", expiryText, color)
                             }
+                            val tokenAnnText = if (isTokenAnnouncementEnabled == true) "Enabled" else "Disabled"
+                            val counterAnnText = if (isCounterAnnouncementEnabled == true) "Enabled" else "Disabled"
+                            InfoRow("Token announcement", tokenAnnText)
+                            InfoRow("Counter announcement", counterAnnText)
                         }
                     }
 
                     HorizontalDivider()
 
-                    Text("Appearance", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    Text(
+                        "Appearance",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
 
-                    // Theme Dropdown
-                    // Theme Dropdown
-                    ExposedDropdownMenuBox(
-                        expanded = expanded,
-                        onExpandedChange = { expanded = it },
-                        modifier = Modifier.fillMaxWidth()
+                    // App theme + counter/token background in a single horizontal row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        OutlinedTextField(
-                            value = currentThemeName,
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("App Theme") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-                            modifier = Modifier
-                                .menuAnchor()
-                                .fillMaxWidth()
-                                .clickable { expanded = !expanded }
-                        )
-                        ExposedDropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false }
-                        ) {
-                            ThemeColorManager.themeColorOptions.forEach { option ->
-                                DropdownMenuItem(
-                                    text = { 
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Box(modifier = Modifier.size(16.dp).background(ThemeColorManager.getBackgroundBrush(option.hexCode), CircleShape))
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(option.name)
-                                        }
-                                    },
-                                    onClick = {
-                                        onThemeSelected(option.hexCode)
-                                        expanded = false
-                                    }
+                        Box(modifier = Modifier.weight(1.4f)) {
+                            ExposedDropdownMenuBox(
+                                expanded = expanded,
+                                onExpandedChange = { expanded = it },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                OutlinedTextField(
+                                    value = currentThemeName,
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    label = { Text("App Theme") },
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                                    modifier = Modifier
+                                        .menuAnchor()
+                                        .fillMaxWidth()
+                                        .clickable { expanded = !expanded }
                                 )
+                                ExposedDropdownMenu(
+                                    expanded = expanded,
+                                    onDismissRequest = { expanded = false }
+                                ) {
+                                    ThemeColorManager.themeColorOptions.forEach { option ->
+                                        DropdownMenuItem(
+                                            text = { 
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(14.dp)
+                                                            .background(
+                                                                ThemeColorManager.getBackgroundBrush(option.hexCode),
+                                                                CircleShape
+                                                            )
+                                                    )
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text(
+                                                        option.name,
+                                                        style = MaterialTheme.typography.labelSmall
+                                                    )
+                                                }
+                                            },
+                                            onClick = {
+                                                onThemeSelected(option.hexCode)
+                                                currentThemeHex = option.hexCode
+                                                expanded = false
+                                            }
+                                        )
+                                    }
+                                }
                             }
+                        }
+
+                        Box(modifier = Modifier.weight(0.8f)) {
+                            ColorPickerButton("Counter BG", currentCounterHex) { showCounterColorPicker = true }
+                        }
+
+                        Box(modifier = Modifier.weight(0.8f)) {
+                            ColorPickerButton("Token BG", currentTokenHex) { showTokenColorPicker = true }
                         }
                     }
 
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                         ColorPickerButton("Counter BG", currentCounterHex) { showCounterColorPicker = true }
-                         ColorPickerButton("Token BG", currentTokenHex) { showTokenColorPicker = true }
+                    // Clear saved token details (with confirmation)
+                    HorizontalDivider()
+                    OutlinedButton(
+                        onClick = { showClearConfirmDialog = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Start,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Clear saved token details",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
                     }
 
                     HorizontalDivider()
@@ -1351,8 +1452,12 @@ fun AppearanceSettingsDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column {
-                            Text("Time Format", style = MaterialTheme.typography.bodyLarge)
-                            Text(if (is24Hour) "24-Hour (14:30)" else "12-Hour (2:30 PM)", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text("Time Format", style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                if (is24Hour) "24-Hour (14:30)" else "12-Hour (2:30 PM)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.Gray
+                            )
                         }
                         Switch(
                             checked = is24Hour,
@@ -1371,13 +1476,47 @@ fun AppearanceSettingsDialog(
             }
         )
     }
+
+    if (showClearConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearConfirmDialog = false },
+            title = { Text("Clear token details?") },
+            text = {
+                Text("This will clear all saved token details for all counters and fetch the latest configuration from the server. Continue?")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onClearTokenHistoryAndRefresh()
+                        showClearConfirmDialog = false
+                        onDismiss()
+                    }
+                ) { Text("Clear", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearConfirmDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
 }
 
 @Composable
 fun InfoRow(label: String, value: String, valueColor: Color = MaterialTheme.colorScheme.onSurface) {
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = valueColor)
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            value,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = valueColor
+        )
     }
 }
 
@@ -1389,10 +1528,15 @@ fun ColorPickerButton(label: String, hex: String, onClick: () -> Unit) {
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         modifier = Modifier.width(130.dp)
     ) {
-        Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(20.dp).background(ThemeColorManager.getBackgroundBrush(hex), RoundedCornerShape(4.dp)).border(1.dp, Color.Gray, RoundedCornerShape(4.dp)))
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(label, fontSize = 12.sp)
+        Row(modifier = Modifier.padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(18.dp)
+                    .background(ThemeColorManager.getBackgroundBrush(hex), RoundedCornerShape(4.dp))
+                    .border(1.dp, Color.Gray, RoundedCornerShape(4.dp))
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(label, fontSize = 11.sp)
         }
     }
 }
@@ -1404,8 +1548,9 @@ fun PresetColorDialog(
     onDismiss: () -> Unit
 ) {
     AlertDialog(
+        modifier = Modifier.fillMaxWidth(0.9f),
         onDismissRequest = onDismiss,
-        title = { Text(title) },
+        title = { Text(title, style = MaterialTheme.typography.titleSmall) },
         text = {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(5),
