@@ -12,6 +12,8 @@ import com.softland.callqtv.data.repository.TokenHistoryRepository
 import com.softland.callqtv.utils.SemanticMqttParser
 import com.softland.callqtv.utils.Event
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -22,6 +24,9 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     // Map of serverUri to MqttClientManager
     private val managers = mutableMapOf<String, MqttClientManager>()
     private val connectionDetailsMap = mutableMapOf<String, MqttConnectionDetails>()
+
+    // Delayed auto-retry when broker disconnects; cancelled when any broker reconnects
+    private var reconnectJob: Job? = null
 
     // Token history persistence
     private val tokenHistoryRepo: TokenHistoryRepository by lazy {
@@ -40,6 +45,10 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     private val _receivedMessage = MutableLiveData<String>()
     fun getReceivedMessage(): LiveData<String> = _receivedMessage
 
+    // Last raw MQTT payload for display (e.g. footer)
+    private val _lastPayload = MutableLiveData<String>("")
+    fun getLastPayload(): LiveData<String> = _lastPayload
+
     private val _connectionStatusMap = MutableLiveData<Map<String, Boolean>>(emptyMap())
     fun getConnectionStatusMap(): LiveData<Map<String, Boolean>> = _connectionStatusMap
 
@@ -53,7 +62,9 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     private val _isAutoRetryExhausted = MutableLiveData<Boolean>(false)
     fun isAutoRetryExhausted(): LiveData<Boolean> = _isAutoRetryExhausted
 
-    val tokenUpdateChannel = kotlinx.coroutines.channels.Channel<Pair<String, String>>(capacity = 64)
+    // Unbounded channel so every MQTT token update is queued and processed in order,
+    // even if messages arrive only a few milliseconds apart.
+    val tokenUpdateChannel = kotlinx.coroutines.channels.Channel<Pair<String, String>>(capacity = kotlinx.coroutines.channels.Channel.UNLIMITED)
     // val latestTokenFlow removed in favor of Channel for sequential processing
 
     private val _tokensPerCounter = MutableLiveData<Map<String, List<String>>>(emptyMap())
@@ -138,6 +149,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
             setMqttListener(object : MqttClientManager.MqttListener {
                 override fun onMessageReceived(topic: String, message: String) {
                     _receivedMessage.postValue(message)
+                    _lastPayload.postValue(message)
                     parseMqttMessage(topic, message)
                 }
 
@@ -146,6 +158,19 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                     if (isConnected) {
                         _isAutoRetryExhausted.postValue(false)
                         _errorMessage.postValue("")
+                        viewModelScope.launch {
+                            reconnectJob?.cancel()
+                            reconnectJob = null
+                        }
+                    } else {
+                        // Schedule app-level auto retry after delay (dialog still shows for manual retry)
+                        viewModelScope.launch {
+                            reconnectJob?.cancel()
+                            reconnectJob = launch {
+                                delay(5000L)
+                                retryConnect()
+                            }
+                        }
                     }
                 }
 
@@ -225,7 +250,11 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun processTokenUpdate(counter: String, token: String): Boolean {
         if (token == "0") return false
-        
+        if (token.contains("CAL", ignoreCase = true)) {
+            android.util.Log.d("MqttViewModel", "Token '$token' contains CAL; skipping display and announcement.")
+            return false
+        }
+
         synchronized(this) {
              val currentMap = _tokensPerCounter.value?.toMutableMap() ?: mutableMapOf()
              val key = if (counter.isEmpty()) "__default__" else counter
@@ -286,7 +315,8 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                      val (counter, token) = result
                      android.util.Log.d("MqttViewModel", "PARSED: Counter='$counter', Token='$token' -> Queueing")
                      if (token != "0") {
-                         tokenUpdateChannel.trySend(counter to token)
+                         // Suspend until this token is enqueued, preserving strict ordering
+                         tokenUpdateChannel.send(counter to token)
                      }
                  } else {
                      android.util.Log.w("MqttViewModel", "PARSE FAILED: '$message'")

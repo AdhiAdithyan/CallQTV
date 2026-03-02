@@ -66,6 +66,16 @@ object ThemeColorManager {
             .edit().putString("token_bg_color", hex).apply()
     }
 
+    fun getNotificationSoundKey(context: Context): String {
+        return context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
+            .getString("notification_sound_key", "ding") ?: "ding"
+    }
+
+    fun setNotificationSoundKey(context: Context, key: String) {
+        context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
+            .edit().putString("notification_sound_key", key).apply()
+    }
+
     val themeColorOptions = listOf(
         // Blue
         ThemeOption("Blue", "#2196F3"),

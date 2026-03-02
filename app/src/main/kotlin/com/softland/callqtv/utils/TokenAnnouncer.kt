@@ -107,12 +107,20 @@ object TokenAnnouncer {
 
     fun announceToken(context: Context, audioLanguage: String?, counterName: String, tokenLabel: String, onDone: (() -> Unit)? = null) {
         synchronized(this) {
-            if (tts == null) {
-                initialize(context, audioLanguage)
+            // If TTS is not ready, initialize and then speak in the init callback
+            if (tts == null || !isInitialized) {
+                initialize(context, audioLanguage) { success ->
+                    if (success) {
+                        setupLanguage(audioLanguage)
+                        speakNow(counterName, tokenLabel, onDone)
+                    } else {
+                        onDone?.invoke()
+                    }
+                }
             } else {
                 setupLanguage(audioLanguage)
+                speakNow(counterName, tokenLabel, onDone)
             }
-            speakNow(counterName, tokenLabel, onDone)
         }
     }
 
@@ -122,13 +130,14 @@ object TokenAnnouncer {
         heartbeatJob?.cancel()
         heartbeatJob = scope.launch {
             while (true) {
-                // Aggressive keep-alive: 45 seconds to prevent ANY sleep
-                delay(45 * 1000L) 
+                // More aggressive keep-alive: ping every ~20 seconds so the
+                // first real announcement after a long idle period is not delayed
+                delay(10 * 1000L)
                 synchronized(this@TokenAnnouncer) {
                     if (isInitialized) {
-                        // Play short silence
+                        // Play a very short silence to keep the TTS service warm
                         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                            tts?.playSilentUtterance(500, TextToSpeech.QUEUE_ADD, "heartbeat")
+                            tts?.playSilentUtterance(50, TextToSpeech.QUEUE_ADD, "heartbeat")
                         } else {
                             tts?.speak(" ", TextToSpeech.QUEUE_ADD, null, "heartbeat")
                         }

@@ -25,9 +25,9 @@ fun AnimatedLoadingOverlay(message: String, isVisible: Boolean) {
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(0.7f) // use 70% of screen width to fit text
+                    .fillMaxWidth(0.7f)
                     .wrapContentHeight()
-                    .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(16.dp)),
+                    .background(Color(0xFF1A1A1A), RoundedCornerShape(16.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Column(

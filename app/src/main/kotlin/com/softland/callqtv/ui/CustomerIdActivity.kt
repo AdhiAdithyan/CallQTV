@@ -41,6 +41,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModelProvider
 import com.softland.callqtv.R
@@ -158,11 +159,12 @@ class CustomerIdActivity : AppCompatActivity() {
             }
             is RegistrationState.Error -> {
                 AlertDialog(
-                    modifier = Modifier.fillMaxWidth(0.8f),
+                    modifier = Modifier.widthIn(min = 280.dp, max = 900.dp),
                     onDismissRequest = { registrationViewModel.resetState() },
-                    title = { Text("Registration error") },
+                    properties = DialogProperties(usePlatformDefaultWidth = false),
+                    title = { Text("Device License Registration error") },
                     text = {
-                        Column {
+                        Column(modifier = Modifier.fillMaxWidth()) {
                             Text(
                                 text = state.message,
                                 style = MaterialTheme.typography.bodyMedium
@@ -184,11 +186,12 @@ class CustomerIdActivity : AppCompatActivity() {
             }
             is RegistrationState.ProductAuthRequired -> {
                 AlertDialog(
-                    modifier = Modifier.fillMaxWidth(0.8f),
+                    modifier = Modifier.widthIn(min = 280.dp, max = 900.dp),
                     onDismissRequest = { registrationViewModel.resetState() },
+                    properties = DialogProperties(usePlatformDefaultWidth = false),
                     title = { Text("License status") },
                     text = {
-                        Column {
+                        Column(modifier = Modifier.fillMaxWidth()) {
                             Text(
                                 text = state.status,
                                 style = MaterialTheme.typography.bodyMedium
@@ -210,11 +213,12 @@ class CustomerIdActivity : AppCompatActivity() {
             }
             is RegistrationState.DeviceApprovalRequired -> {
                 AlertDialog(
-                    modifier = Modifier.fillMaxWidth(0.8f),
+                    modifier = Modifier.widthIn(min = 280.dp, max = 900.dp),
                     onDismissRequest = { registrationViewModel.resetState() },
+                    properties = DialogProperties(usePlatformDefaultWidth = false),
                     title = { Text("Device approval required") },
                     text = {
-                        Column {
+                        Column(modifier = Modifier.fillMaxWidth()) {
                             Text(
                                 text = state.status,
                                 style = MaterialTheme.typography.bodyMedium
@@ -236,11 +240,12 @@ class CustomerIdActivity : AppCompatActivity() {
             }
             is RegistrationState.LicenseExpired -> {
                 AlertDialog(
-                    modifier = Modifier.fillMaxWidth(0.8f),
+                    modifier = Modifier.widthIn(min = 280.dp, max = 900.dp),
                     onDismissRequest = { registrationViewModel.resetState() },
+                    properties = DialogProperties(usePlatformDefaultWidth = false),
                     title = { Text("License expired") },
                     text = {
-                        Column {
+                        Column(modifier = Modifier.fillMaxWidth()) {
                             Text(
                                 text = state.status,
                                 style = MaterialTheme.typography.bodyMedium
@@ -262,11 +267,12 @@ class CustomerIdActivity : AppCompatActivity() {
             }
             is RegistrationState.UpdateAvailable -> {
                 AlertDialog(
-                    modifier = Modifier.fillMaxWidth(0.8f),
+                    modifier = Modifier.widthIn(min = 280.dp, max = 900.dp),
                     onDismissRequest = { },
+                    properties = DialogProperties(usePlatformDefaultWidth = false),
                     title = { Text("Update available") },
                     text = {
-                        Column {
+                        Column(modifier = Modifier.fillMaxWidth()) {
                             Text(
                                 text = "A new version is available. Please update to continue.",
                                 style = MaterialTheme.typography.bodyMedium

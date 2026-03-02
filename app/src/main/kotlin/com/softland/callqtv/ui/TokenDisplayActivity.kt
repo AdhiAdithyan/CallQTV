@@ -51,6 +51,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.basicMarquee
@@ -73,8 +74,10 @@ import com.softland.callqtv.utils.PreferenceHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 import android.graphics.Color as AndroidColor
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.DialogProperties
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -83,6 +86,11 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.datasource.DefaultDataSource
+import android.media.MediaPlayer
+import android.media.AudioManager
+import android.media.ToneGenerator
+import android.net.Uri
+import android.util.Log
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
@@ -169,6 +177,78 @@ class TokenDisplayActivity : ComponentActivity() {
     }
 }
 
+// Play a short built-in chime before announcing a token.
+// Uses ToneGenerator so it does not depend on network or external URLs.
+suspend fun playTokenChime(soundKey: String) {
+    withContext(Dispatchers.Default) {
+        val (tone, durationMs) = when (soundKey) {
+            // Dings
+            "ding"   -> ToneGenerator.TONE_PROP_BEEP2 to 350
+            "ding2"  -> ToneGenerator.TONE_PROP_BEEP2 to 500
+            "ding3"  -> ToneGenerator.TONE_PROP_BEEP2 to 650
+            // Doubles
+            "double"  -> ToneGenerator.TONE_PROP_ACK to 400
+            "double2" -> ToneGenerator.TONE_PROP_ACK to 550
+            "double3" -> ToneGenerator.TONE_PROP_ACK to 700
+            // Soft beeps
+            "soft"  -> ToneGenerator.TONE_PROP_BEEP to 250
+            "soft2" -> ToneGenerator.TONE_PROP_BEEP to 400
+            "soft3" -> ToneGenerator.TONE_PROP_BEEP to 550
+            // Alerts
+            "alert"  -> ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD to 450
+            "alert2" -> ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD to 600
+            "alert3" -> ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD to 750
+            // Bells
+            "bell"  -> ToneGenerator.TONE_SUP_PIP to 400
+            "bell2" -> ToneGenerator.TONE_SUP_PIP to 550
+            "bell3" -> ToneGenerator.TONE_SUP_PIP to 700
+            // Church bells
+            "church1" -> ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_NORMAL to 600
+            "church2" -> ToneGenerator.TONE_CDMA_HIGH_L to 650
+            "church3" -> ToneGenerator.TONE_CDMA_HIGH_PBX_L to 750
+            // Pings
+            "ping"  -> ToneGenerator.TONE_PROP_PROMPT to 300
+            "ping2" -> ToneGenerator.TONE_PROP_PROMPT to 450
+            "ping3" -> ToneGenerator.TONE_PROP_PROMPT to 600
+            // Long tones
+            "long"  -> ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_PING_RING to 700
+            "long2" -> ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_PING_RING to 900
+            "long3" -> ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_PING_RING to 1100
+            // Chimes
+            "chime1" -> ToneGenerator.TONE_SUP_RINGTONE to 600
+            "chime2" -> ToneGenerator.TONE_SUP_RINGTONE to 800
+            "chime3" -> ToneGenerator.TONE_SUP_RINGTONE to 1000
+            // High beeps
+            "hi1" -> ToneGenerator.TONE_SUP_RADIO_ACK to 300
+            "hi2" -> ToneGenerator.TONE_SUP_RADIO_ACK to 450
+            "hi3" -> ToneGenerator.TONE_SUP_RADIO_ACK to 600
+            // Low beeps
+            "low1" -> ToneGenerator.TONE_SUP_CONGESTION to 300
+            "low2" -> ToneGenerator.TONE_SUP_CONGESTION to 450
+            "low3" -> ToneGenerator.TONE_SUP_CONGESTION to 600
+            // Misc tones
+            "tone1" -> ToneGenerator.TONE_SUP_DIAL to 350
+            "tone2" -> ToneGenerator.TONE_SUP_BUSY to 350
+            "tone3" -> ToneGenerator.TONE_SUP_CALL_WAITING to 500
+            "tone4" -> ToneGenerator.TONE_SUP_CONFIRM to 500
+            "tone5" -> ToneGenerator.TONE_SUP_ERROR to 500
+            "tone6" -> ToneGenerator.TONE_SUP_INTERCEPT to 500
+            // use another valid system tone for tone7 (reorder is not available on all devices)
+            "tone7" -> ToneGenerator.TONE_SUP_CALL_WAITING to 650
+            else    -> ToneGenerator.TONE_PROP_BEEP2 to 400 // default ding
+        }
+
+        val toneGen = ToneGenerator(AudioManager.STREAM_MUSIC, 80)
+        try {
+            toneGen.startTone(tone, durationMs)
+            delay(durationMs + 50L)
+        } catch (_: Exception) {
+        } finally {
+            toneGen.release()
+        }
+    }
+}
+
 @Composable
 fun TokenDisplayScreen(
     viewModel: TokenDisplayViewModel, 
@@ -194,6 +274,7 @@ fun TokenDisplayScreen(
     val mqttError by mqttViewModel.getErrorMessage().observeAsState("")
     val isAutoRetryExhausted by mqttViewModel.isAutoRetryExhausted().observeAsState(false)
     val tokensPerCounter by mqttViewModel.getTokensPerCounter().observeAsState(emptyMap())
+    val lastPayloadForFooter by mqttViewModel.getLastPayload().observeAsState("")
     
     val macAddress = viewModel.macAddress
     val appVersion = remember { context.getString(R.string.app_version) }
@@ -206,6 +287,12 @@ fun TokenDisplayScreen(
     LaunchedEffect(isAutoRetryExhausted, mqttError) {
         if (isAutoRetryExhausted && mqttError.isNotBlank()) {
             showMqttRetryDialog = true
+        }
+    }
+    // Auto-dismiss broker error dialog when connection is restored (e.g. after auto or manual retry)
+    LaunchedEffect(mqttConnected) {
+        if (mqttConnected) {
+            showMqttRetryDialog = false
         }
     }
 
@@ -243,13 +330,26 @@ fun TokenDisplayScreen(
                 return@collect
             }
 
-            // 2. Update in‑memory history & UI for valid counters only
-            val shouldAnnounce = mqttViewModel.processTokenUpdate(counterIdOrName, tokenLabel)
+            // 2. Use a canonical storage key so the same physical counter always shares history,
+            //    even if MQTT uses different identifiers (id, name, button index).
+            val storageKey =
+                actualCounter.counterId?.takeIf { it.isNotBlank() }
+                    ?: actualCounter.name?.takeIf { it.isNotBlank() }
+                    ?: actualCounter.defaultName?.takeIf { it.isNotBlank() }
+                    ?: actualCounter.buttonIndex?.toString()
+                    ?: counterIdOrName
+
+            // Update in‑memory history & UI for valid counters only
+            val shouldAnnounce = mqttViewModel.processTokenUpdate(storageKey, tokenLabel)
             if (!shouldAnnounce) {
                 return@collect
             }
 
-            // 3. Announce ONLY when enabled in configuration
+            // 3. Always play chime first, even when announcement is disabled
+            val soundKey = ThemeColorManager.getNotificationSoundKey(context)
+            playTokenChime(soundKey)
+
+            // 4. Announce ONLY when enabled in configuration
             if (currentConfig?.enableTokenAnnouncement == true) {
                 val displayName =
                     (actualCounter.name?.takeIf { it.isNotBlank() }
@@ -275,7 +375,7 @@ fun TokenDisplayScreen(
                         }
                     )
                 }
-                mqttViewModel.markAsAnnounced(counterIdOrName, tokenLabel)
+                mqttViewModel.markAsAnnounced(storageKey, tokenLabel)
             }
         }
     }
@@ -322,6 +422,7 @@ fun TokenDisplayScreen(
     } else if (isPendingApproval) {
         AlertDialog(
             onDismissRequest = { /* Prevent dismiss */ },
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 1f),
             title = {
                 Text(
                     "Device Awaiting Approval",
@@ -344,22 +445,23 @@ fun TokenDisplayScreen(
             }
         )
     } else if (!errorMessage.isNullOrBlank() && !isAutoRetryExhausted) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(32.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = errorMessage.orEmpty(),
-                style = MaterialTheme.typography.bodyLarge,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Spacer(modifier = Modifier.height(24.dp))
-            Button(onClick = { viewModel.loadData(mqttViewModel) }) {
-                Text("Retry Loading")
+        AlertDialog(
+            onDismissRequest = { },
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 1f),
+            title = { Text("Configuration Error", style = MaterialTheme.typography.titleMedium) },
+            text = {
+                Text(
+                    text = errorMessage.orEmpty(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Start
+                )
+            },
+            confirmButton = {
+                Button(onClick = { viewModel.loadData(mqttViewModel) }) {
+                    Text("Retry Loading")
+                }
             }
-        }
+        )
     }
 
     // MQTT Retry Dialog - Move to the end so it always appears on top
@@ -367,6 +469,7 @@ fun TokenDisplayScreen(
         AlertDialog(
             modifier = Modifier.fillMaxWidth(0.8f),
             onDismissRequest = { showMqttRetryDialog = false },
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 1f),
             title = { 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(painter = painterResource(id = com.softland.callqtv.R.drawable.ic_network_unavailable), contentDescription = null, tint = MaterialTheme.colorScheme.error)
@@ -566,6 +669,7 @@ private fun TokenDisplayContent(
             }
         }
 
+        // Footer: restore configured scrolling section based on TV config
         val scrollEnabled = config.scrollEnabled.equals("on", ignoreCase = true)
         val noOfTextFields = config.noOfTextFields ?: 0
         val scrollTextLinesJson = config.scrollTextLinesJson
@@ -590,12 +694,12 @@ private fun TokenDisplayContent(
         }
 
         if (scrollEnabled && noOfTextFields > 0 && scrollLines.isNotEmpty()) {
-             Spacer(modifier = Modifier.height(responsivePadding))
-             ScrollingFooter(
-                 textLines = scrollLines,
-                 scale = scale,
-                 isPortrait = isPortrait
-             )
+            Spacer(modifier = Modifier.height(responsivePadding))
+            ScrollingFooter(
+                textLines = scrollLines,
+                scale = scale,
+                isPortrait = isPortrait
+            )
         }
     }
 }
@@ -1022,8 +1126,8 @@ fun CounterBoard(
             ?: (if (tokensPerCounter.containsKey("__default__")) tokensPerCounter["__default__"] else null)
             ?: emptyList()
             
-        // Filter out "0", handles duplicates, and maintain order (first is latest)
-        rawList.filter { it != "0" }.distinct()
+        // Filter out "0", tokens containing "CAL", and maintain order (first is latest)
+        rawList.filter { it != "0" && !it.contains("CAL", ignoreCase = true) }.distinct()
     }
 
     val counterColor = remember(config.counterTextColor) { 
@@ -1045,10 +1149,13 @@ fun CounterBoard(
     val shouldBlink = config.blinkCurrentToken ?: false
     val blinkSeconds = config.blinkSeconds ?: 0
 
-    // Blink only for blinkSeconds; if blinkSeconds <= 0, blink indefinitely (backward compat)
+    // Blink only for blinkSeconds; if blinkSeconds <= 0, blink indefinitely (backward compat).
+    // Restart blink timer whenever the current token changes.
+    val currentTokenForBlink = tokens.firstOrNull()
     var blinkActive by remember { mutableStateOf(true) }
-    LaunchedEffect(shouldBlink, blinkSeconds) {
-        if (shouldBlink && blinkSeconds > 0) {
+    LaunchedEffect(shouldBlink, blinkSeconds, currentTokenForBlink) {
+        blinkActive = true
+        if (shouldBlink && blinkSeconds > 0 && currentTokenForBlink != null) {
             delay(blinkSeconds * 1000L)
             blinkActive = false
         }
@@ -1139,8 +1246,7 @@ fun TokenCard(
         modifier = Modifier
             .fillMaxWidth()
             .height(cardHeight)
-            .padding(1.dp)
-            .graphicsLayer { this.alpha = blinkAlpha },
+            .padding(1.dp),
         shape = RoundedCornerShape(8.dp),
         elevation = CardDefaults.cardElevation(2.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent)
@@ -1156,7 +1262,8 @@ fun TokenCard(
                 color = textColor,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
-                softWrap = false
+                softWrap = false,
+                modifier = Modifier.graphicsLayer { alpha = blinkAlpha }
             )
         }
     }
@@ -1247,6 +1354,7 @@ fun AppearanceSettingsDialog(
     companyName: String
 ) {
     var showThemeColorPicker by remember { mutableStateOf(false) }
+    var showSoundPicker by remember { mutableStateOf(false) }
     var showCounterColorPicker by remember { mutableStateOf(false) }
     var showTokenColorPicker by remember { mutableStateOf(false) }
     var showClearConfirmDialog by remember { mutableStateOf(false) }
@@ -1255,12 +1363,14 @@ fun AppearanceSettingsDialog(
     var currentTokenHex by remember { mutableStateOf("#FFFFFF") }
     var customerId by remember { mutableStateOf(0) }
     var currentThemeHex by remember { mutableStateOf("#2196F3") }
+    var notificationSoundKey by remember { mutableStateOf("ding") }
     var is24Hour by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) {
         withContext(Dispatchers.Default) {
             currentCounterHex = ThemeColorManager.getCounterBackgroundColor(context)
             currentTokenHex = ThemeColorManager.getTokenBackgroundColor(context)
             currentThemeHex = ThemeColorManager.getSelectedThemeColorHex(context)
+            notificationSoundKey = ThemeColorManager.getNotificationSoundKey(context)
             customerId = context.getSharedPreferences(AppSharedPreferences.AUTHENTICATION, Context.MODE_PRIVATE)
                 .getInt(PreferenceHelper.customer_id, 0)
             is24Hour = context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
@@ -1268,7 +1378,17 @@ fun AppearanceSettingsDialog(
         }
     }
 
-    if (showThemeColorPicker) {
+    if (showSoundPicker) {
+        NotificationSoundDialog(
+            title = "Notification sound",
+            selectedKey = notificationSoundKey,
+            onSoundSelected = { key ->
+                notificationSoundKey = key
+                ThemeColorManager.setNotificationSoundKey(context, key)
+            },
+            onDismiss = { showSoundPicker = false }
+        )
+    } else if (showThemeColorPicker) {
         PresetThemeColorDialog(
             title = "App Theme",
             onColorSelected = {
@@ -1300,8 +1420,10 @@ fun AppearanceSettingsDialog(
         )
     } else {
         AlertDialog(
-            modifier = Modifier.fillMaxWidth(0.95f),
+            modifier = Modifier
+                .fillMaxWidth(0.65f),
             onDismissRequest = onDismiss,
+            properties = DialogProperties(usePlatformDefaultWidth = false),
             title = { Text("Settings", style = MaterialTheme.typography.titleSmall) },
             text = {
                 Column(
@@ -1310,12 +1432,12 @@ fun AppearanceSettingsDialog(
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.Top
                     ) {
                         // Left column: Company / device details
                         Column(
-                            modifier = Modifier.weight(1.2f),
+                            modifier = Modifier.width(310.dp),
                             verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
                             Card(
@@ -1333,7 +1455,7 @@ fun AppearanceSettingsDialog(
                                         androidx.compose.foundation.Image(
                                             painter = painterResource(id = R.drawable.callq_tv_logo),
                                             contentDescription = null,
-                                            modifier = Modifier.size(32.dp)
+                                            modifier = Modifier.size(100.dp)
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Column {
@@ -1365,15 +1487,15 @@ fun AppearanceSettingsDialog(
                                         if (isTokenAnnouncementEnabled == true) "Enabled" else "Disabled"
                                     val counterAnnText =
                                         if (isCounterAnnouncementEnabled == true) "Enabled" else "Disabled"
-                                    InfoRow("Token announcement", tokenAnnText)
-                                    InfoRow("Counter announcement", counterAnnText)
+                                    InfoRow("Token Announcement", tokenAnnText)
+                                    InfoRow("Counter Announcement", counterAnnText)
                                 }
                             }
                         }
 
-                        // Right column: Appearance + actions
+                        // Right column: Appearance + actions (fixed width)
                         Column(
-                            modifier = Modifier.weight(0.8f),
+                            modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
                             Text(
@@ -1381,12 +1503,77 @@ fun AppearanceSettingsDialog(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.primary
                             )
+                            HorizontalDivider(modifier = Modifier.padding(top = 2.dp, bottom = 4.dp))
+                            Text(
+                                "Notification sound",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
 
-                            // App theme, Counter BG, Token BG in a single vertical column
+                            // Notification sound + App theme, Counter BG, Token BG in a single vertical column
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                                verticalArrangement = Arrangement.spacedBy(1.dp)
                             ) {
+                                // Notification sound selector
+                                val soundOptions = listOf(
+                                    "ding"      to "Ding",
+                                    "ding2"     to "Ding 2",
+                                    "ding3"     to "Ding 3",
+                                    "double"    to "Double beep",
+                                    "double2"   to "Double beep 2",
+                                    "double3"   to "Double beep 3",
+                                    "soft"      to "Soft beep",
+                                    "soft2"     to "Soft beep 2",
+                                    "soft3"     to "Soft beep 3",
+                                    "alert"     to "Alert",
+                                    "alert2"    to "Alert 2",
+                                    "alert3"    to "Alert 3",
+                                    "bell"      to "Bell",
+                                    "bell2"     to "Bell 2",
+                                    "bell3"     to "Bell 3",
+                                    "church1"   to "Church bell 1",
+                                    "church2"   to "Church bell 2",
+                                    "church3"   to "Church bell 3",
+                                    "ping"      to "Ping",
+                                    "ping2"     to "Ping 2",
+                                    "ping3"     to "Ping 3",
+                                    "long"      to "Long tone",
+                                    "long2"     to "Long tone 2",
+                                    "long3"     to "Long tone 3",
+                                    "chime1"    to "Chime 1",
+                                    "chime2"    to "Chime 2",
+                                    "chime3"    to "Chime 3",
+                                    "hi1"       to "High beep 1",
+                                    "hi2"       to "High beep 2",
+                                    "hi3"       to "High beep 3",
+                                    "low1"      to "Low beep 1",
+                                    "low2"      to "Low beep 2",
+                                    "low3"      to "Low beep 3",
+                                    "tone1"     to "Tone 1",
+                                    "tone2"     to "Tone 2",
+                                    "tone3"     to "Tone 3",
+                                    "tone4"     to "Tone 4",
+                                    "tone5"     to "Tone 5",
+                                    "tone6"     to "Tone 6",
+                                    "tone7"     to "Tone 7"
+                                )
+                                val currentSoundLabel = soundOptions.firstOrNull { it.first == notificationSoundKey }?.second ?: "Ding"
+
+                                Box(modifier = Modifier.fillMaxWidth()) {
+                                    OutlinedButton(
+                                        onClick = { showSoundPicker = true },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            "sound: $currentSoundLabel",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+
                                 Box(modifier = Modifier.fillMaxWidth()) {
                                     ColorPickerButton("App Theme", currentThemeHex) {
                                         showThemeColorPicker = true
@@ -1419,7 +1606,9 @@ fun AppearanceSettingsDialog(
                                 ) {
                                     Text(
                                         "Clear saved token details",
-                                        style = MaterialTheme.typography.bodySmall
+                                        style = MaterialTheme.typography.bodySmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                             }
@@ -1497,19 +1686,23 @@ fun AppearanceSettingsDialog(
 @Composable
 fun InfoRow(label: String, value: String, valueColor: Color = MaterialTheme.colorScheme.onSurface) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 1.dp),
+        verticalAlignment = Alignment.Top
     ) {
         Text(
             label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(0.35f)
         )
         Text(
             value,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.SemiBold,
-            color = valueColor
+            color = valueColor,
+            modifier = Modifier.weight(0.65f)
         )
     }
 }
@@ -1573,6 +1766,100 @@ fun PresetColorDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun NotificationSoundDialog(
+    title: String,
+    selectedKey: String,
+    onSoundSelected: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val soundOptions = listOf(
+        "ding"      to "Ding",
+        "ding2"     to "Ding 2",
+        "ding3"     to "Ding 3",
+        "double"    to "Double beep",
+        "double2"   to "Double beep 2",
+        "double3"   to "Double beep 3",
+        "soft"      to "Soft beep",
+        "soft2"     to "Soft beep 2",
+        "soft3"     to "Soft beep 3",
+        "alert"     to "Alert",
+        "alert2"    to "Alert 2",
+        "alert3"    to "Alert 3",
+        "bell"      to "Bell",
+        "bell2"     to "Bell 2",
+        "bell3"     to "Bell 3",
+        "church1"   to "Church bell 1",
+        "church2"   to "Church bell 2",
+        "church3"   to "Church bell 3",
+        "ping"      to "Ping",
+        "ping2"     to "Ping 2",
+        "ping3"     to "Ping 3",
+        "long"      to "Long tone",
+        "long2"     to "Long tone 2",
+        "long3"     to "Long tone 3",
+        "chime1"    to "Chime 1",
+        "chime2"    to "Chime 2",
+        "chime3"    to "Chime 3",
+        "hi1"       to "High beep 1",
+        "hi2"       to "High beep 2",
+        "hi3"       to "High beep 3",
+        "low1"      to "Low beep 1",
+        "low2"      to "Low beep 2",
+        "low3"      to "Low beep 3",
+        "tone1"     to "Tone 1",
+        "tone2"     to "Tone 2",
+        "tone3"     to "Tone 3",
+        "tone4"     to "Tone 4",
+        "tone5"     to "Tone 5",
+        "tone6"     to "Tone 6",
+        "tone7"     to "Tone 7"
+    )
+    val scope = rememberCoroutineScope()
+
+    AlertDialog(
+        modifier = Modifier.fillMaxWidth(0.9f),
+        onDismissRequest = onDismiss,
+        title = { Text(title, style = MaterialTheme.typography.titleSmall) },
+        text = {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.heightIn(max = 320.dp)
+            ) {
+                items(soundOptions.size) { index ->
+                    val (key, label) = soundOptions[index]
+                    val isSelected = key == selectedKey
+                    OutlinedButton(
+                        onClick = {
+                            onSoundSelected(key)
+                            scope.launch { playTokenChime(key) }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        border = if (isSelected)
+                            BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+                        else
+                            BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                    ) {
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
             }
         }
     )

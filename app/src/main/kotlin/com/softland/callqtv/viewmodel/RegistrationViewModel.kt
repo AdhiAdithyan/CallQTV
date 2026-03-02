@@ -138,12 +138,12 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
                     checkDeviceStatus(macAddress, customerId, authRes, regRes)
                 }
                 "Block" -> {
-                    val msg = regRes.message ?: "Awaiting approval"
+                    val msg = regRes.message ?: "Awaiting Approval"
                     com.softland.callqtv.utils.FileLogger.logError(getApplication(), "RegViewModel", "Device Blocked: $msg")
                     _state.value = RegistrationState.DeviceApprovalRequired(msg)
                 }
                 else -> {
-                    val msg = regRes.message ?: "Registration error"
+                    val msg = regRes.message ?: "Device License Registration Error"
                     com.softland.callqtv.utils.FileLogger.logError(getApplication(), "RegViewModel", "Registration Fail: $msg")
                     _state.value = RegistrationState.Error(msg)
                 }
