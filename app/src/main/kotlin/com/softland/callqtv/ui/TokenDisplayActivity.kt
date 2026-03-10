@@ -719,15 +719,28 @@ private fun TokenDisplayContent(
         // When counters increase, CountersArea(type 2) already arranges them into a grid of rows/columns.
         val layoutType = if (usePortraitLayout) "2" else baseLayoutType
 
+        // Decide how much horizontal space ads vs counters should take when ads are visible.
+        // Use configuration (no_of_counters) to choose between 40% and 50% for ads:
+        // - If ads are enabled AND there are 2 or fewer counters, ads take 50% (bigger ad area).
+        // - Otherwise, ads take 40%. Counters take the remaining width.
+        val counterCount = countersToDisplay.size
+        val configuredCounterLimit = config.noOfCounters ?: counterCount
+        val adWeight = remember(showAds, configuredCounterLimit) {
+            if (!showAds) 0f
+            else if (configuredCounterLimit <= 2) 0.5f
+            else 0.4f
+        }
+        val countersWeight = remember(adWeight) { if (adWeight > 0f) 1f - adWeight else 1f }
+
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             if (usePortraitLayout) {
                 if (hasAds) {
                     // Portrait + ads: Ad area on the left, vertical counters on the right
                     Row(modifier = Modifier.fillMaxSize()) {
-                        Box(modifier = Modifier.weight(0.40f).fillMaxHeight()) {
+                        Box(modifier = Modifier.weight(adWeight).fillMaxHeight()) {
                             AdArea(adFiles, config)
                         }
-                        Box(modifier = Modifier.weight(0.60f).fillMaxHeight()) {
+                        Box(modifier = Modifier.weight(countersWeight).fillMaxHeight()) {
                             CountersArea(
                                 countersToDisplay,
                                 tokensPerCounter,
@@ -764,15 +777,15 @@ private fun TokenDisplayContent(
                 if (hasAds) {
                     Row(modifier = Modifier.fillMaxSize()) {
                         if (adPlacement.equals("left", ignoreCase = true)) {
-                            Box(modifier = Modifier.weight(0.40f).fillMaxHeight()) { AdArea(adFiles, config) }
-                            Box(modifier = Modifier.weight(0.60f).fillMaxHeight()) {
+                            Box(modifier = Modifier.weight(adWeight).fillMaxHeight()) { AdArea(adFiles, config) }
+                            Box(modifier = Modifier.weight(countersWeight).fillMaxHeight()) {
                                 CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout)
                             }
                         } else {
-                            Box(modifier = Modifier.weight(0.60f).fillMaxHeight()) {
+                            Box(modifier = Modifier.weight(countersWeight).fillMaxHeight()) {
                                 CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout)
                             }
-                            Box(modifier = Modifier.weight(0.40f).fillMaxHeight()) { AdArea(adFiles, config) }
+                            Box(modifier = Modifier.weight(adWeight).fillMaxHeight()) { AdArea(adFiles, config) }
                         }
                     }
                 } else {
@@ -1164,10 +1177,9 @@ fun CountersArea(
         val numCounters = counters.size
 
         // When there are many counters, split the UI into two parts.
-        // We now always split only when there are more than 4 counters,
-        // regardless of orientation; orientation only controls the
-        // direction of the split (horizontal vs vertical).
-        val splitThreshold = 4
+        // For landscape layouts (isPortrait = false) use a lower threshold (2),
+        // otherwise use 4. Orientation still controls only direction of split.
+        val splitThreshold = if (isPortrait) 4 else 2
 
         if (numCounters > splitThreshold) {
             val firstHalfCount = (numCounters + 1) / 2
