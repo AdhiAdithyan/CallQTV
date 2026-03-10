@@ -12,6 +12,7 @@ import com.softland.callqtv.data.local.MappedBrokerEntity
 import com.softland.callqtv.data.local.TvConfigEntity
 import com.softland.callqtv.data.local.CounterEntity
 import com.softland.callqtv.data.local.AdFileEntity
+import com.softland.callqtv.data.local.ConnectedDeviceEntity
 import com.softland.callqtv.data.network.ApiService
 import com.softland.callqtv.data.local.AppSharedPreferences
 import com.softland.callqtv.utils.PreferenceHelper
@@ -39,6 +40,7 @@ class TvConfigRepository(private val context: Context) {
     private val mappedBrokerDao = AppDatabase.getInstance(context).mappedBrokerDao()
     private val counterDao = AppDatabase.getInstance(context).counterDao()
     private val adFileDao = AppDatabase.getInstance(context).adFileDao()
+    private val connectedDeviceDao = AppDatabase.getInstance(context).connectedDeviceDao()
     private val gson = Gson()
 
     /**
@@ -49,10 +51,12 @@ class TvConfigRepository(private val context: Context) {
         macAddress: String,
         customerId: String
     ): TvConfigResult = withContext(Dispatchers.IO) {
+        val fcmToken = PreferenceHelper.getFcmToken(context)
         val request = TvConfigRequest(
             macAddress = macAddress,
             customerId = customerId,
-            flag = "TV"
+            flag = "TV",
+            fcmToken = fcmToken.ifEmpty { null }
         )
 
         // Dynamically construct URL from saved base URL
@@ -60,7 +64,7 @@ class TvConfigRepository(private val context: Context) {
         val baseUrl = if (savedBaseUrl.endsWith("/")) savedBaseUrl else "$savedBaseUrl/"
         val url = "${baseUrl}config/api/android/config"
 
-        val body: TvConfigResponse = try {
+        val body: TvConfigResponse? = try {
             api.fetchTvConfig(url, request)
         } catch (e: HttpException) {
             val errorBody = e.response()?.errorBody()?.string() ?: ""
@@ -84,6 +88,10 @@ class TvConfigRepository(private val context: Context) {
         } catch (e: Exception) {
             com.softland.callqtv.utils.FileLogger.logError(context, "TvConfigRepo", "Request failed at $url", e)
             return@withContext TvConfigResult.Error(e.message ?: "Request failed")
+        }
+
+        if (body == null) {
+            return@withContext TvConfigResult.Error("Empty response from configuration server")
         }
 
         val messageText = body.message ?: body.error ?: ""
@@ -110,27 +118,44 @@ class TvConfigRepository(private val context: Context) {
             )
         }
 
-        val entity = body.toEntity(macAddress = macAddress, customerId = customerId)
+        val entity = try {
+            body.toEntity(macAddress = macAddress, customerId = customerId)
+        } catch (e: Exception) {
+            com.softland.callqtv.utils.FileLogger.logError(context, "TvConfigRepo", "Failed to map response to entity", e)
+            return@withContext TvConfigResult.Error("Configuration parsing error: ${e.message}")
+        }
+        
         val db = AppDatabase.getInstance(context)
 
-        db.runInTransaction {
-            dao.upsert(entity)
+        try {
+            db.runInTransaction {
+                dao.upsert(entity)
 
-            body.toMappedBrokerEntityOrNull(macAddress, customerId)?.let {
-                mappedBrokerDao.upsert(it)
-            }
+                body.toMappedBrokerEntityOrNull(macAddress, customerId)?.let {
+                    mappedBrokerDao.upsert(it)
+                }
 
-            val counterEntities = body.toCounterEntities(macAddress, customerId)
-            if (counterEntities.isNotEmpty()) {
-                counterDao.deleteByDeviceAndCustomer(entity.deviceId, macAddress, customerId)
-                counterDao.insertAll(counterEntities)
-            }
+                val counterEntities = body.toCounterEntities(macAddress, customerId)
+                if (counterEntities.isNotEmpty()) {
+                    counterDao.deleteByDeviceAndCustomer(entity.deviceId, macAddress, customerId)
+                    counterDao.insertAll(counterEntities)
+                }
 
-            val adFileEntities = body.toAdFileEntities(macAddress, customerId)
-            if (adFileEntities.isNotEmpty()) {
-                adFileDao.deleteByDeviceAndCustomer(entity.deviceId, macAddress, customerId)
-                adFileDao.insertAll(adFileEntities)
+                val adFileEntities = body.toAdFileEntities(macAddress, customerId)
+                if (adFileEntities.isNotEmpty()) {
+                    adFileDao.deleteByDeviceAndCustomer(entity.deviceId, macAddress, customerId)
+                    adFileDao.insertAll(adFileEntities)
+                }
+
+                val connectedDeviceEntities = body.toConnectedDeviceEntities(macAddress, customerId)
+                if (connectedDeviceEntities.isNotEmpty()) {
+                    connectedDeviceDao.deleteByDeviceAndCustomer(entity.deviceId, macAddress, customerId)
+                    connectedDeviceDao.insertAll(connectedDeviceEntities)
+                }
             }
+        } catch (e: Exception) {
+            com.softland.callqtv.utils.FileLogger.logError(context, "TvConfigRepo", "Database transaction failed", e)
+            return@withContext TvConfigResult.Error("Database error: ${e.message}")
         }
 
         TvConfigResult.Success(entity)
@@ -167,6 +192,16 @@ class TvConfigRepository(private val context: Context) {
     ): List<AdFileEntity> = withContext(Dispatchers.IO) {
         val config = dao.getByMacAndCustomer(macAddress, customerId) ?: return@withContext emptyList()
         adFileDao.getByMacAndCustomer(config.macAddress, config.customerId)
+    }
+
+    /**
+     * Get the list of connected devices from local DB.
+     */
+    suspend fun getConnectedDevices(
+        macAddress: String,
+        customerId: String
+    ): List<ConnectedDeviceEntity> = withContext(Dispatchers.IO) {
+        connectedDeviceDao.getByMacAndCustomer(macAddress, customerId)
     }
 
     /**
@@ -234,13 +269,14 @@ class TvConfigRepository(private val context: Context) {
             status = this.status.orEmpty(),
             message = this.message,
             audioLanguage = cfg.audioLanguage,
-            showAds = cfg.showAds,
+            showAds = cfg.showAds, // String type handled
             adInterval = cfg.adInterval,
             orientation = cfg.orientation,
             layoutType = cfg.layoutType,
             saveAudioExternal = cfg.saveAudioExternal,
             enableCounterAnnouncement = cfg.enableCounterAnnouncement,
             enableTokenAnnouncement = cfg.enableTokenAnnouncement,
+            enableCounterPrefix = cfg.enableCounterPrefix,
             tokenAudioUrl = cfg.tokenAudioUrl,
             tokenMusicUrl = cfg.tokenMusicUrl,
             displayRows = cfg.displayRows,
@@ -278,7 +314,8 @@ class TvConfigRepository(private val context: Context) {
         val list = this.counters ?: emptyList()
         if (list.isEmpty()) return emptyList()
 
-        return list.map { c ->
+        return list.mapNotNull { c ->
+            if (c == null) return@mapNotNull null
             CounterEntity(
                 deviceId = deviceIdLocal,
                 macAddress = macAddress,
@@ -295,6 +332,11 @@ class TvConfigRepository(private val context: Context) {
                 isEnabled = c.isEnabled,
                 audioUrl = c.audioUrl,
                 audioName = c.audioName,
+                counterConfigId = c.counterConfigId,
+                maxTokenNumber = c.maxTokenNumber,
+                dispenserSerialNumber = c.dispenserSerialNumber,
+                dispenserTokenType = c.dispenserTokenType,
+                dispenserDisplayName = c.dispenserDisplayName,
                 rawJson = gson.toJson(c)
             )
         }
@@ -336,7 +378,8 @@ class TvConfigRepository(private val context: Context) {
         val list = cfg.adFiles ?: emptyList()
         if (list.isEmpty()) return emptyList()
 
-        return list.mapIndexed { index, path ->
+        return list.mapIndexedNotNull { index, path ->
+            if (path == null) return@mapIndexedNotNull null
             AdFileEntity(
                 deviceId = deviceIdLocal,
                 macAddress = macAddress,
@@ -344,6 +387,31 @@ class TvConfigRepository(private val context: Context) {
                 position = index,
                 filePath = path,
                 rawJson = gson.toJson(path)
+            )
+        }
+    }
+
+    private fun TvConfigResponse.toConnectedDeviceEntities(
+        macAddress: String,
+        customerId: String
+    ): List<ConnectedDeviceEntity> {
+        val deviceIdLocal = this.deviceId ?: return emptyList()
+        val list = this.connectedDevices ?: emptyList()
+        if (list.isEmpty()) return emptyList()
+
+        return list.mapNotNull { d ->
+            if (d == null) return@mapNotNull null
+            ConnectedDeviceEntity(
+                deviceId = deviceIdLocal,
+                macAddress = macAddress,
+                customerId = customerId,
+                remoteDeviceId = d.id,
+                serialNumber = d.serialNumber,
+                deviceType = d.deviceType,
+                name = d.name,
+                status = d.status,
+                isActive = d.isActive,
+                configJson = d.config?.let { gson.toJson(it) }
             )
         }
     }

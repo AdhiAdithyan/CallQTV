@@ -1,66 +1,122 @@
 # CallQTV – Code Validation Report
 
-**Date:** January 30, 2026  
-**Scope:** Full project (Kotlin app, Gradle Kotlin DSL, Jetpack)  
-**Last validation:** Full validation run; issues fixed (see §8).
+**Date:** March 9, 2026  
+**Scope:** Full project (Kotlin app, Gradle Kotlin DSL, Jetpack Compose)  
+**Validation Type:** Static analysis, linter, code structure review
 
 ---
 
-## 1. Build & Compilation
+## 1. Executive Summary
+
+| Category | Status | Notes |
+|----------|--------|-------|
+| **IDE Linter** | ✅ PASS | 0 errors in `app/src/main/kotlin` |
+| **Code Structure** | ✅ PASS | MVVM architecture, clear module separation |
+| **Code Quality** | ✅ PASS | No TODO/FIXME/HACK; null-safe patterns |
+| **Build** | ⚠️ Environment | Requires `JAVA_HOME` to be set for Gradle |
+| **Dependencies** | ✅ PASS | Current versions (Kotlin 2.1, Compose BOM, Room 2.7) |
+
+---
+
+## 2. Source Code Validation
+
+### 2.1 Project Structure
+
+```
+app/src/main/kotlin/com/softland/callqtv/
+├── data/
+│   ├── local/         # Room DB, DAOs, Entities (8 entities)
+│   ├── model/         # API request/response models
+│   ├── network/       # Retrofit, ApiService
+│   └── repository/    # TvConfig, Mqtt, Auth, TokenHistory
+├── fcm/               # Firebase Cloud Messaging
+├── ui/                # SplashScreen, CustomerId, TokenDisplay
+├── utils/             # ThemeColorManager, TokenAnnouncer, SemanticMqttParser
+└── viewmodel/         # Mqtt, TokenDisplay, Registration, License
+```
+
+### 2.2 Key Validations
 
 | Check | Result |
 |-------|--------|
-| Clean build | **PASS** – `./gradlew clean assembleCallQTVDebug` |
-| Compilation | **PASS** – All 61 Kotlin sources in `app/src/main/kotlin` compile |
-| Kapt (Room, DataBinding) | **PASS** |
+| **Kotlin sources** | ~70 files in `app/src/main/kotlin` |
+| **Linter errors** | 0 |
+| **TODO/FIXME/HACK** | 0 in main source |
+| **Null safety** | Proper use of nullable types, `?.`, `?.let` |
+| **Architecture** | MVVM with Repository pattern |
+| **UI** | 100% Jetpack Compose |
+
+### 2.3 Database (Room)
+
+| Entity | Purpose |
+|--------|---------|
+| TvConfigEntity | TV configuration cache |
+| MappedBrokerEntity | MQTT broker settings |
+| CounterEntity | Counter definitions |
+| AdFileEntity | Advertisement files |
+| TokenHistoryEntity | Token call history |
+| ConnectedDeviceEntity | Connected device list |
+
+**Version:** 13 | **Migration:** 10→11 defined | **Fallback:** Destructive migration on schema change
+
+### 2.4 Activities & Entry Points
+
+| Activity | Exported | Purpose |
+|----------|----------|---------|
+| SplashScreenActivity | ✅ (LAUNCHER) | License check, navigate to Customer ID |
+| CustomerIdActivity | ❌ | 4-digit ID, license validation, theme |
+| TokenDisplayActivity | ❌ | Token display, MQTT, ads, TTS |
+
+### 2.5 Build Configuration
+
+- **minSdk:** 26 | **targetSdk:** 35 | **compileSdk:** 35  
+- **JDK:** 21  
+- **Signing:** Configurable (limar.keystore)  
+- **Product Flavor:** CallQTV  
 
 ---
 
-## 2. Tests
+## 3. Build Commands (Requires JAVA_HOME)
 
-| Check | Result |
-|-------|--------|
-| Unit tests | **PASS** – `./gradlew :app:testCallQTVDebugUnitTest` |
-| Test code | Kotlin (`app/src/test/kotlin`, `app/src/androidTest/kotlin`) |
+To run a full build on a machine with Java configured:
 
----
-
-## 3. Lint (Android)
-
-| Check | Result |
-|-------|--------|
-| Lint run | **PASS** – `./gradlew :app:lintCallQTVDebug` (0 errors) |
-| Fixes applied | 1. `AndroidManifest.xml`: `SCHEDULE_EXACT_ALARM` – added `tools:ignore="ProtectedPermissions"` (permission kept for devices that grant it). 2. `PreferenceHelper.kt`: Replaced `.commit()` with `.apply()` for all SharedPreferences writes (avoids blocking UI). |
-
-**Remaining lint (warnings only, non-blocking):**
-
-- **DefaultLocale** – `String.format("%04d", ...)` in `CustomerIdActivity.kt`; use `String.format(Locale.getDefault(), ...)` or `Locale.ROOT` where appropriate.
-- **KotlinNullnessAnnotation** – `@Nullable` / `@NonNull` in Kotlin (`CurrentDayOrder.kt`, `StoragePathProvider.kt`); safe to remove, nullability is in the type (`String?`, non-null types).
-- **CustomSplashScreen** – `SplashScreenActivity` custom splash; on API 31+ consider aligning with system splash (see [SplashScreen](https://developer.android.com/guide/topics/ui/splash-screen)).
-- **OldTargetApi** – `targetSdk = 35`; lint suggests “not latest” relative to its checks; 35 is current; no change required unless you adopt a newer SDK.
-- **VectorRaster** – Some vector drawables have large intrinsic size; consider limiting to &lt;200dp for icons.
-- **ApplySharedPref** – Resolved in `PreferenceHelper` (all `.apply()`).
-- Other minor warnings (typos, accessibility, etc.) – see `app/build/reports/lint-results-CallQTVDebug.html`.
+```powershell
+# Windows PowerShell
+cd "f:\I Drive\Adithyan\CallQTV"
+$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"  # or your JDK path
+.\gradlew clean assembleCallQTVDebug
+.\gradlew :app:testCallQTVDebugUnitTest
+.\gradlew :app:lintCallQTVDebug
+```
 
 ---
 
-## 4. IDE / Linter
+## 4. Known Lint Warnings (Non-Blocking)
 
-| Check | Result |
-|-------|--------|
-| Linter errors in `app/src/main/kotlin` | **0** |
+| Warning | Location | Recommendation |
+|---------|----------|----------------|
+| DefaultLocale | String.format | Use `Locale.ROOT` or `Locale.getDefault()` |
+| CustomSplashScreen | SplashScreenActivity | Consider API 31+ splash screen alignment |
+| VectorRaster | Drawables | Limit icon size for large vectors |
+| ProtectedPermissions | Manifest | `SCHEDULE_EXACT_ALARM` requires `tools:ignore` |
 
 ---
 
-## 5. Code Quality Snapshot
+## 5. Feature Completeness
 
-| Area | Notes |
-|------|--------|
-| **Null safety** | No unsafe `!!` found in app code. Nullable types and `?.` / `?.let` used. |
-| **Deprecations** | A few intentional: `overridePendingTransition`, `MediaRecorder()`, `InputMethodManager.toggleSoftInput`, `TextToSpeech` callback; some already have `@Suppress("DeprecatedCallableAddReplaceWith")` or `@Suppress("DEPRECATION")` where needed. |
-| **Threading** | ViewModels, LiveData, coroutines used; no obvious UI work on background threads. |
-| **Resources** | `AndroidManifest` references correct activities; duplicate `FileProvider` entries (one `StoragePathProvider`, one `androidx.core.content.FileProvider`) – consider using a single provider. |
-| **Architecture** | Clear split: Activities (UI), ViewModel, Repository, Room DB, Retrofit API, Utils. |
+| Feature | Implemented |
+|---------|-------------|
+| Splash + License | ✅ |
+| Customer ID + License API | ✅ |
+| TV Config API + Cache | ✅ |
+| Token Display (Type 1 & 2) | ✅ |
+| MQTT Connect & Subscribe | ✅ |
+| Token TTS Announcements | ✅ (multi-language: EN, HI, TA, ML) |
+| Advertisement (Image + Video) | ✅ |
+| Theme Picker | ✅ |
+| Firebase FCM | ✅ (config refresh on push) |
+| Offline fallback | ✅ |
+| FileLogger / Error logs | ✅ |
 
 ---
 
@@ -68,38 +124,14 @@
 
 | Category | Status |
 |----------|--------|
-| Build | **PASS** |
-| Unit tests | **PASS** |
-| Lint (errors) | **PASS** (0 errors) |
-| Linter (IDE) | **PASS** (0 errors) |
-| Kotlin style | Pure Kotlin; source under `kotlin/` only |
-| Jetpack | ViewModel, LiveData, Room, Compose in use |
+| IDE Linter | **PASS** |
+| Code Quality | **PASS** |
+| Architecture | **PASS** |
+| Dependencies | **PASS** |
+| Build | **Environment-dependent** |
 
-**Overall:** The codebase validates successfully. Build and tests pass, lint reports no errors, and the applied fixes (manifest permission handling, SharedPreferences `apply()`) improve correctness and lint compliance. Remaining lint warnings are documented above and in the HTML report for optional follow-up.
-
----
-
-## 7. Commands Used
-
-```bash
-./gradlew clean assembleCallQTVDebug
-./gradlew :app:testCallQTVDebugUnitTest
-./gradlew :app:lintCallQTVDebug
-```
-
-Lint report (if generated): `app/build/reports/lint-results-CallQTVDebug.html`
+**Overall:** The CallQTV source code is well-structured, follows modern Android best practices, and passes static validation. Configure `JAVA_HOME` and run the Gradle commands above for full build and test validation.
 
 ---
 
-## 8. Issues fixed (this run)
-
-| Issue | Location | Fix |
-|-------|----------|-----|
-| **DefaultLocale** | CustomerIdActivity.kt | `String.format("%04d", custId)` → `String.format(Locale.ROOT, "%04d", custId)` |
-| **KotlinNullnessAnnotation** | CurrentDayOrder.kt | Removed `@Nullable` from `notifiedAt`, `device` (Kotlin types already express nullability) |
-| **KotlinNullnessAnnotation** | StoragePathProvider.kt | Removed `@NonNull` from `uncaughtException(thread, throwable)` and import |
-| **Unused variable** | CustomerIdActivity.kt | Removed unused `device` (DeviceRegistrationRequest) in `checkLicenseFromServer` |
-| **Unused variables** | CustomerIdActivity.kt | Removed unused `statusIconSize`, `statusTextStyle` in `CustomerIdScreen` |
-| **Unnecessary safe call** | CustomerIdActivity.kt | `Objects.requireNonNull(posts)?.authenticationstatus` → `posts?.authenticationstatus` |
-| **Redundant / unused** | Variables.kt | Simplified `isNetworkEnabled`: use `wifiEnabled`/`cellularEnabled` booleans, remove redundant assignments |
-| **No cast needed** | TokenDisplayActivity.kt | `List(...) { null as String? }` → `List(...) { null }` (type inferred) |
+*Generated for CallQTV – Android TV Token Display System*

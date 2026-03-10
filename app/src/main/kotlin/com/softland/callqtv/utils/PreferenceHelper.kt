@@ -10,6 +10,7 @@ object PreferenceHelper {
     const val customer_id = "CustomerID"
     const val project_code = "ProjectCode"
     const val TOKEN_VOICE = "token_voice"
+    const val FCM_TOKEN = "fcm_token"
     private const val CURRENT_DATE = "current_date"
 
     private fun getAuthPrefs(context: Context): SharedPreferences {
@@ -35,5 +36,13 @@ object PreferenceHelper {
 
     fun UpdateLoginRespDetails(context: Context, key: String, value: String) {
         getLoginPrefs(context).edit().putString(key, value).apply()
+    }
+
+    fun saveFcmToken(context: Context, token: String) {
+        getAuthPrefs(context).edit().putString(FCM_TOKEN, token).apply()
+    }
+
+    fun getFcmToken(context: Context): String {
+        return getAuthPrefs(context).getString(FCM_TOKEN, "") ?: ""
     }
 }

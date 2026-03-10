@@ -11,6 +11,7 @@ import androidx.room.PrimaryKey
  * token        – the token value (e.g. "101")
  * position     – 0 = most recent, 1 = second most recent, …
  * updated_at   – epoch millis, used for ordering / pruning
+ * call_date    – date when the token was called (yyyy-MM-dd); used to clear previous days' data
  */
 @Entity(
     tableName = "token_history",
@@ -31,5 +32,8 @@ data class TokenHistoryEntity(
     val position: Int,          // 0 = latest
 
     @ColumnInfo(name = "updated_at")
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+
+    @ColumnInfo(name = "call_date")
+    val callDate: String = ""   // yyyy-MM-dd; tokens with date != today are cleared on load
 )

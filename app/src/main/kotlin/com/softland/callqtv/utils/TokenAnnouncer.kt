@@ -33,7 +33,7 @@ object TokenAnnouncer {
                     if (status == TextToSpeech.SUCCESS) {
                         isInitialized = true
                         Log.i(TAG, "TTS Initialized successfully")
-                        tts?.setSpeechRate(0.80f) // Slow down for clarity
+                        tts?.setSpeechRate(0.90f) // Slow down for clarity
                         
                         tts?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
                             override fun onStart(utteranceId: String?) {}
@@ -130,9 +130,9 @@ object TokenAnnouncer {
         heartbeatJob?.cancel()
         heartbeatJob = scope.launch {
             while (true) {
-                // More aggressive keep-alive: ping every ~20 seconds so the
+                // More aggressive keep-alive: ping every ~5 seconds so the
                 // first real announcement after a long idle period is not delayed
-                delay(10 * 1000L)
+                delay(5 * 1000L)
                 synchronized(this@TokenAnnouncer) {
                     if (isInitialized) {
                         // Play a very short silence to keep the TTS service warm
@@ -166,19 +166,19 @@ object TokenAnnouncer {
         // independent of script rendering support.
         val phrase = when (lang) {
             "hi", "hindi" -> {
-                if (counter.isNotBlank()) "Token number $tokenText, kripya $counter par jayen" 
+                if (counter.isNotBlank()) "Token $tokenText,$counter vahaan jaen"
                 else "Token number $tokenText"
             }
             "ta", "tamil" -> {
-                if (counter.isNotBlank()) "Token number $tokenText, thayavu seithu $counter sellavum" 
+                if (counter.isNotBlank()) "Token $tokenText, $counter ange Cellavum"
                 else "Token number $tokenText"
             }
             "ml", "malayalam" -> {
-                if (counter.isNotBlank()) "Token number $tokenText, dayavayi $counter ilekku varuka" 
+                if (counter.isNotBlank()) "Token $tokenText, $counter ilekku varuka"
                 else "Token number $tokenText"
             }
             else -> {
-                if (counter.isNotBlank()) "Token $tokenText, please proceed to $counter" 
+                if (counter.isNotBlank()) "Token $tokenText,Counter $counter"
                 else "Token $tokenText"
             }
         }

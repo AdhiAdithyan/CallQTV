@@ -39,6 +39,8 @@ import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.*
@@ -283,16 +285,31 @@ fun TokenDisplayScreen(
                 val isNetworkAvailable by networkViewModel.getNetworkLiveData(context).observeAsState(initial = true)
     var showMqttRetryDialog by remember { mutableStateOf(false) }
     var showTtsLoading by remember { mutableStateOf(false) }
+    // Tracks when the BLUCON error dialog was shown (kept for potential timing / analytics)
+    var mqttRetryShownAt by remember { mutableStateOf<Long?>(null) }
+    val mqttRetryFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(isAutoRetryExhausted, mqttError) {
         if (isAutoRetryExhausted && mqttError.isNotBlank()) {
             showMqttRetryDialog = true
+            mqttRetryShownAt = System.currentTimeMillis()
         }
     }
-    // Auto-dismiss broker error dialog when connection is restored (e.g. after auto or manual retry)
-    LaunchedEffect(mqttConnected) {
-        if (mqttConnected) {
+    // Auto-close BLUCON dialog when connection is successfully restored.
+    // This does NOT depend on error text, only on actual MQTT connection status.
+    LaunchedEffect(mqttConnected, showMqttRetryDialog) {
+        if (mqttConnected && showMqttRetryDialog) {
             showMqttRetryDialog = false
+            mqttRetryShownAt = null
+        }
+    }
+    // Auto-focus Retry button when broker error dialog is shown (defer so dialog content is composed)
+    LaunchedEffect(showMqttRetryDialog) {
+        if (showMqttRetryDialog && mqttError.isNotBlank()) {
+            delay(100)
+            try {
+                mqttRetryFocusRequester.requestFocus()
+            } catch (_: IllegalStateException) { /* focus tree not ready */ }
         }
     }
 
@@ -338,44 +355,67 @@ fun TokenDisplayScreen(
                     ?: actualCounter.defaultName?.takeIf { it.isNotBlank() }
                     ?: actualCounter.buttonIndex?.toString()
                     ?: counterIdOrName
+            val btnKey = actualCounter.buttonIndex?.toString()
 
-            // Update in‑memory history & UI for valid counters only
-            val shouldAnnounce = mqttViewModel.processTokenUpdate(storageKey, tokenLabel)
+            // Update in‑memory history & UI atomically (one map update for both keys).
+            val shouldAnnounce = mqttViewModel.processTokenUpdateForKeys(storageKey, tokenLabel, btnKey)
             if (!shouldAnnounce) {
                 return@collect
             }
 
-            // 3. Always play chime first, even when announcement is disabled
+            // Deduplicate: skip announcement if we already announced this token (e.g. duplicate MQTT)
+            if (mqttViewModel.isAlreadyAnnounced(storageKey, tokenLabel) ||
+                (btnKey != null && mqttViewModel.isAlreadyAnnounced(btnKey, tokenLabel))) {
+                return@collect
+            }
+
+            // Announcements (chime + TTS) ONLY when token announcement is enabled.
+            if (currentConfig?.enableTokenAnnouncement != true) {
+                return@collect
+            }
+
+            // Mark before TTS so duplicate messages don't re-announce
+            mqttViewModel.markAsAnnounced(storageKey, tokenLabel)
+            if (btnKey != null) mqttViewModel.markAsAnnounced(btnKey, tokenLabel)
+
+            // Brief delay so UI updates before TTS (both visible at same time)
+            delay(150)
+
+            // 3. Play chime first
             val soundKey = ThemeColorManager.getNotificationSoundKey(context)
             playTokenChime(soundKey)
 
-            // 4. Announce ONLY when enabled in configuration
-            if (currentConfig?.enableTokenAnnouncement == true) {
-                val displayName =
-                    (actualCounter.name?.takeIf { it.isNotBlank() }
-                        ?: actualCounter.defaultName?.takeIf { it.isNotBlank() }
-                        ?: "Counter ${actualCounter.buttonIndex}")
+            // 4. TTS: include counter name only when counter announcement is also enabled
+            val displayName =
+                (actualCounter.name?.takeIf { it.isNotBlank() }
+                    ?: actualCounter.defaultName?.takeIf { it.isNotBlank() }
+                    ?: "Counter ${actualCounter.buttonIndex}")
 
-                val announcementCounterName =
-                    if (currentConfig.enableCounterAnnouncement == true) {
-                        displayName
-                    } else {
-                        ""
-                    }
-
-                // Announce and suspend until TTS callback completes
-                suspendCancellableCoroutine<Unit> { continuation ->
-                    TokenAnnouncer.announceToken(
-                        context = context,
-                        audioLanguage = currentConfig.audioLanguage,
-                        counterName = announcementCounterName,
-                        tokenLabel = tokenLabel,
-                        onDone = {
-                            if (continuation.isActive) continuation.resume(Unit)
-                        }
-                    )
+            val announcementCounterName =
+                if (currentConfig.enableCounterAnnouncement == true) {
+                    displayName
+                } else {
+                    ""  // Token ann on, counter ann off → announce token only, no counter details
                 }
-                mqttViewModel.markAsAnnounced(storageKey, tokenLabel)
+
+            // Token label with counter code prefix when enable_counter_prifix is true (e.g. "A-36")
+            val counterCode = actualCounter.code.orEmpty().trim().ifBlank {
+                actualCounter.defaultCode.orEmpty().trim()
+            }
+            val usePrefix = currentConfig?.enableCounterPrefix != false
+            val tokenLabelWithCode = if (usePrefix && counterCode.isNotBlank()) "$counterCode-$tokenLabel" else tokenLabel
+
+            // Announce and suspend until TTS callback completes
+            suspendCancellableCoroutine<Unit> { continuation ->
+                TokenAnnouncer.announceToken(
+                    context = context,
+                    audioLanguage = currentConfig.audioLanguage,
+                    counterName = announcementCounterName,
+                    tokenLabel = tokenLabelWithCode,
+                    onDone = {
+                        if (continuation.isActive) continuation.resume(Unit)
+                    }
+                )
             }
         }
     }
@@ -451,7 +491,7 @@ fun TokenDisplayScreen(
             title = { Text("Configuration Error", style = MaterialTheme.typography.titleMedium) },
             text = {
                 Text(
-                    text = errorMessage.orEmpty(),
+                    text = /*errorMessage.orEmpty()*/"Connection timeout.\nPlease retry",
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Start
                 )
@@ -465,10 +505,15 @@ fun TokenDisplayScreen(
     }
 
     // MQTT Retry Dialog - Move to the end so it always appears on top
-    if (showMqttRetryDialog && mqttError.isNotBlank()) {
+    // Show dialog purely based on showMqttRetryDialog so it does not auto-close
+    // when background retries clear the mqttError string.
+    if (showMqttRetryDialog) {
         AlertDialog(
-            modifier = Modifier.fillMaxWidth(0.8f),
-            onDismissRequest = { showMqttRetryDialog = false },
+            modifier = Modifier.fillMaxWidth(0.9f),
+            onDismissRequest = { 
+                showMqttRetryDialog = false
+                mqttRetryShownAt = null
+            },
             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 1f),
             title = { 
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -484,24 +529,32 @@ fun TokenDisplayScreen(
                         "Please check your network or broker settings, then tap Retry.",
                         style = MaterialTheme.typography.bodyMedium
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    /*Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = "Error: $mqttError",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error
-                    )
+                    )*/
                 }
             },
             confirmButton = {
-                Button(onClick = {
-                    showMqttRetryDialog = false
-                    mqttViewModel.retryConnect()
-                }) {
+                Button(
+                    modifier = Modifier.focusRequester(mqttRetryFocusRequester),
+                    onClick = {
+                        // User-initiated retry: close dialog and trigger reconnect
+                        showMqttRetryDialog = false
+                        mqttRetryShownAt = null
+                        mqttViewModel.retryConnect()
+                    }
+                ) {
                     Text("Retry Connection")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showMqttRetryDialog = false }) {
+                TextButton(onClick = { 
+                    showMqttRetryDialog = false
+                    mqttRetryShownAt = null
+                }) {
                     Text("Close")
                 }
             }
@@ -511,6 +564,7 @@ fun TokenDisplayScreen(
 
 @Composable
 fun MqttErrorBar(error: String, exhausted: Boolean, onRetry: () -> Unit) {
+    val retryFocusRequester = remember { FocusRequester() }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -521,16 +575,24 @@ fun MqttErrorBar(error: String, exhausted: Boolean, onRetry: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = if (exhausted) "MQTT Error: $error" else "MQTT: Connecting... (Retrying)",
+            text = if (exhausted) "MQTT Error: Connection timeout" else "MQTT: Connecting... (Retrying)",
             modifier = Modifier.weight(1f),
             color = MaterialTheme.colorScheme.onErrorContainer,
             fontSize = 13.sp
         )
         if (exhausted) {
+            LaunchedEffect(exhausted) {
+                delay(100)
+                try {
+                    retryFocusRequester.requestFocus()
+                } catch (_: IllegalStateException) { /* focus tree not ready */ }
+            }
             Button(
                 onClick = onRetry,
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = MaterialTheme.colorScheme.error),
-                modifier = Modifier.height(32.dp)
+                modifier = Modifier
+                    .height(32.dp)
+                    .focusRequester(retryFocusRequester)
             ) {
                 Text("Retry", fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
@@ -575,10 +637,27 @@ private fun TokenDisplayContent(
     val configuration = androidx.compose.ui.platform.LocalConfiguration.current
     val screenWidth = configuration.screenWidthDp.dp
     val screenHeight = configuration.screenHeightDp.dp
-    val isPortrait = screenHeight > screenWidth
-    
-    val scale = remember(screenWidth, screenHeight, isPortrait) {
-        if (isPortrait) {
+    val deviceIsPortrait = screenHeight > screenWidth
+
+    // Use config.orientation when set; otherwise fall back to device orientation.
+    // Be tolerant of common variants/misspellings (e.g., "potrait", "P", "L").
+    val usePortraitLayout = remember(config.orientation, deviceIsPortrait) {
+        val raw = config.orientation?.trim()
+        val o = raw?.lowercase()
+        when {
+            o == null -> deviceIsPortrait
+            o == "portrait" || o == "potrait" ||
+                o == "p" || o.startsWith("port") -> true
+            o == "landscape" || o == "l" || o.startsWith("land") -> false
+            else -> deviceIsPortrait
+        }
+    }
+
+    // IMPORTANT: scale (and thus font sizes) should follow the *physical* screen
+    // orientation, not tv_config.orientation, so text size doesn't jump when
+    // only the layout mode changes.
+    val scale = remember(screenWidth, screenHeight, deviceIsPortrait) {
+        if (deviceIsPortrait) {
             (screenWidth.value / 360f).coerceIn(0.6f, 1.2f)
         } else {
             (screenWidth.value / 1280f).coerceIn(0.5f, 1.6f)
@@ -592,8 +671,10 @@ private fun TokenDisplayContent(
         counters.take(limit)
     }
 
-    val showAds = config.showAds == true
+    val showAds = config.showAds?.equals("on", ignoreCase = true) == true
     val adPlacement = config.adPlacement ?: "right"
+    // Token grid shape comes directly from config (no swapping), so backend fully controls
+    // how many tokens are shown per row/column.
     val rows = remember(config.displayRows) { (config.displayRows ?: 3).coerceAtLeast(1) }
     val columns = remember(config.displayColumns) { (config.displayColumns ?: 4).coerceAtLeast(1) }
     val companyName = if (config.companyName.isNotBlank()) config.companyName else "CALL-Q"
@@ -610,7 +691,8 @@ private fun TokenDisplayContent(
             dateTime = dateTime,
             isMqttConnected = isMqttConnected,
             isNetworkAvailable = isNetworkAvailable,
-            isPortrait = isPortrait,
+            // Header should follow physical screen shape, not config.orientation
+            isPortrait = deviceIsPortrait,
             scale = scale,
             responsivePadding = responsivePadding,
             onThemeChange = onThemeChange,
@@ -621,6 +703,7 @@ private fun TokenDisplayContent(
             daysUntilExpiry = daysUntilLicenseExpiry,
             isTokenAnnouncementEnabled = config.enableTokenAnnouncement,
             isCounterAnnouncementEnabled = config.enableCounterAnnouncement,
+            isCounterPrefixEnabled = config.enableCounterPrefix,
             onRefresh = onRefresh,
             onClearTokenHistoryAndRefresh = {
                 mqttViewModel.clearTokenHistory()
@@ -631,46 +714,75 @@ private fun TokenDisplayContent(
         Spacer(modifier = Modifier.height(responsivePadding))
 
         val hasAds = showAds && adFiles.isNotEmpty()
-        val layoutType = config.layoutType ?: "1"
+        val baseLayoutType = config.layoutType ?: "1"
+        // In portrait mode: treat each counter as a row, tokens as columns (type 2 behavior).
+        // When counters increase, CountersArea(type 2) already arranges them into a grid of rows/columns.
+        val layoutType = if (usePortraitLayout) "2" else baseLayoutType
 
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            if (hasAds) {
-                if (isPortrait) {
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        if (adPlacement.equals("top", ignoreCase = true) || adPlacement.equals("left", ignoreCase = true)) {
-                            Box(modifier = Modifier.weight(0.30f).fillMaxWidth()) { AdArea(adFiles, config) }
-                            Box(modifier = Modifier.weight(0.70f).fillMaxWidth()) { 
-                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex) 
-                            }
-                        } else {
-                            Box(modifier = Modifier.weight(0.70f).fillMaxWidth()) { 
-                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex) 
-                            }
-                            Box(modifier = Modifier.weight(0.30f).fillMaxWidth()) { AdArea(adFiles, config) }
+            if (usePortraitLayout) {
+                if (hasAds) {
+                    // Portrait + ads: Ad area on the left, vertical counters on the right
+                    Row(modifier = Modifier.fillMaxSize()) {
+                        Box(modifier = Modifier.weight(0.40f).fillMaxHeight()) {
+                            AdArea(adFiles, config)
+                        }
+                        Box(modifier = Modifier.weight(0.60f).fillMaxHeight()) {
+                            CountersArea(
+                                countersToDisplay,
+                                tokensPerCounter,
+                                config,
+                                rows,
+                                columns,
+                                layoutType,
+                                scale,
+                                counterBgHex,
+                                tokenBgHex,
+                                isPortrait = usePortraitLayout,
+                                hasAds = hasAds
+                            )
                         }
                     }
                 } else {
-                    Row(modifier = Modifier.fillMaxSize()) {
-                        if (adPlacement.equals("left", ignoreCase = true)) {
-                            Box(modifier = Modifier.weight(0.30f).fillMaxHeight()) { AdArea(adFiles, config) }
-                            Box(modifier = Modifier.weight(0.70f).fillMaxHeight()) { 
-                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex) 
-                            }
-                        } else {
-                            Box(modifier = Modifier.weight(0.70f).fillMaxHeight()) { 
-                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex) 
-                            }
-                            Box(modifier = Modifier.weight(0.30f).fillMaxHeight()) { AdArea(adFiles, config) }
-                        }
-                    }
+                    // Portrait + no ads: full-width vertical counters
+                    CountersArea(
+                        countersToDisplay,
+                        tokensPerCounter,
+                        config,
+                        rows,
+                        columns,
+                        layoutType,
+                        scale,
+                        counterBgHex,
+                        tokenBgHex,
+                        isPortrait = usePortraitLayout,
+                        hasAds = hasAds
+                    )
                 }
             } else {
-                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex)
+                // Landscape: preserve existing behavior with layout_type and ad_placement
+                if (hasAds) {
+                    Row(modifier = Modifier.fillMaxSize()) {
+                        if (adPlacement.equals("left", ignoreCase = true)) {
+                            Box(modifier = Modifier.weight(0.40f).fillMaxHeight()) { AdArea(adFiles, config) }
+                            Box(modifier = Modifier.weight(0.60f).fillMaxHeight()) {
+                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout)
+                            }
+                        } else {
+                            Box(modifier = Modifier.weight(0.60f).fillMaxHeight()) {
+                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout)
+                            }
+                            Box(modifier = Modifier.weight(0.40f).fillMaxHeight()) { AdArea(adFiles, config) }
+                        }
+                    }
+                } else {
+                    CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds)
+                }
             }
         }
 
         // Footer: restore configured scrolling section based on TV config
-        val scrollEnabled = config.scrollEnabled.equals("on", ignoreCase = true)
+        val scrollEnabled = config.scrollEnabled?.equals("on", ignoreCase = true) == true
         val noOfTextFields = config.noOfTextFields ?: 0
         val scrollTextLinesJson = config.scrollTextLinesJson
 
@@ -698,7 +810,8 @@ private fun TokenDisplayContent(
             ScrollingFooter(
                 textLines = scrollLines,
                 scale = scale,
-                isPortrait = isPortrait
+                // Footer should also follow physical screen shape only
+                isPortrait = deviceIsPortrait
             )
         }
     }
@@ -721,6 +834,7 @@ fun HeaderArea(
     daysUntilExpiry: Int?,
     isTokenAnnouncementEnabled: Boolean?,
     isCounterAnnouncementEnabled: Boolean?,
+    isCounterPrefixEnabled: Boolean?,
     onRefresh: () -> Unit,
     onClearTokenHistoryAndRefresh: () -> Unit
 ) {
@@ -742,6 +856,7 @@ fun HeaderArea(
             daysUntilExpiry = daysUntilExpiry,
             isTokenAnnouncementEnabled = isTokenAnnouncementEnabled,
             isCounterAnnouncementEnabled = isCounterAnnouncementEnabled,
+            isCounterPrefixEnabled = isCounterPrefixEnabled,
             companyName = companyName
         )
     }
@@ -1041,39 +1156,45 @@ fun CountersArea(
     layoutType: String,
     scale: Float,
     counterBgHex: String,
-    tokenBgHex: String
+    tokenBgHex: String,
+    isPortrait: Boolean = false,
+    hasAds: Boolean = false
 ) {
     Box(modifier = Modifier.fillMaxSize().padding(1.dp)) {
         val numCounters = counters.size
 
-        if (numCounters > 4) {
-            if (layoutType == "2") {
-                Row(modifier = Modifier.fillMaxSize().padding(1.dp), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
-                    val firstHalfCount = (numCounters + 1) / 2
-                    val firstHalf = counters.take(firstHalfCount)
-                    val secondHalf = counters.drop(firstHalfCount)
+        // When there are many counters, split the UI into two parts.
+        // We now always split only when there are more than 4 counters,
+        // regardless of orientation; orientation only controls the
+        // direction of the split (horizontal vs vertical).
+        val splitThreshold = 4
 
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        firstHalf.forEach { CounterBoard(it, tokensPerCounter, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex) }
+        if (numCounters > splitThreshold) {
+            val firstHalfCount = (numCounters + 1) / 2
+            val firstHalf = counters.take(firstHalfCount)
+            val secondHalf = counters.drop(firstHalfCount)
+
+            if (isPortrait) {
+                // Portrait: split horizontally (top/bottom)
+                Column(modifier = Modifier.fillMaxSize().padding(1.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+                        firstHalf.forEach { CounterBoard(it, tokensPerCounter, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds) }
                     }
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        secondHalf.forEach { CounterBoard(it, tokensPerCounter, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex) }
+                    Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+                        secondHalf.forEach { CounterBoard(it, tokensPerCounter, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds) }
                         if (secondHalf.size < firstHalf.size) {
                             Spacer(modifier = Modifier.weight(1f))
                         }
                     }
                 }
             } else {
-                Column(modifier = Modifier.fillMaxSize().padding(1.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                    val firstHalfCount = (numCounters + 1) / 2
-                    val firstHalf = counters.take(firstHalfCount)
-                    val secondHalf = counters.drop(firstHalfCount)
-
-                    Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
-                        firstHalf.forEach { CounterBoard(it, tokensPerCounter, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex) }
+                // Landscape: split vertically (left/right)
+                Row(modifier = Modifier.fillMaxSize().padding(1.dp), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        firstHalf.forEach { CounterBoard(it, tokensPerCounter, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds) }
                     }
-                    Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
-                        secondHalf.forEach { CounterBoard(it, tokensPerCounter, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex) }
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        secondHalf.forEach { CounterBoard(it, tokensPerCounter, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds) }
                         if (secondHalf.size < firstHalf.size) {
                             Spacer(modifier = Modifier.weight(1f))
                         }
@@ -1081,13 +1202,43 @@ fun CountersArea(
                 }
             }
         } else {
-            if (layoutType == "2") {
+            if (isPortrait) {
+                // Portrait: single vertical stack of counters
                 Column(modifier = Modifier.fillMaxSize().padding(1.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                    counters.forEach { counter -> CounterBoard(counter, tokensPerCounter, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex) }
+                    counters.forEach { counter ->
+                        CounterBoard(
+                            counter,
+                            tokensPerCounter,
+                            config,
+                            rows,
+                            columns,
+                            Modifier.weight(1f).fillMaxWidth(),
+                            scale,
+                            counterBgHex,
+                            tokenBgHex,
+                            isPortrait,
+                            hasAds
+                        )
+                    }
                 }
             } else {
+                // Landscape: single horizontal row of counters
                 Row(modifier = Modifier.fillMaxSize().padding(1.dp), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
-                    counters.forEach { counter -> CounterBoard(counter, tokensPerCounter, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex) }
+                    counters.forEach { counter ->
+                        CounterBoard(
+                            counter,
+                            tokensPerCounter,
+                            config,
+                            rows,
+                            columns,
+                            Modifier.weight(1f).fillMaxHeight(),
+                            scale,
+                            counterBgHex,
+                            tokenBgHex,
+                            isPortrait,
+                            hasAds
+                        )
+                    }
                 }
             }
         }
@@ -1104,7 +1255,9 @@ fun CounterBoard(
     modifier: Modifier,
     scale: Float,
     counterBgHex: String,
-    tokenBgHex: String
+    tokenBgHex: String,
+    isPortrait: Boolean,
+    hasAds: Boolean
 ) {
     val counterName = remember(counter.name, counter.defaultName) { 
         (counter.name.orEmpty().ifBlank { counter.defaultName.orEmpty().ifBlank { "Counter" } }).uppercase()
@@ -1114,11 +1267,14 @@ fun CounterBoard(
         val cid = counter.counterId.orEmpty().trim()
         val cname = counter.name.orEmpty().trim()
         val dname = counter.defaultName.orEmpty().trim()
-        
-        val rawList = tokensPerCounter[cid] 
-            ?: tokensPerCounter[cname] 
+        val btnKey = counter.buttonIndex?.toString().orEmpty()
+
+        // Look up by counterId, name, defaultName, buttonIndex, or numeric match (handles MQTT counter "2" -> storageKey "2")
+        val rawList = tokensPerCounter[cid]
+            ?: tokensPerCounter[cname]
             ?: tokensPerCounter[dname]
-            ?: tokensPerCounter.entries.find { 
+            ?: tokensPerCounter[btnKey]
+            ?: tokensPerCounter.entries.find {
                 val keyInt = it.key.toIntOrNull()
                 val cidInt = cid.toIntOrNull()
                 keyInt != null && (keyInt == cidInt || keyInt == counter.buttonIndex)
@@ -1128,6 +1284,11 @@ fun CounterBoard(
             
         // Filter out "0", tokens containing "CAL", and maintain order (first is latest)
         rawList.filter { it != "0" && !it.contains("CAL", ignoreCase = true) }.distinct()
+    }
+
+    // Counter code from CounterConfig - used to prefix token for display (e.g. "A-36")
+    val counterCode = remember(counter.code, counter.defaultCode) {
+        counter.code.orEmpty().trim().ifBlank { counter.defaultCode.orEmpty().trim() }
     }
 
     val counterColor = remember(config.counterTextColor) { 
@@ -1176,51 +1337,118 @@ fun CounterBoard(
     }
 
     Card(
-        modifier = modifier.clip(RoundedCornerShape(12.dp)), 
+        modifier = modifier.clip(RoundedCornerShape(12.dp)),
         elevation = CardDefaults.cardElevation(4.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent) // Use Transparent to show Brush
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
     ) {
         Box(modifier = Modifier.fillMaxSize().background(counterBgBrush)) {
-            Column(modifier = Modifier.fillMaxSize().padding(1.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = counterName, 
-                    fontWeight = FontWeight.Bold, 
-                    fontSize = (counterFontSize * scale).sp, 
-                    color = counterColor,
-                    maxLines = 1,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(1.dp))
-                
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(columns), 
-                    modifier = Modifier.fillMaxWidth().weight(1f), 
-                    horizontalArrangement = Arrangement.spacedBy(1.dp), 
-                    verticalArrangement = Arrangement.spacedBy(1.dp),
-                    userScrollEnabled = false
-                ) {
-                    val totalSlots = config.tokensPerCounter ?: (rows * columns) // Default to standard grid size
-                    items(totalSlots) { index ->
-                        val token = tokens.getOrNull(index)
-                        
-                        // Logic: First item is current token.
-                        // If token list is empty, index 0 is empty current token slot.
-                        val isFirst = index == 0
-                        
-                        // Scale font size for historical tokens
-                        val currentFontSize = if (isFirst) tokenFontSize else tokenFontSize * 0.85f
-                        
-                        val textColorToUse = if (isFirst) currentTokenTextColor else previousTokenTextColor
-                        
-                        TokenCard(
-                            token = token, 
-                            isPrimary = isFirst, 
-                            scale = scale, 
-                            textColor = textColorToUse,
-                            bgBrush = tokenBgBrush,
-                            fontSize = currentFontSize,
-                            blinkAlpha = if (isFirst && shouldBlink && token != null) blinkAlpha else 1f
+            if (isPortrait) {
+                Row(modifier = Modifier.fillMaxSize().padding(1.dp)) {
+                    // If ads exist, use 30% for name and 70% for tokens.
+                    // If no ads, keep name compact and give 80% to tokens.
+                    val nameWeight = if (hasAds) 0.30f else 0.2f
+                    val tokenWeight = if (hasAds) 0.70f else 0.8f
+
+                    // Counter name area
+                    Box(
+                        modifier = Modifier
+                            .weight(nameWeight)
+                            .fillMaxHeight(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = counterName,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = (counterFontSize * scale).sp,
+                            color = counterColor,
+                            maxLines = 1,
+                            textAlign = TextAlign.Center
                         )
+                    }
+
+                    Spacer(modifier = Modifier.width(2.dp))
+
+                    // Token matrix area
+                    Box(
+                        modifier = Modifier
+                            .weight(tokenWeight)
+                            .fillMaxHeight()
+                    ) {
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(columns),
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalArrangement = Arrangement.spacedBy(1.dp),
+                            verticalArrangement = Arrangement.spacedBy(1.dp),
+                            userScrollEnabled = false
+                        ) {
+                            val totalSlots = config.tokensPerCounter ?: (rows * columns)
+                            items(totalSlots) { index ->
+                                val token = tokens.getOrNull(index)
+                                val isFirst = index == 0
+                                val usePrefix = config.enableCounterPrefix != false
+                                val displayToken = when {
+                                    token == null -> null
+                                    usePrefix && counterCode.isNotBlank() -> "$counterCode-$token"
+                                    else -> token
+                                }
+                                val currentFontSize = if (isFirst) tokenFontSize else tokenFontSize
+                                val textColorToUse = if (isFirst) currentTokenTextColor else previousTokenTextColor
+                                TokenCard(
+                                    token = displayToken,
+                                    isPrimary = isFirst,
+                                    scale = scale,
+                                    textColor = textColorToUse,
+                                    bgBrush = tokenBgBrush,
+                                    fontSize = currentFontSize,
+                                    blinkAlpha = if (isFirst && shouldBlink && token != null) blinkAlpha else 1f
+                                )
+                            }
+                        }
+                    }
+
+                    // No extra spacer needed; nameWeight + tokenWeight should be <= 1f
+                }
+            } else {
+                Column(modifier = Modifier.fillMaxSize().padding(1.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = counterName,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = (counterFontSize * scale).sp,
+                        color = counterColor,
+                        maxLines = 1,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(1.dp))
+
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(columns),
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(1.dp),
+                        verticalArrangement = Arrangement.spacedBy(1.dp),
+                        userScrollEnabled = false
+                    ) {
+                        val totalSlots = config.tokensPerCounter ?: (rows * columns)
+                        items(totalSlots) { index ->
+                            val token = tokens.getOrNull(index)
+                            val isFirst = index == 0
+                            val usePrefix = config.enableCounterPrefix != false
+                            val displayToken = when {
+                                token == null -> null
+                                usePrefix && counterCode.isNotBlank() -> "$counterCode-$token"
+                                else -> token
+                            }
+                            val currentFontSize = if (isFirst) tokenFontSize else tokenFontSize
+                            val textColorToUse = if (isFirst) currentTokenTextColor else previousTokenTextColor
+                            TokenCard(
+                                token = displayToken,
+                                isPrimary = isFirst,
+                                scale = scale,
+                                textColor = textColorToUse,
+                                bgBrush = tokenBgBrush,
+                                fontSize = currentFontSize,
+                                blinkAlpha = if (isFirst && shouldBlink && token != null) blinkAlpha else 1f
+                            )
+                        }
                     }
                 }
             }
@@ -1351,6 +1579,7 @@ fun AppearanceSettingsDialog(
     daysUntilExpiry: Int?,
     isTokenAnnouncementEnabled: Boolean?,
     isCounterAnnouncementEnabled: Boolean?,
+    isCounterPrefixEnabled: Boolean?,
     companyName: String
 ) {
     var showThemeColorPicker by remember { mutableStateOf(false) }
@@ -1432,12 +1661,12 @@ fun AppearanceSettingsDialog(
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
                         verticalAlignment = Alignment.Top
                     ) {
                         // Left column: Company / device details
                         Column(
-                            modifier = Modifier.width(310.dp),
+                            modifier = Modifier.width(320.dp),
                             verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
                             Card(
@@ -1447,7 +1676,7 @@ fun AppearanceSettingsDialog(
                             ) {
                                 Column(
                                     modifier = Modifier
-                                        .padding(4.dp)
+                                        .padding(2.dp)
                                         .fillMaxWidth()
                                 ) {
                                     // Header: Icon + Company Name
@@ -1457,7 +1686,7 @@ fun AppearanceSettingsDialog(
                                             contentDescription = null,
                                             modifier = Modifier.size(100.dp)
                                         )
-                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
                                         Column {
                                             Text(
                                                 text = companyName,
@@ -1487,15 +1716,18 @@ fun AppearanceSettingsDialog(
                                         if (isTokenAnnouncementEnabled == true) "Enabled" else "Disabled"
                                     val counterAnnText =
                                         if (isCounterAnnouncementEnabled == true) "Enabled" else "Disabled"
+                                    val counterPrefixText =
+                                        if (isCounterPrefixEnabled == true) "Enabled" else "Disabled"
                                     InfoRow("Token Announcement", tokenAnnText)
                                     InfoRow("Counter Announcement", counterAnnText)
+                                    InfoRow("Counter Prefix", counterPrefixText)
                                 }
                             }
                         }
 
                         // Right column: Appearance + actions (fixed width)
                         Column(
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(0.9f),
                             verticalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
                             Text(
@@ -1503,7 +1735,7 @@ fun AppearanceSettingsDialog(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.primary
                             )
-                            HorizontalDivider(modifier = Modifier.padding(top = 2.dp, bottom = 4.dp))
+                            HorizontalDivider(modifier = Modifier.padding(top = 2.dp, bottom = 2.dp))
                             Text(
                                 "Notification sound",
                                 style = MaterialTheme.typography.bodyMedium,
@@ -1735,12 +1967,12 @@ fun PresetColorDialog(
     onDismiss: () -> Unit
 ) {
     AlertDialog(
-        modifier = Modifier.fillMaxWidth(0.9f),
+        modifier = Modifier.fillMaxWidth(0.98f),
         onDismissRequest = onDismiss,
         title = { Text(title, style = MaterialTheme.typography.titleSmall) },
         text = {
             LazyVerticalGrid(
-                columns = GridCells.Fixed(5),
+                columns = GridCells.Fixed(7),
                 horizontalArrangement = Arrangement.spacedBy(1.dp), // Minimal spacing
                 verticalArrangement = Arrangement.spacedBy(1.dp), // Minimal spacing
                 modifier = Modifier.heightIn(max = 300.dp)
@@ -1831,7 +2063,7 @@ fun NotificationSoundDialog(
                 columns = GridCells.Fixed(2),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.heightIn(max = 320.dp)
+                modifier = Modifier.heightIn(max = 340.dp)
             ) {
                 items(soundOptions.size) { index ->
                     val (key, label) = soundOptions[index]
@@ -1872,12 +2104,12 @@ fun PresetThemeColorDialog(
     onDismiss: () -> Unit
 ) {
     AlertDialog(
-        modifier = Modifier.fillMaxWidth(0.9f),
+        modifier = Modifier.fillMaxWidth(0.98f),
         onDismissRequest = onDismiss,
         title = { Text(title, style = MaterialTheme.typography.titleSmall) },
         text = {
             LazyVerticalGrid(
-                columns = GridCells.Fixed(5),
+                columns = GridCells.Fixed(7),
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
                 modifier = Modifier.heightIn(max = 300.dp)

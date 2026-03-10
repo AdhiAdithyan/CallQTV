@@ -24,7 +24,6 @@ import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
@@ -32,7 +31,6 @@ import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
@@ -57,8 +55,13 @@ import com.softland.callqtv.viewmodel.NetworkViewModel
 import com.softland.callqtv.viewmodel.RegistrationViewModel
 import com.softland.callqtv.viewmodel.RegistrationState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
 import java.util.Locale
 
 class CustomerIdActivity : AppCompatActivity() {
@@ -84,6 +87,8 @@ class CustomerIdActivity : AppCompatActivity() {
         // Pre-fill if exists
         val authSharedPrefs = getSharedPreferences(AppSharedPreferences.AUTHENTICATION, Context.MODE_PRIVATE)
         val custId = authSharedPrefs.getInt(PreferenceHelper.customer_id, 0)
+        val licenseEnd = authSharedPrefs.getString(PreferenceHelper.product_license_end, "") ?: ""
+
         if (custId != 0) {
             registrationViewModel.setCustomerId(String.format(Locale.ROOT, "%04d", custId))
         }
@@ -145,7 +150,48 @@ class CustomerIdActivity : AppCompatActivity() {
         
         // Auto trigger if already has ID
         if (custId != 0) {
-            registrationViewModel.startRegistrationFlow()
+            if (isLicenseValid(licenseEnd)) {
+                // License is valid for more than 0 days, proceed to main activity
+                val intent = Intent(this, TokenDisplayActivity::class.java)
+                startActivity(intent)
+                finish()
+            } else {
+                // License expired or expiring today, check with server
+                registrationViewModel.startRegistrationFlow()
+            }
+        }
+    }
+
+    private fun isLicenseValid(licenseEndDateStr: String): Boolean {
+        if (licenseEndDateStr.isEmpty()) return false
+        
+        try {
+            // Attempt common formats. If the server uses a specific one, adjust here.
+            val formats = listOf("yyyy-MM-dd", "dd-MM-yyyy", "yyyy/MM/dd", "dd/MM/yyyy", "MMM dd, yyyy")
+            var expiryDate: Date? = null
+            
+            for (format in formats) {
+                try {
+                    expiryDate = SimpleDateFormat(format, Locale.ROOT).parse(licenseEndDateStr)
+                    if (expiryDate != null) break
+                } catch (e: Exception) { continue }
+            }
+
+            if (expiryDate == null) return false
+
+            val calendar = Calendar.getInstance()
+            // Reset current time to start of day for accurate day comparison
+            calendar.set(Calendar.HOUR_OF_DAY, 0)
+            calendar.set(Calendar.MINUTE, 0)
+            calendar.set(Calendar.SECOND, 0)
+            calendar.set(Calendar.MILLISECOND, 0)
+            val today = calendar.time
+
+            // Compare only dates. If expiryDate is AFTER today, it's valid for at least tomorrow.
+            // If expiryDate is EQUAL to today, it's 0 days left, so we check license.
+            return expiryDate.after(today)
+        } catch (e: Exception) {
+            return false
         }
     }
 
@@ -390,14 +436,6 @@ private fun CustomerIdScreen(
         localCustomerId = customerId
     }
 
-    // For TV, request initial focus on the text field so D‑pad works naturally
-    val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(isTv) {
-        if (isTv) {
-            focusRequester.requestFocus()
-        }
-    }
-
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val screenWidth = maxWidth
         val screenHeight = maxHeight
@@ -505,7 +543,8 @@ private fun CustomerIdScreen(
                         }
                     }
 
-                    val focusManager = LocalFocusManager.current
+                    val digitFocusRequesters = remember { List(4) { FocusRequester() } }
+                    val scope = rememberCoroutineScope()
 
                     fun updateDigit(index: Int, input: TextFieldValue) {
                         val filtered = input.text.filter { it.isDigit() }
@@ -517,12 +556,22 @@ private fun CustomerIdScreen(
                             digitStates[index] = TextFieldValue("")
                             val combined = digitStates.joinToString(separator = "") { it.text }
                             onCustomerIdChange(combined)
-                            if (index > 0) focusManager.moveFocus(FocusDirection.Previous)
+                            if (index > 0) {
+                                scope.launch {
+                                    delay(0)
+                                    digitFocusRequesters[index - 1].requestFocus()
+                                }
+                            }
                         } else if (newText.isNotEmpty()) {
                             digitStates[index] = TextFieldValue(text = newText, selection = TextRange(newText.length))
                             val combined = digitStates.joinToString(separator = "") { it.text }
                             onCustomerIdChange(combined)
-                            if (index < 3) focusManager.moveFocus(FocusDirection.Next)
+                            if (index < 3) {
+                                scope.launch {
+                                    delay(0)
+                                    digitFocusRequesters[index + 1].requestFocus()
+                                }
+                            }
                         }
                     }
 
@@ -531,6 +580,12 @@ private fun CustomerIdScreen(
                         verticalArrangement = Arrangement.Center,
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        LaunchedEffect(isTv) {
+                            if (isTv) {
+                                delay(0)
+                                digitFocusRequesters[0].requestFocus()
+                            }
+                        }
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(digitFieldSpacing),
                             verticalAlignment = Alignment.CenterVertically
@@ -547,7 +602,9 @@ private fun CustomerIdScreen(
                                         fontSize = titleFontSize * 0.6f
                                     ),
                                     keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Number),
-                                    modifier = Modifier.width(digitFieldWidth).focusRequester(if (index == 0) focusRequester else FocusRequester())
+                                    modifier = Modifier
+                                        .width(digitFieldWidth)
+                                        .focusRequester(digitFocusRequesters[index])
                                 )
                             }
                         }

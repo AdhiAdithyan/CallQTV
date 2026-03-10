@@ -9,7 +9,8 @@ import com.google.gson.annotations.SerializedName
 data class TvConfigRequest(
     @SerializedName("mac_address") val macAddress: String,
     @SerializedName("customer_id") val customerId: String,
-    @SerializedName("Flag") val flag: String = "TV"
+    @SerializedName("Flag") val flag: String = "TV",
+    @SerializedName("fcm_token") val fcmToken: String? = null
 )
 
 /**
@@ -68,6 +69,11 @@ data class CounterConfig(
     @SerializedName("row_span") val rowSpan: Int? = null,
     @SerializedName("col_span") val colSpan: Int? = null,
     @SerializedName("is_enabled") val isEnabled: Boolean? = null,
+    @SerializedName("counter_config_id") val counterConfigId: Int? = null,
+    @SerializedName("max_token_number") val maxTokenNumber: Int? = null,
+    @SerializedName("dispenser_serial_number") val dispenserSerialNumber: String? = null,
+    @SerializedName("dispenser_token_type") val dispenserTokenType: String? = null,
+    @SerializedName("dispenser_display_name") val dispenserDisplayName: String? = null,
     // Legacy fields kept for compatibility if needed
     @SerializedName("default_name") val defaultName: String? = null,
     @SerializedName("audio_url") val audioUrl: String? = null,
@@ -81,6 +87,7 @@ data class TvConfigPayload(
     @SerializedName("save_audio_external") val saveAudioExternal: Boolean? = null,
     @SerializedName("enable_counter_announcement") val enableCounterAnnouncement: Boolean? = null,
     @SerializedName("enable_token_announcement") val enableTokenAnnouncement: Boolean? = null,
+    @SerializedName("enable_counter_prifix") val enableCounterPrefix: Boolean? = null,
     @SerializedName("token_audio_url") val tokenAudioUrl: String? = null,
     @SerializedName("token_music_url") val tokenMusicUrl: String? = null,
     @SerializedName("display_rows") val displayRows: Int? = null,
@@ -98,7 +105,8 @@ data class TvConfigPayload(
     @SerializedName("token_format") val tokenFormat: String? = null,
     
     // Legacy / Ad fields (Optional)
-    @SerializedName("show_ads") val showAds: Boolean? = null,
+    // Using String for show_ads because JSON may return "on"/"off"
+    @SerializedName("show_ads") val showAds: String? = null,
     @SerializedName("ad_interval") val adInterval: Int? = null,
     @SerializedName("ad_files") val adFiles: List<String>? = null,
     @SerializedName("ad_placement") val adPlacement: String? = null,

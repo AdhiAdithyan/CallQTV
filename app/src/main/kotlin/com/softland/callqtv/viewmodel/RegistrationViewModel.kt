@@ -115,7 +115,8 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
                 _state.value = RegistrationState.Error(displayMsg)
             } catch (e: Exception) {
                 com.softland.callqtv.utils.FileLogger.logError(getApplication(), "RegViewModel", "Auth Exception", e)
-                _state.value = RegistrationState.Error("Auth failed: ${e.message}")
+//                _state.value = RegistrationState.Error("Auth failed: ${e.message}")
+                _state.value = RegistrationState.Error("Auth failed.Please retry...")
             }
         }
     }
@@ -162,7 +163,8 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
             _state.value = RegistrationState.Error(displayMsg)
         } catch (e: Exception) {
             com.softland.callqtv.utils.FileLogger.logError(getApplication(), "RegViewModel", "Reg Exception", e)
-            _state.value = RegistrationState.Error("Registration failed: ${e.message}")
+//            _state.value = RegistrationState.Error("Registration failed: ${e.message}")
+            _state.value = RegistrationState.Error("Registration failed: Please retry")
         }
     }
 
@@ -219,7 +221,8 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
             _state.value = RegistrationState.Error(displayMsg)
         } catch (e: Exception) {
             com.softland.callqtv.utils.FileLogger.logError(getApplication(), "RegViewModel", "Status Exception", e)
-            _state.value = RegistrationState.Error("Status check failed: ${e.message}")
+//            _state.value = RegistrationState.Error("Status check failed: ${e.message}")
+            _state.value = RegistrationState.Error("Status check failed: Please retry")
         }
     }
 

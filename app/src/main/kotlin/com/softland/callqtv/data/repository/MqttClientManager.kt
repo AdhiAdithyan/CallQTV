@@ -57,8 +57,19 @@ class MqttClientManager(
 
                     override fun messageArrived(topic: String?, message: MqttMessage?) {
                         val payload = message?.payload?.let { String(it) } ?: ""
-                        Log.i(TAG, "!!! INCOMING MQTT MESSAGE !!! Topic: [$topic], Payload: $payload")
-                        mqttListener?.onMessageReceived(topic.orEmpty(), payload)
+                        if (payload.contains("CAL0K")) {
+                            // Check if the 17th digit (index 16) is '0'
+                            if (payload.length != 24 || payload[16] == '0') {
+//                                Log.w(TAG, "Skipping response: 17th digit is '0'. Payload: $payload")
+                                return
+                            }
+
+                            Log.i(
+                                TAG,
+                                "!!! INCOMING MQTT MESSAGE !!! Topic: [$topic], Payload: $payload"
+                            )
+                            mqttListener?.onMessageReceived(topic.orEmpty(), payload)
+                        }
                     }
 
                     override fun deliveryComplete(token: IMqttDeliveryToken?) {
@@ -114,8 +125,9 @@ class MqttClientManager(
         val options = MqttConnectOptions().apply {
             isCleanSession = true
             isAutomaticReconnect = true
-            connectionTimeout = 10
-            keepAliveInterval = 30
+            // Increased timeout to handle network initialization delays
+            connectionTimeout = 7
+            keepAliveInterval = 5
             mqttVersion = MqttConnectOptions.MQTT_VERSION_3_1_1
             if (!username.isNullOrEmpty() && !password.isNullOrEmpty()) {
                 userName = username
@@ -129,7 +141,6 @@ class MqttClientManager(
                     isConnecting = false
                     Log.i(TAG, "==> INITIAL MQTT CONNECTION SUCCESS <== Server: $serverUri")
                     
-                    // Signal success to listener immediately
                     mqttListener?.onConnectionStatus(true)
                     
                     topicsToSubscribe?.let {

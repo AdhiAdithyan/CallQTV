@@ -17,7 +17,7 @@ object SemanticMqttParser {
      * Parses a message to find a token and counter.
      * Returns Pair(CounterName, TokenValue)
      */
-    suspend fun parse(message: String, topic: String = ""): Pair<String, String>? {
+    fun parse(message: String, topic: String = ""): Pair<String, String>? {
         Log.d(TAG, "Parsing message: $message (topic: $topic)")
         val trimmedMessage = message.trim()
 
@@ -31,7 +31,8 @@ object SemanticMqttParser {
                     // Return counter ID and the token
                     // We trim leading zeros for display, but "0000" becomes "0"
                     val cleanToken = tokenNum.trimStart('0').ifEmpty { "0" }
-                    return Pair(counterNum, cleanToken)
+                    val cleanCounter = if (counterNum == "0") "" else counterNum
+                    return Pair(cleanCounter, cleanToken)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error parsing fixed protocol", e)
@@ -53,7 +54,10 @@ object SemanticMqttParser {
                     else if (key == "COUNTER" || key == "DESK") counter = value
                 }
             }
-            if (token.isNotEmpty()) return Pair(counter, token)
+            if (token.isNotEmpty()) {
+                val cleanCounter = if (counter == "0") "" else counter
+                return Pair(cleanCounter, token)
+            }
         }
 
         // 2. Try Regex-based Extraction
@@ -62,22 +66,27 @@ object SemanticMqttParser {
         
         if (tokenMatch != null) {
             val token = tokenMatch.groupValues.getOrNull(1) ?: ""
-            val counter = counterMatch?.groupValues?.getOrNull(1)?.trim() ?: ""
+            var counter = counterMatch?.groupValues?.getOrNull(1)?.trim() ?: ""
+            if (counter == "0") counter = ""
             return Pair(counter, token)
         }
 
         // 3. Try "123,Main" format
         val simpleMatch = simplePairRegex.find(trimmedMessage)
         if (simpleMatch != null) {
-            return Pair(simpleMatch.groupValues[2].trim(), simpleMatch.groupValues[1])
+            var counter = simpleMatch.groupValues[2].trim()
+            if (counter == "0") counter = ""
+            return Pair(counter, simpleMatch.groupValues[1])
         }
 
         // 4. Try Topic fallback if message is just a number
         val numericToken = trimmedMessage.toIntOrNull()
         if (numericToken != null && topic.isNotEmpty()) {
             val topicParts = topic.split("/")
-            // Try to find a numeric part in topic that could be a counter ID
-            val counterFromTopic = topicParts.findLast { it.isNotEmpty() && it.all { c -> c.isDigit() } && it != trimmedMessage }
+            // Try to find a numeric part in topic that could be a counter ID (excluding "0")
+            val counterFromTopic = topicParts.findLast { 
+                it.isNotEmpty() && it.all { c -> c.isDigit() } && it != trimmedMessage && it != "0" 
+            }
             if (counterFromTopic != null) {
                 return Pair(counterFromTopic, trimmedMessage)
             }

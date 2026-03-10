@@ -1,11 +1,8 @@
 package com.softland.callqtv.utils
 
-import android.content.ContentUris
-import android.content.ContentValues
 import android.content.Context
 import android.os.Build
 import android.os.Environment
-import android.provider.MediaStore
 import android.util.Log
 import java.io.File
 import java.io.FileOutputStream
@@ -25,47 +22,40 @@ object FileLogger {
 
     /**
      * Returns the log file path for display.
+     * Avoids deprecated getExternalStorageDirectory() on Android 10+ (can cause issues on Android 15).
      */
     fun getLogFilePath(context: Context): String {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            Environment.getExternalStorageDirectory().path + "/Download/$LOG_FILE_NAME"
-        } else {
-            @Suppress("DEPRECATION")
-            val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            File(dir, LOG_FILE_NAME).absolutePath
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val downloads = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+                    ?: context.getExternalFilesDir(null)
+                    ?: context.filesDir
+                File(downloads, LOG_FILE_NAME).absolutePath
+            } else {
+                @Suppress("DEPRECATION")
+                val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                File(dir, LOG_FILE_NAME).absolutePath
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "getLogFilePath failed", e)
+            File(context.filesDir, LOG_FILE_NAME).absolutePath
         }
     }
 
     /**
      * Opens an output stream for appending to the log file.
-     * Location: Download/CallQTV_errors.txt
+     * Uses app-specific storage on Android 10+ to avoid deprecated APIs and Android 15 issues.
      */
     private fun getLogOutputStream(context: Context): OutputStream? {
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val projection = arrayOf(MediaStore.Downloads._ID)
-                val selection = "${MediaStore.Downloads.DISPLAY_NAME}=?"
-                val selectionArgs = arrayOf(LOG_FILE_NAME)
-                context.contentResolver.query(
-                    MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                    projection,
-                    selection,
-                    selectionArgs,
-                    null
-                )?.use { cursor ->
-                    if (cursor.moveToFirst()) {
-                        val id = cursor.getLong(0)
-                        val uri = ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id)
-                        context.contentResolver.openOutputStream(uri, "wa")
-                    } else {
-                        val values = ContentValues().apply {
-                            put(MediaStore.Downloads.DISPLAY_NAME, LOG_FILE_NAME)
-                            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-                        }
-                        context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-                            ?.let { context.contentResolver.openOutputStream(it, "wa") }
-                    }
-                }
+                // Prefer app-specific external dir (no permissions needed, stable on Android 15)
+                val appDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+                    ?: context.getExternalFilesDir(null)
+                    ?: context.filesDir
+                val file = File(appDir, LOG_FILE_NAME)
+                file.parentFile?.mkdirs()
+                FileOutputStream(file, true)
             } else {
                 @Suppress("DEPRECATION")
                 val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
@@ -73,9 +63,14 @@ object FileLogger {
                 FileOutputStream(File(dir, LOG_FILE_NAME), true)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to open Download log stream, falling back to app dir", e)
-            val fallbackDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.getExternalFilesDir(null) ?: context.filesDir
-            FileOutputStream(File(fallbackDir!!, LOG_FILE_NAME), true)
+            Log.e(TAG, "Failed to open log stream, using filesDir fallback", e)
+            try {
+                val fallbackDir = context.filesDir
+                FileOutputStream(File(fallbackDir, LOG_FILE_NAME), true)
+            } catch (e2: Exception) {
+                Log.e(TAG, "Fallback log stream also failed", e2)
+                null
+            }
         }
     }
 
@@ -96,12 +91,13 @@ object FileLogger {
                 val logEntry = "[$timestamp] [$tag] $message\n"
                 fos.write(logEntry.toByteArray())
                 throwable?.let {
-                    PrintWriter(fos).use { writer ->
-                        it.printStackTrace(writer)
-                        writer.flush()
-                    }
+                    val writer = PrintWriter(fos)
+                    it.printStackTrace(writer)
+                    writer.flush()
+                    // Don't close the writer here as it will close the underlying OutputStream 'fos'
                 }
                 fos.write("\n-----------------------------------\n".toByteArray())
+                fos.flush()
             }
             Log.d(TAG, "Log written to: ${getLogFilePath(context)}")
         } catch (e: Exception) {

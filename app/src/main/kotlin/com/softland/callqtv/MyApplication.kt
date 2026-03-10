@@ -37,7 +37,8 @@ class MyApplication : Application() {
             com.softland.callqtv.utils.FileLogger.logCrash(this, exception)
             Log.e("MyApplication", "Crash logged to: ${com.softland.callqtv.utils.FileLogger.getLogFilePath(this)}")
         } catch (e: Exception) {
-            Log.e("MyApplication", "Failed to write crash log: ${e.message}")
+            // Never let crash logging cause a secondary crash (critical on Android 15)
+            Log.e("MyApplication", "Failed to write crash log: ${e.message}", e)
         }
     }
 

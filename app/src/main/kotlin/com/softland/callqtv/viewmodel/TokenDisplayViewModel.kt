@@ -6,6 +6,7 @@ import androidx.lifecycle.*
 import com.softland.callqtv.data.local.TvConfigEntity
 import com.softland.callqtv.data.local.CounterEntity
 import com.softland.callqtv.data.local.AdFileEntity
+import com.softland.callqtv.data.local.ConnectedDeviceEntity
 import com.softland.callqtv.data.local.AppSharedPreferences
 import com.softland.callqtv.data.repository.TvConfigRepository
 import com.softland.callqtv.data.repository.TvConfigResult
@@ -37,6 +38,9 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
     
     private val _adFiles = MutableLiveData<List<AdFileEntity>>(emptyList())
     val adFiles: LiveData<List<AdFileEntity>> = _adFiles
+
+    private val _connectedDevices = MutableLiveData<List<ConnectedDeviceEntity>>(emptyList())
+    val connectedDevices: LiveData<List<ConnectedDeviceEntity>> = _connectedDevices
     
     private val _daysUntilExpiry = MutableLiveData<Int?>(null)
     val daysUntilExpiry: LiveData<Int?> = _daysUntilExpiry
@@ -142,6 +146,7 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                 }
                 _counters.value = repository.getCounters(_macAddress, customerId)
                 _adFiles.value = repository.getAdFiles(_macAddress, customerId)
+                _connectedDevices.value = repository.getConnectedDevices(_macAddress, customerId)
 
                 _config.value?.let { cfg ->
                     // Launch concurrently so loading spinner dismisses immediately
@@ -151,6 +156,7 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                 _config.value = repository.getCachedConfig(_macAddress, customerId)
                 _counters.value = repository.getCounters(_macAddress, customerId)
                 _adFiles.value = repository.getAdFiles(_macAddress, customerId)
+                _connectedDevices.value = repository.getConnectedDevices(_macAddress, customerId)
                 if (_config.value == null) {
                     _errorMessage.value = "Failed to load TV configuration: ${e.message}"
                 }

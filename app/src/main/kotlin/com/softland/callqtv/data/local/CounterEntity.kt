@@ -6,7 +6,7 @@ import androidx.room.PrimaryKey
 
 /**
  * Per-counter configuration for a TV device, derived from the "counters" array
- * in the TV config API (Response5/Response6).
+ * in the TV config API.
  */
 @Entity(tableName = "counters")
 data class CounterEntity(
@@ -58,6 +58,21 @@ data class CounterEntity(
 
     @ColumnInfo(name = "audio_name")
     val audioName: String?,
+
+    @ColumnInfo(name = "counter_config_id")
+    val counterConfigId: Int?,
+
+    @ColumnInfo(name = "max_token_number")
+    val maxTokenNumber: Int?,
+
+    @ColumnInfo(name = "dispenser_serial_number")
+    val dispenserSerialNumber: String?,
+
+    @ColumnInfo(name = "dispenser_token_type")
+    val dispenserTokenType: String?,
+
+    @ColumnInfo(name = "dispenser_display_name")
+    val dispenserDisplayName: String?,
 
     // Raw JSON for forward compatibility / debugging
     @ColumnInfo(name = "raw_json")

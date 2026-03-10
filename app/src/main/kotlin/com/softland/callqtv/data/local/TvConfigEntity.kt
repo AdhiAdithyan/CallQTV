@@ -37,7 +37,7 @@ data class TvConfigEntity(
     @ColumnInfo(name = "audio_language")
     val audioLanguage: String?,
     @ColumnInfo(name = "show_ads")
-    val showAds: Boolean?,
+    val showAds: String?, // Changed to String to handle "on"/"off" from JSON
     @ColumnInfo(name = "ad_interval")
     val adInterval: Int?,
     @ColumnInfo(name = "orientation")
@@ -50,6 +50,8 @@ data class TvConfigEntity(
     val enableCounterAnnouncement: Boolean?,
     @ColumnInfo(name = "enable_token_announcement")
     val enableTokenAnnouncement: Boolean?,
+    @ColumnInfo(name = "enable_counter_prifix")
+    val enableCounterPrefix: Boolean?,
     @ColumnInfo(name = "token_audio_url")
     val tokenAudioUrl: String?,
     @ColumnInfo(name = "token_music_url")

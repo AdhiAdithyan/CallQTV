@@ -22,8 +22,10 @@ Detailed documentation is available in the following files:
 
 | Document | Description |
 |----------|-------------|
+| [**DOCUMENTATION_INDEX.md**](./DOCUMENTATION_INDEX.md) | Master index of all documentation. |
 | [**SRS.md**](./SRS.md) | Software Requirements Specification, detailing core functional and non-functional requirements. |
-| [**SRS_FLOWCHARTS_WIREFRAMES.md**](./SRS_FLOWCHARTS_WIREFRAMES.md) | Comprehensive logic flows, UI wireframes, and architectural diagrams. |
+| [**WIREFRAMES.md**](./WIREFRAMES.md) | Standalone UI wireframes for all main screens. |
+| [**SRS_FLOWCHARTS_WIREFRAMES.md**](./SRS_FLOWCHARTS_WIREFRAMES.md) | Comprehensive logic flows (Mermaid), UI wireframes, and architectural diagrams. |
 | [**ARCHITECTURE_AND_WORKFLOW.md**](./ARCHITECTURE_AND_WORKFLOW.md) | Technical deep-dive into the codebase, module responsibilities, and data flows. |
 | [**SOURCE_CODE_DOCUMENTATION.md**](./SOURCE_CODE_DOCUMENTATION.md) | Developer guide for classes, interfaces, and utilities. |
 | [**VALIDATION_REPORT.md**](./VALIDATION_REPORT.md) | Recent build and code quality validation results. |

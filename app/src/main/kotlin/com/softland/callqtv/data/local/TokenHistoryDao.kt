@@ -35,4 +35,8 @@ interface TokenHistoryDao {
     /** Wipe all history (e.g. on full config reset). */
     @Query("DELETE FROM token_history")
     suspend fun clearAll()
+
+    /** Remove tokens that are not from [today] (yyyy-MM-dd). Keeps only today's called tokens. */
+    @Query("DELETE FROM token_history WHERE call_date != :today OR call_date IS NULL OR call_date = ''")
+    suspend fun deleteWhereDateNot(today: String)
 }
