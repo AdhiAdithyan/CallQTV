@@ -50,7 +50,7 @@ object TokenAnnouncer {
                         })
                         
                         setupLanguage(audioLanguage)
-                        scheduleHeartbeat()
+                        scheduleHeartbeat(context.applicationContext)
                         onInitComplete(true)
                     } else {
                         Log.e(TAG, "TTS Initialization failed")
@@ -125,26 +125,49 @@ object TokenAnnouncer {
     }
 
     private var heartbeatJob: Job? = null
+    private var lastHeartbeatErrorCount = 0
 
-    private fun scheduleHeartbeat() {
+    private fun scheduleHeartbeat(context: Context) {
         heartbeatJob?.cancel()
         heartbeatJob = scope.launch {
             while (true) {
-                // More aggressive keep-alive: ping every ~5 seconds so the
-                // first real announcement after a long idle period is not delayed
-                delay(5 * 1000L)
+                // Heartbeat every 8 seconds to prevent both TTS and Audio Hardware sleep
+                delay(8000L)
                 synchronized(this@TokenAnnouncer) {
-                    if (isInitialized) {
-                        // Play a very short silence to keep the TTS service warm
-                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                            tts?.playSilentUtterance(50, TextToSpeech.QUEUE_ADD, "heartbeat")
-                        } else {
-                            tts?.speak(" ", TextToSpeech.QUEUE_ADD, null, "heartbeat")
+                    if (isInitialized && tts != null) {
+                        try {
+                            val result = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                                tts?.playSilentUtterance(10, TextToSpeech.QUEUE_ADD, "heartbeat")
+                            } else {
+                                @Suppress("DEPRECATION")
+                                tts?.speak(" ", TextToSpeech.QUEUE_ADD, null)
+                            }
+
+                            if (result == TextToSpeech.ERROR) {
+                                lastHeartbeatErrorCount++
+                                Log.w(TAG, "TTS Heartbeat failed ($lastHeartbeatErrorCount)")
+                            } else {
+                                lastHeartbeatErrorCount = 0
+                            }
+
+                            // If we fail multiple times, the service is likely dead/disconnected
+                            if (lastHeartbeatErrorCount >= 3) {
+                                Log.e(TAG, "TTS service unresponsive. Re-initializing...")
+                                reinitialize(context.applicationContext)
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Heartbeat error", e)
                         }
                     }
                 }
             }
         }
+    }
+
+    private fun reinitialize(context: Context) {
+        val oldLang = currentLanguage
+        shutdown()
+        initialize(context, oldLang)
     }
 
     private fun speakNow(counter: String, token: String, onDone: (() -> Unit)? = null) {
@@ -157,13 +180,9 @@ object TokenAnnouncer {
         val lang = currentLanguage?.lowercase() ?: "en"
 
         // 1. Format the token string (Natural reading)
-        // We allow the TTS engine to read numbers naturally (e.g. "33" becomes "Thirty Three").
-        // We replace non-alphanumeric characters with spaces to avoid reading punctuation (e.g. "dash").
         val tokenText = token.replace(Regex("[^a-zA-Z0-9]"), " ")
 
         // 2. Select Phrase based on Language
-        // Using transliterated strings which most TTS engines handle reasonably well for these languages
-        // independent of script rendering support.
         val phrase = when (lang) {
             "hi", "hindi" -> {
                 if (counter.isNotBlank()) "Token $tokenText,$counter vahaan jaen"
@@ -196,10 +215,16 @@ object TokenAnnouncer {
 
     fun shutdown() {
         heartbeatJob?.cancel()
-        tts?.stop()
-        tts?.shutdown()
+        heartbeatJob = null
+        try {
+            tts?.stop()
+            tts?.shutdown()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error shutting down TTS", e)
+        }
         tts = null
         isInitialized = false
         currentLanguage = null
+        lastHeartbeatErrorCount = 0
     }
 }

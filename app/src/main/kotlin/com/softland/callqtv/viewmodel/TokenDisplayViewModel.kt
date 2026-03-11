@@ -124,33 +124,39 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
             val customerId = String.format(Locale.ROOT, "%04d", customerIdInt)
 
             try {
-                val result = repository.fetchAndCacheTvConfig(_macAddress, customerId)
-                when (result) {
-                    is TvConfigResult.Success -> {
-                        _config.value = result.entity
-                        _errorMessage.value = null
-                    }
-                    is TvConfigResult.Pending -> {
-                        _config.value = repository.getCachedConfig(_macAddress, customerId)
-                        _isPendingApproval.value = true
-                        _errorMessage.value = result.message
-                    }
-                    is TvConfigResult.Error -> {
-                        _config.value = repository.getCachedConfig(_macAddress, customerId)
-                        _errorMessage.value = if (result.licenceStatus != null) {
-                            "${result.message}\n\n${result.licenceStatus}"
-                        } else {
-                            result.message
+                // Outer safety timeout of 30 seconds to ensure the dialog ALWAYS closes
+                kotlinx.coroutines.withTimeoutOrNull(30_000L) {
+                    val result = repository.fetchAndCacheTvConfig(_macAddress, customerId)
+                    when (result) {
+                        is TvConfigResult.Success -> {
+                            _config.value = result.entity
+                            _errorMessage.value = null
+                        }
+                        is TvConfigResult.Pending -> {
+                            _config.value = repository.getCachedConfig(_macAddress, customerId)
+                            _isPendingApproval.value = true
+                            _errorMessage.value = result.message
+                        }
+                        is TvConfigResult.Error -> {
+                            _config.value = repository.getCachedConfig(_macAddress, customerId)
+                            _errorMessage.value = if (result.licenceStatus != null) {
+                                "${result.message}\n\n${result.licenceStatus}"
+                            } else {
+                                result.message
+                            }
                         }
                     }
-                }
-                _counters.value = repository.getCounters(_macAddress, customerId)
-                _adFiles.value = repository.getAdFiles(_macAddress, customerId)
-                _connectedDevices.value = repository.getConnectedDevices(_macAddress, customerId)
+                    _counters.value = repository.getCounters(_macAddress, customerId)
+                    _adFiles.value = repository.getAdFiles(_macAddress, customerId)
+                    _connectedDevices.value = repository.getConnectedDevices(_macAddress, customerId)
 
-                _config.value?.let { cfg ->
-                    // Launch concurrently so loading spinner dismisses immediately
-                    launch { initMqttIfNeeded(cfg, mqttViewModel) }
+                    _config.value?.let { cfg ->
+                        // Launch concurrently so loading spinner dismisses immediately
+                        launch { initMqttIfNeeded(cfg, mqttViewModel) }
+                    }
+                } ?: run {
+                    // Timeout occurred
+                    _errorMessage.value = "Connection timeout. Please check your network and try again."
                 }
             } catch (e: Exception) {
                 _config.value = repository.getCachedConfig(_macAddress, customerId)

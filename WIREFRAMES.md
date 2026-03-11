@@ -106,6 +106,7 @@ ASCII wireframes for the main screens of CallQTV. Layout adapts to **orientation
 ```
 
 - Full width counters; >4 counters split into 2 rows
+- **Scaling Note:** UI elements use a responsive `scale` factor based on a 1920x1080 design baseline to ensure readability on various TV sizes.
 
 ---
 

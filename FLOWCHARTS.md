@@ -141,7 +141,7 @@ flowchart TD
     DEDUP -->|No| MARK[Mark as announced]
     MARK --> DELAY[Delay 150ms]
     DELAY --> CHIME[Play chime]
-    CHIME --> TTS[TTS announce]
+    CHIME --> TTS[TTS announce - QUEUE_ADD]
     TTS --> END3([END])
 ```
 

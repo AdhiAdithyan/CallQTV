@@ -24,9 +24,12 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     private val connectionDetailsMap = mutableMapOf<String, MqttConnectionDetails>()
     private val stateMutex = Mutex()
     private val gson = Gson()
+    
+    private val retryAttempts = mutableMapOf<String, Int>()
+    private val retryJobs = mutableMapOf<String, kotlinx.coroutines.Job>()
 
     private val tokenHistoryRepo: TokenHistoryRepository by lazy {
-        TokenHistoryRepository(AppDatabase.getInstance(application))
+        TokenHistoryRepository(AppDatabase.getInstance(application), application)
     }
 
     private val connectedDeviceDao by lazy {
@@ -65,40 +68,65 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     private val _tokensPerCounter = MutableLiveData<Map<String, List<String>>>(emptyMap())
     fun getTokensPerCounter(): LiveData<Map<String, List<String>>> = _tokensPerCounter
 
-    private val announcedTokenCalls = mutableSetOf<String>()
+    // Thread-safe internal state to prevent race conditions during updates
+    private val internalTokenMap = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
+    private val announcedTokenTimestamps = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    @Volatile private var isHistoryLoaded = false
 
+    /**
+     * Deduplicate rapid MQTT messages. Returns true if announced within the last 2 seconds.
+     */
     fun isAlreadyAnnounced(counterKey: String, token: String): Boolean {
-        val key = "${counterKey}_$token"
-        return announcedTokenCalls.contains(key)
+        val key = "${counterKey.trim()}_${token.trim()}"
+        val lastTime = announcedTokenTimestamps[key] ?: 0L
+        return (System.currentTimeMillis() - lastTime) < 2000L
     }
 
     fun markAsAnnounced(counterKey: String, token: String) {
-        announcedTokenCalls.add("${counterKey}_$token")
+        val key = "${counterKey.trim()}_${token.trim()}"
+        announcedTokenTimestamps[key] = System.currentTimeMillis()
+        
+        // Cleanup old entries (simple way to prevent memory leak)
+        if (announcedTokenTimestamps.size > 100) {
+            val now = System.currentTimeMillis()
+            announcedTokenTimestamps.entries.removeIf { now - it.value > 60000 }
+        }
     }
 
     fun loadPersistedHistory() {
         viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val persisted = tokenHistoryRepo.loadAll()
-                if (persisted.isNotEmpty()) {
-                    _tokensPerCounter.postValue(persisted)
+            stateMutex.withLock {
+                try {
+                    val persisted = tokenHistoryRepo.loadAll()
+                    // If MQTT updates arrived before we loaded from DB, merge them
+                    // This is safer than internalTokenMap.clear()
+                    persisted.forEach { (key, tokens) ->
+                        val current = internalTokenMap[key] ?: emptyList()
+                        // Combine: persisted tokens followed by current ones, then take top 15
+                        val combined = (tokens + current).distinct().take(15)
+                        internalTokenMap[key] = combined
+                    }
+                    isHistoryLoaded = true
+                    _tokensPerCounter.postValue(internalTokenMap.toMap())
+                } catch (e: Exception) {
+                    android.util.Log.w("MqttViewModel", "Failed to load token history: ${e.message}")
                 }
-            } catch (e: Exception) {
-                android.util.Log.w("MqttViewModel", "Failed to load token history: ${e.message}")
             }
         }
     }
 
     fun clearTokenHistory() {
         viewModelScope.launch(Dispatchers.IO) {
-            try {
-                tokenHistoryRepo.clearAll()
-                _tokensPerCounter.postValue(emptyMap())
-                synchronized(this@MqttViewModel) {
-                    announcedTokenCalls.clear()
+            stateMutex.withLock {
+                try {
+                    tokenHistoryRepo.clearAll()
+                    internalTokenMap.clear()
+                    isHistoryLoaded = true // Resetting counts as loaded
+                    _tokensPerCounter.postValue(emptyMap())
+                    announcedTokenTimestamps.clear()
+                } catch (e: Exception) {
+                    android.util.Log.w("MqttViewModel", "Failed to clear token history: ${e.message}")
                 }
-            } catch (e: Exception) {
-                android.util.Log.w("MqttViewModel", "Failed to clear token history: ${e.message}")
             }
         }
     }
@@ -153,11 +181,16 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                     if (isConnected) {
                         _isAutoRetryExhausted.postValue(false)
                         _errorMessage.postValue("")
+                        // Connection success: reset backoff
+                        retryAttempts[serverUri] = 0
+                        retryJobs[serverUri]?.cancel()
                     }
                 }
 
                 override fun onError(error: String) {
                     _errorMessage.postValue("[$serverUri] $error")
+                    // Initial connection failed or lost before Paho could handle auto-reconnect
+                    scheduleInitialRetry(serverUri)
                 }
 
                 override fun onAutoRetryExhausted() {
@@ -238,17 +271,42 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    init {
-        viewModelScope.launch {
-            while (true) {
-                val status = _connectionStatusMap.value ?: emptyMap()
-                if (status.isNotEmpty()) {
-                    if (status.any { !it.value }) retryConnect()
-                }
-                delay(10000L)
-            }
+    private fun scheduleInitialRetry(serverUri: String) {
+        val details = connectionDetailsMap[serverUri] ?: return
+        
+        // If already connected, no need to retry
+        if (managers[serverUri]?.isConnected() == true) return
+        
+        // Avoid overlapping retry jobs
+        if (retryJobs[serverUri]?.isActive == true) return
+
+        val attempt = retryAttempts[serverUri] ?: 0
+        // Exponential backoff: 5s, 10s, 30s, then capped at 1 min
+        val delayMs = when (attempt) {
+            0 -> 5000L
+            1 -> 10000L
+            2 -> 30000L
+            else -> 60000L
+        }
+
+        retryJobs[serverUri] = viewModelScope.launch {
+            android.util.Log.d("MqttViewModel", "Retrying initial connection for $serverUri in ${delayMs/1000}s (Attempt ${attempt + 1})")
+            delay(delayMs)
+            retryAttempts[serverUri] = attempt + 1
+            initAndConnect(
+                details.serverUri, 
+                details.clientId, 
+                details.username, 
+                details.password, 
+                details.topic, 
+                details.qos, 
+                getApplication()
+            )
         }
     }
+
+// Redundant retry loop removed. Relying on Paho's isAutomaticReconnect = true 
+// for optimized and conflict-free reconnection management.
 
     private fun removeManager(serverUri: String) {
         viewModelScope.launch {
@@ -262,32 +320,45 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun processTokenUpdate(counter: String, token: String): Boolean {
-        if (token == "0" || token.isBlank() || counter == "0" || counter.isBlank()) return false
-        if (token.contains("CAL", ignoreCase = true)) return false
+    suspend fun processTokenUpdate(counter: String, token: String): Boolean {
+        val trimmedCounter = counter.trim()
+        val trimmedToken = token.trim()
+        
+        if (trimmedToken == "0" || trimmedToken.isBlank() || trimmedCounter == "0" || trimmedCounter.isBlank()) return false
+        if (trimmedToken.contains("CAL", ignoreCase = true)) return false
 
-        val currentMap = _tokensPerCounter.value?.toMutableMap() ?: mutableMapOf()
-        val list = (currentMap[counter] ?: emptyList()).toMutableList()
-
-        val existingPosition = list.indexOf(token)
-        if (existingPosition == 0) return false // Already at top
-
-        if (existingPosition > 0) {
-            list.removeAt(existingPosition)
-        }
-
-        list.add(0, token)
-        currentMap[counter] = list.take(15)
-        _tokensPerCounter.postValue(currentMap)
-
-        if (existingPosition > 0) {
-            synchronized(this) {
-                announcedTokenCalls.remove("${counter}_$token")
+        return stateMutex.withLock {
+            // If history isn't loaded yet, try to load it first
+            if (!isHistoryLoaded) {
+                val persisted = withContext(Dispatchers.IO) { tokenHistoryRepo.loadAll() }
+                persisted.forEach { (k, v) -> 
+                    if (!internalTokenMap.containsKey(k)) internalTokenMap[k] = v 
+                }
+                isHistoryLoaded = true
             }
-        }
 
-        persistToken(counter, token)
-        return true
+            val list = (internalTokenMap[trimmedCounter] ?: emptyList()).toMutableList()
+            val existingPosition = list.indexOf(trimmedToken)
+
+            // If already at top, per user request: DO NOT announce
+            if (existingPosition == 0) {
+                return@withLock false 
+            }
+
+            if (existingPosition > 0) {
+                list.removeAt(existingPosition)
+                // Clear the "announced" flag before moving to top, so it can be re-announced
+                announcedTokenTimestamps.remove("${trimmedCounter}_$trimmedToken")
+            }
+
+            list.add(0, trimmedToken)
+            val updatedList = list.take(15)
+            internalTokenMap[trimmedCounter] = updatedList
+            _tokensPerCounter.postValue(internalTokenMap.toMap())
+
+            persistToken(trimmedCounter, trimmedToken)
+            true // Announcement should happen
+        }
     }
 
     /**
@@ -295,35 +366,59 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
      * Prevents race where two processTokenUpdate calls overwrite each other.
      * Returns true if the token was new or moved for the primary key (should announce).
      */
-    fun processTokenUpdateForKeys(primaryKey: String, token: String, fallbackKey: String?): Boolean {
-        if (token == "0" || token.isBlank() || primaryKey == "0" || primaryKey.isBlank()) return false
-        if (token.contains("CAL", ignoreCase = true)) return false
+    suspend fun processTokenUpdateForKeys(primaryKey: String, token: String, fallbackKey: String?): Boolean {
+        val trimmedPrimary = primaryKey.trim()
+        val trimmedToken = token.trim()
+        val trimmedFallback = fallbackKey?.trim()
 
-        val currentMap = _tokensPerCounter.value?.toMutableMap() ?: mutableMapOf()
-        val keysToUpdate = mutableListOf(primaryKey)
-        if (fallbackKey != null && fallbackKey != primaryKey) keysToUpdate.add(fallbackKey)
+        if (trimmedToken == "0" || trimmedToken.isBlank() || trimmedPrimary == "0" || trimmedPrimary.isBlank()) return false
+        if (trimmedToken.contains("CAL", ignoreCase = true)) return false
 
-        var shouldAnnounce = false
-        for (key in keysToUpdate) {
-            val list = (currentMap[key] ?: emptyList()).toMutableList()
-            val existingPosition = list.indexOf(token)
-            if (existingPosition == 0 && key == primaryKey) {
-                shouldAnnounce = false
-                continue
-            }
-            if (existingPosition > 0) list.removeAt(existingPosition)
-            list.add(0, token)
-            currentMap[key] = list.take(15)
-            if (key == primaryKey) shouldAnnounce = true
-            persistToken(key, token)
-            if (existingPosition > 0) {
-                synchronized(this) {
-                    announcedTokenCalls.remove("${key}_$token")
+        return stateMutex.withLock {
+            if (!isHistoryLoaded) {
+                val persisted = withContext(Dispatchers.IO) { tokenHistoryRepo.loadAll() }
+                persisted.forEach { (k, v) -> 
+                    if (!internalTokenMap.containsKey(k)) internalTokenMap[k] = v 
                 }
+                isHistoryLoaded = true
             }
+
+            val keysToUpdate = mutableListOf(trimmedPrimary)
+            if (trimmedFallback != null && trimmedFallback != trimmedPrimary) keysToUpdate.add(trimmedFallback)
+
+            var shouldAnnounce = false
+
+            for (key in keysToUpdate) {
+                val list = (internalTokenMap[key] ?: emptyList()).toMutableList()
+                val existingPosition = list.indexOf(trimmedToken)
+                
+                // If it's already the most recent for this key, keep moving but don't set shouldAnnounce
+                if (existingPosition == 0) {
+                    continue
+                }
+
+                // If it's the primary key and it's not at top, it's a candidate for announcement
+                if (key == trimmedPrimary) {
+                    shouldAnnounce = true
+                }
+
+                if (existingPosition > 0) {
+                    list.removeAt(existingPosition)
+                    // Clear flag so it can be re-announced since its position is changing
+                    announcedTokenTimestamps.remove("${key}_$trimmedToken")
+                }
+                
+                list.add(0, trimmedToken)
+                internalTokenMap[key] = list.take(15)
+                persistToken(key, trimmedToken)
+            }
+            
+            if (shouldAnnounce) {
+                _tokensPerCounter.postValue(internalTokenMap.toMap())
+            }
+            
+            shouldAnnounce
         }
-        _tokensPerCounter.postValue(currentMap)
-        return shouldAnnounce
     }
 
     private fun persistToken(key: String, token: String) {

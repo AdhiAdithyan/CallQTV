@@ -138,14 +138,15 @@ CallQTV is a standalone Android application that:
 | FR-M5 | **Keypad validation:** Accept message only if serial (chars 2–15) matches keypad_sl_no_1 of a connected KEYPAD device for this customer/MAC. | High |
 | FR-M6 | Expose connection status and error messages in UI. | High |
 | FR-M7 | When enable_token_announcement is true, announce new tokens via TTS. | High |
-| FR-M8 | Phrasing: "Token [Number], please proceed to [Counter Name]"; counter name when enable_counter_announcement is true. | High |
+| FR-M8 | Phrasing: Language-specific (EN, HI, TA, ML). "Token [Number], Counter [Counter Name]". | High |
 | FR-M9 | Token label with counter code when enable_counter_prifix is true (e.g., A-36). | High |
 | FR-M10 | Only announce when MQTT counter matches configured button_index. | High |
 | FR-M11 | Deduplicate: do not announce same (counter, token) twice; mark before TTS. | High |
-| FR-M12 | Store token atomically under both canonical key and button_index for reliable UI display. | High |
+| FR-M12 | Store token atomically using `processTokenUpdateForKeys` to prevent race conditions. | High |
 | FR-M13 | Brief delay (~150ms) before TTS so UI updates first. | Medium |
-| FR-M14 | Ignore zero-value tokens. | Medium |
-| FR-M15 | TTS shall work without Google Play Services. | High |
+| FR-M14 | Ignore zero-value tokens and "CAL" prefix tokens. | Medium |
+| FR-M15 | TTS uses `QUEUE_ADD` to ensure sequential, non-interrupted announcements. | High |
+| FR-M16 | Maintain a heartbeat ping every 5s to keep TTS service warm. | Medium |
 
 ### 3.6 Firebase Cloud Messaging (FCM)
 

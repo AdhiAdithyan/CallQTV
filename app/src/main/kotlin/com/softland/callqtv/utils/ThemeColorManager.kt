@@ -81,6 +81,14 @@ object ThemeColorManager {
         ThemeOption("Blue", "#2196F3"),
         ThemeOption("Light Blue", "#64B5F6"),
         ThemeOption("Dark Blue", "#1565C0"),
+        // Branded Metallic
+        ThemeOption("CallQ Silver", "#C0C0C0"),
+        ThemeOption("CallQ Platinum", "#E5E4E2"),
+        ThemeOption("CallQ Steel", "#778899"),
+        // High-Contrast Highlights (To make silver logo pop)
+        ThemeOption("Electric Blue", "#00E5FF"),
+        ThemeOption("Neon Cyan", "#00B8D4"),
+        ThemeOption("Cyber Purple", "#AA00FF"),
         // Red
         ThemeOption("Red", "#F44336"),
         ThemeOption("Light Red", "#EF5350"),
@@ -187,7 +195,14 @@ object ThemeColorManager {
         ThemeOption("Indigo", "#3F51B5"),
         ThemeOption("Cyan", "#00BCD4"),
         
-        // Gradients
+        // Branded & Highlight Gradients
+        ThemeOption("Silver Shine", "GRADIENT:#E0E0E0,#757575"),
+        ThemeOption("Platinum Glow", "GRADIENT:#FFFFFF,#BDBDBD"),
+        ThemeOption("Deep Space", "GRADIENT:#000000,#434343"),
+        ThemeOption("Electric Stream", "GRADIENT:#2196F3,#00E5FF"),
+        ThemeOption("Premium Dark", "GRADIENT:#121212,#242424,#121212"),
+
+        // Standard Gradients
         ThemeOption("Blue Gradient", "GRADIENT:#1976D2,#64B5F6"),
         ThemeOption("Red Gradient", "GRADIENT:#D32F2F,#EF5350"),
         ThemeOption("Green Gradient", "GRADIENT:#388E3C,#81C784"),

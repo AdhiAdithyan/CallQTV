@@ -350,22 +350,22 @@ fun TokenDisplayScreen(
             // 2. Use a canonical storage key so the same physical counter always shares history,
             //    even if MQTT uses different identifiers (id, name, button index).
             val storageKey =
-                actualCounter.counterId?.takeIf { it.isNotBlank() }
-                    ?: actualCounter.name?.takeIf { it.isNotBlank() }
-                    ?: actualCounter.defaultName?.takeIf { it.isNotBlank() }
+                actualCounter.counterId?.trim()?.takeIf { it.isNotBlank() }
+                    ?: actualCounter.name?.trim()?.takeIf { it.isNotBlank() }
+                    ?: actualCounter.defaultName?.trim()?.takeIf { it.isNotBlank() }
                     ?: actualCounter.buttonIndex?.toString()
-                    ?: counterIdOrName
-            val btnKey = actualCounter.buttonIndex?.toString()
+                    ?: counterIdOrName.trim()
+            val btnKey = actualCounter.buttonIndex?.toString()?.trim()
 
-            // Update in‑memory history & UI atomically (one map update for both keys).
-            val shouldAnnounce = mqttViewModel.processTokenUpdateForKeys(storageKey, tokenLabel, btnKey)
-            if (!shouldAnnounce) {
+            // Update in-memory history & UI. processTokenUpdateForKeys is now a suspend function 
+            // and returns false if the token is already at index 0 (skip announcement).
+            val isNewOrMoved = mqttViewModel.processTokenUpdateForKeys(storageKey, tokenLabel, btnKey)
+            if (!isNewOrMoved) {
                 return@collect
             }
 
-            // Deduplicate: skip announcement if we already announced this token (e.g. duplicate MQTT)
-            if (mqttViewModel.isAlreadyAnnounced(storageKey, tokenLabel) ||
-                (btnKey != null && mqttViewModel.isAlreadyAnnounced(btnKey, tokenLabel))) {
+            // Deduplicate: skip announcement if we already announced this token call recently
+            if (mqttViewModel.isAlreadyAnnounced(storageKey, tokenLabel)) {
                 return@collect
             }
 
@@ -1279,15 +1279,16 @@ fun CounterBoard(
         val cid = counter.counterId.orEmpty().trim()
         val cname = counter.name.orEmpty().trim()
         val dname = counter.defaultName.orEmpty().trim()
-        val btnKey = counter.buttonIndex?.toString().orEmpty()
+        val btnKey = counter.buttonIndex?.toString()?.trim().orEmpty()
 
         // Look up by counterId, name, defaultName, buttonIndex, or numeric match (handles MQTT counter "2" -> storageKey "2")
-        val rawList = tokensPerCounter[cid]
-            ?: tokensPerCounter[cname]
-            ?: tokensPerCounter[dname]
-            ?: tokensPerCounter[btnKey]
+        val rawList = (if (cid.isNotBlank()) tokensPerCounter[cid] else null)
+            ?: (if (cname.isNotBlank()) tokensPerCounter[cname] else null)
+            ?: (if (dname.isNotBlank()) tokensPerCounter[dname] else null)
+            ?: (if (btnKey.isNotBlank()) tokensPerCounter[btnKey] else null)
             ?: tokensPerCounter.entries.find {
-                val keyInt = it.key.toIntOrNull()
+                val keyTrimmed = it.key.trim()
+                val keyInt = keyTrimmed.toIntOrNull()
                 val cidInt = cid.toIntOrNull()
                 keyInt != null && (keyInt == cidInt || keyInt == counter.buttonIndex)
             }?.value
@@ -1295,7 +1296,7 @@ fun CounterBoard(
             ?: emptyList()
             
         // Filter out "0", tokens containing "CAL", and maintain order (first is latest)
-        rawList.filter { it != "0" && !it.contains("CAL", ignoreCase = true) }.distinct()
+        rawList.filter { it.trim() != "0" && !it.contains("CAL", ignoreCase = true) }.map { it.trim() }.distinct()
     }
 
     // Counter code from CounterConfig - used to prefix token for display (e.g. "A-36")

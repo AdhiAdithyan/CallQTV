@@ -123,11 +123,10 @@ class MqttClientManager(
         isConnecting = true
         
         val options = MqttConnectOptions().apply {
-            isCleanSession = true
+            isCleanSession = false // Enable persistent session to receive missed messages on reconnect
             isAutomaticReconnect = true
-            // Increased timeout to handle network initialization delays
-            connectionTimeout = 7
-            keepAliveInterval = 5
+            connectionTimeout = 20 // Increased to handle network jitter
+            keepAliveInterval = 30 // Increased to avoid false disconnects on busy networks
             mqttVersion = MqttConnectOptions.MQTT_VERSION_3_1_1
             if (!username.isNullOrEmpty() && !password.isNullOrEmpty()) {
                 userName = username
