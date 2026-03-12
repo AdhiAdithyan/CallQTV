@@ -56,6 +56,11 @@ class MqttClientManager(
                     }
 
                     override fun messageArrived(topic: String?, message: MqttMessage?) {
+                        if (message?.isRetained == true) {
+                            Log.d(TAG, "Skipping retained message (stale payload on reconnect)")
+                            return
+                        }
+
                         val payload = message?.payload?.let { String(it) } ?: ""
                         if (payload.contains("CAL0K")) {
                             // Check if the 17th digit (index 16) is '0'
@@ -160,6 +165,16 @@ class MqttClientManager(
                 }
             })
         } catch (e: Exception) {
+            val isAlreadyConnecting = (e is MqttException && e.reasonCode == 32110) ||
+                    e.message?.contains("Connect already in progress") == true ||
+                    e.cause?.message?.contains("Connect already in progress") == true
+            
+            if (isAlreadyConnecting) {
+                Log.d(TAG, "MQTT connection is already in progress (Paho auto-reconnect or duplicate call). Ignoring.")
+                // Do not reset isConnecting here, since a connection is genuinely in progress.
+                return
+            }
+            
             isConnecting = false
             val errorText = "Connection exception: ${e.message}"
             Log.e(TAG, errorText, e)

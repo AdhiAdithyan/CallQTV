@@ -277,6 +277,8 @@ fun TokenDisplayScreen(
     val isAutoRetryExhausted by mqttViewModel.isAutoRetryExhausted().observeAsState(false)
     val tokensPerCounter by mqttViewModel.getTokensPerCounter().observeAsState(emptyMap())
     val lastPayloadForFooter by mqttViewModel.getLastPayload().observeAsState("")
+    val isConnectingToMqtt by mqttViewModel.isConnectingToMqtt().observeAsState(false)
+    val connectTimer by mqttViewModel.getConnectTimer().observeAsState(0)
     
     val macAddress = viewModel.macAddress
     val appVersion = remember { context.getString(R.string.app_version) }
@@ -459,6 +461,11 @@ fun TokenDisplayScreen(
             message = "Loading TV configuration.\nPlease wait...",
             isVisible = true
         )
+    } else if (isConnectingToMqtt) {
+        AnimatedLoadingOverlay(
+            message = "Connecting to BLUCON...\nTime elapsed: ${connectTimer}s",
+            isVisible = true
+        )
     } else if (isPendingApproval) {
         AlertDialog(
             onDismissRequest = { /* Prevent dismiss */ },
@@ -470,13 +477,20 @@ fun TokenDisplayScreen(
                 )
             },
             text = {
-                Text(
-                    errorMessage
-                        ?: "This display is awaiting approval from the administrator.\n" +
-                           "Please contact support or tap Retry after approval.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Start
-                )
+                Column {
+                    Text(
+                        errorMessage
+                            ?: "This display is awaiting approval from the administrator.\n" +
+                               "Please contact support or tap Retry after approval.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Start
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Device ID: $macAddress",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
             },
             confirmButton = {
                 Button(onClick = { viewModel.loadData(mqttViewModel) }) {
@@ -490,11 +504,18 @@ fun TokenDisplayScreen(
             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 1f),
             title = { Text("Configuration Error", style = MaterialTheme.typography.titleMedium) },
             text = {
-                Text(
-                    text = /*errorMessage.orEmpty()*/"Connection timeout.\nPlease retry",
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Start
-                )
+                Column {
+                    Text(
+                        text = /*errorMessage.orEmpty()*/"Connection timeout.\nPlease retry",
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Start
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Device ID: $macAddress",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
             },
             confirmButton = {
                 Button(onClick = { viewModel.loadData(mqttViewModel) }) {
@@ -528,6 +549,11 @@ fun TokenDisplayScreen(
                         "The display could not connect to the messaging server.\n" +
                         "Please check your network or broker settings, then tap Retry.",
                         style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Device ID: $macAddress",
+                        style = MaterialTheme.typography.labelSmall
                     )
                     /*Spacer(modifier = Modifier.height(8.dp))
                     Text(

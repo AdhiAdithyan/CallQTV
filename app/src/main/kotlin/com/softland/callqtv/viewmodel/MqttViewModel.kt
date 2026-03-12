@@ -60,6 +60,34 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     private val _errorMessage = MutableLiveData<String>("")
     fun getErrorMessage(): LiveData<String> = _errorMessage
 
+    private val _isConnectingToMqtt = MutableLiveData<Boolean>(false)
+    fun isConnectingToMqtt(): LiveData<Boolean> = _isConnectingToMqtt
+
+    private val _connectTimer = MutableLiveData<Int>(0)
+    fun getConnectTimer(): LiveData<Int> = _connectTimer
+    
+    private var timerJob: kotlinx.coroutines.Job? = null
+
+    private fun startConnectTimer() {
+        _isConnectingToMqtt.postValue(true)
+        _connectTimer.postValue(0)
+        timerJob?.cancel()
+        timerJob = viewModelScope.launch(Dispatchers.Main) {
+            var time = 0
+            while(true) {
+                delay(1000)
+                time++
+                _connectTimer.postValue(time)
+            }
+        }
+    }
+
+    private fun stopConnectTimer() {
+        _isConnectingToMqtt.postValue(false)
+        timerJob?.cancel()
+        timerJob = null
+    }
+
     private val _isAutoRetryExhausted = MutableLiveData<Boolean>(false)
     fun isAutoRetryExhausted(): LiveData<Boolean> = _isAutoRetryExhausted
 
@@ -179,6 +207,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 override fun onConnectionStatus(isConnected: Boolean) {
                     updateStatus(serverUri, isConnected)
                     if (isConnected) {
+                        stopConnectTimer()
                         _isAutoRetryExhausted.postValue(false)
                         _errorMessage.postValue("")
                         // Connection success: reset backoff
@@ -188,6 +217,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 override fun onError(error: String) {
+                    stopConnectTimer()
                     _errorMessage.postValue("[$serverUri] $error")
                     // Initial connection failed or lost before Paho could handle auto-reconnect
                     scheduleInitialRetry(serverUri)
@@ -198,63 +228,36 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 }
             })
         }
+        
+        startConnectTimer()
         managers[serverUri] = manager
         manager.subscribe(topic, qos)
         manager.connect(username, password)
     }
 
     /**
-     * Checks if the character sequence after "$0" matches "keypad_sl_no_1"
-     * for any connected device of type "KEYPAD".
+     * Checks if the character sequence after "$0" matches a connected device of type "KEYPAD".
      */
     private suspend fun isValidKeypadMessage(message: String): Boolean {
-        // Extract the potential serial from the message (characters after "$0" up to where counter info starts)
-        // In the fixed protocol "$0<SERIAL>C<TOKEN>*", if index 16 is Counter, then 2..15 is Serial (14 chars).
-        val serialInMessage = try {
-            message.substring(2, 16).trim()
-        } catch (e: Exception) {
-            return false
-        }
+        if (message.length < 16) return false
+        val serialInMessage = message.substring(2, 16).trim()
+        if (serialInMessage.isEmpty()) return false
 
         return withContext(Dispatchers.IO) {
             val authPrefs = getApplication<Application>().getSharedPreferences(com.softland.callqtv.data.local.AppSharedPreferences.AUTHENTICATION, android.content.Context.MODE_PRIVATE)
-            val customerIdInt = authPrefs.getInt(com.softland.callqtv.utils.PreferenceHelper.customer_id, 0)
-            val customerId = String.format(java.util.Locale.ROOT, "%04d", customerIdInt)
+            val customerId = String.format(java.util.Locale.ROOT, "%04d", authPrefs.getInt(com.softland.callqtv.utils.PreferenceHelper.customer_id, 0))
             val macAddress = com.softland.callqtv.utils.Variables.getMacId(getApplication())
 
-            val devices = connectedDeviceDao.getByMacAndCustomer(macAddress, customerId)
-
-            var matched = false
-
-            devices.forEach { device ->
-                if (device.deviceType?.uppercase() == "KEYPAD" && !device.configJson.isNullOrBlank()) {
-                    try {
-                        val configMap = gson.fromJson(device.configJson, Map::class.java)
-                        val keypadSlNo = configMap["keypad_sl_no_1"]?.toString()
-                        if (keypadSlNo != null && keypadSlNo == serialInMessage) {
-                            matched = true
-                        } else {
-                            android.util.Log.d(
-                                "MqttViewModel",
-                                "Keypad serial mismatch: fromMessage='$serialInMessage', keypad_sl_no_1='${keypadSlNo ?: "null"}', deviceSerial='${device.serialNumber}'"
-                            )
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.d(
-                            "MqttViewModel",
-                            "Failed to parse keypad configJson for deviceSerial='${device.serialNumber}': ${e.message}"
-                        )
-                    }
-                }
+            connectedDeviceDao.getByMacAndCustomer(macAddress, customerId).any { device ->
+                device.deviceType?.uppercase() == "KEYPAD" && device.configJson?.contains(serialInMessage) == true
             }
-
-            matched
         }
     }
 
     fun retryConnect() {
         _errorMessage.postValue("")
         _isAutoRetryExhausted.postValue(false)
+        startConnectTimer()
         connectionDetailsMap.values.forEach { details ->
             initAndConnect(details.serverUri, details.clientId, details.username, details.password, details.topic, details.qos, getApplication())
         }
