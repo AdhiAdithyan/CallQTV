@@ -11,6 +11,9 @@ interface MappedBrokerDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun upsert(entity: MappedBrokerEntity)
 
+    @Query("DELETE FROM mapped_broker WHERE mac_address = :macAddress AND customer_id = :customerId")
+    fun deleteByMacAndCustomer(macAddress: String, customerId: String)
+
     @Query("SELECT * FROM mapped_broker WHERE device_id = :deviceId")
     fun getByDeviceId(deviceId: Int): List<MappedBrokerEntity>
 

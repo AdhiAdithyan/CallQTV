@@ -8,6 +8,7 @@ import com.softland.callqtv.data.repository.TvConfigRepository
 import com.softland.callqtv.utils.PreferenceHelper
 import com.softland.callqtv.utils.Variables
 import com.softland.callqtv.data.local.AppSharedPreferences
+import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -42,7 +43,13 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
     private fun triggerConfigUpdate() {
         val authPrefs = getSharedPreferences(AppSharedPreferences.AUTHENTICATION, Context.MODE_PRIVATE)
-        val customerId = authPrefs.getString(PreferenceHelper.customer_id, "") ?: ""
+        val customerIdInt = authPrefs.getInt(PreferenceHelper.customer_id, 0)
+        // Mirror the 4-digit formatting used elsewhere in the app (e.g., TokenDisplayViewModel)
+        val customerId = if (customerIdInt > 0) {
+            String.format(Locale.ROOT, "%04d", customerIdInt)
+        } else {
+            ""
+        }
         val macAddress = Variables.getMacId(applicationContext)
 
         if (customerId.isNotEmpty()) {

@@ -28,7 +28,7 @@ This Software Requirements Specification (SRS) describes the functional and non-
 | **TV Config** | Backend configuration (layout, orientation, colors, counters, ads, MQTT broker) fetched per device/customer. |
 | **Display Type 1** | Horizontal layout: counters in a row; optional ad column on left/right. |
 | **Display Type 2** | Vertical layout: counters stacked in a column; optional ad column on left/right. |
-| **Fixed Protocol** | MQTT message format: `$<serial><counter><token>*` (e.g., `$02026bCAL0K00062100020*`). |
+| **Fixed Protocol** | MQTT message format: `$<15-char-serial><1-char-counter><1-char-separator><4-char-token><1-char-padding>*` (e.g., `$02026bCAL0K00071100030*`). |
 
 ### 1.4 References
 
@@ -131,12 +131,12 @@ CallQTV is a standalone Android application that:
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| FR-M1 | Connect to MQTT broker from mapped_broker config. | High |
+| FR-M1 | Connect to MQTT broker from mapped_broker config using Paho Async Client with auto-reconnect. | High |
 | FR-M2 | Subscribe to configurable topic after connection. | High |
-| FR-M3 | Parse fixed protocol: `$<14-char-serial><1-char-counter><4-char-token>*`. | High |
+| FR-M3 | Parse fixed protocol: `$<15-char-serial><1-char-counter><1-skip><4-char-token><1-skip>*` (>=22 chars). | High |
 | FR-M4 | Support fallback formats: TOKEN:X, COUNTER:Y; regex; topic fallback. | High |
-| FR-M5 | **Keypad validation:** Accept message only if serial (chars 2–15) matches keypad_sl_no_1 of a connected KEYPAD device for this customer/MAC. | High |
-| FR-M6 | Expose connection status and error messages in UI. | High |
+| FR-M5 | **Keypad validation:** Accept message only if serial (chars 2–16) matches keypad_sl_no_1 of a connected KEYPAD device for this customer/MAC. | High |
+| FR-M6 | Expose connection status and error messages in UI, soft-failing on connection lost to allow auto-retry. | High |
 | FR-M7 | When enable_token_announcement is true, announce new tokens via TTS. | High |
 | FR-M8 | Phrasing: Language-specific (EN, HI, TA, ML). "Token [Number], Counter [Counter Name]". | High |
 | FR-M9 | Token label with counter code when enable_counter_prifix is true (e.g., A-36). | High |
@@ -146,7 +146,10 @@ CallQTV is a standalone Android application that:
 | FR-M13 | Brief delay (~150ms) before TTS so UI updates first. | Medium |
 | FR-M14 | Ignore zero-value tokens and "CAL" prefix tokens. | Medium |
 | FR-M15 | TTS uses `QUEUE_ADD` to ensure sequential, non-interrupted announcements. | High |
-| FR-M16 | Maintain a heartbeat ping every 5s to keep TTS service warm. | Medium |
+| FR-M16 | Maintain a heartbeat ping every 8s to keep TTS service warm. | Medium |
+| FR-M17 | **Continuous Publishing:** Every 5 seconds, publish a heartbeat payload `$<SERIAL>000000#` to the "fr/status" topic for all connected keypad devices. | High |
+| FR-M18 | **Publishing Cycle:** The heartbeat loop shall run unconditionally every 5 seconds to ensure the broker maintains an active association with the device ID. | High |
+| FR-M19 | **Publishing Lifecycle:** The loop shall start upon the first successful MQTT connection and pause if all broker connections are lost. | Medium |
 
 ### 3.6 Firebase Cloud Messaging (FCM)
 

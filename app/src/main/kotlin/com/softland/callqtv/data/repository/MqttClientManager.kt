@@ -47,11 +47,11 @@ class MqttClientManager(
                 setCallback(object : MqttCallbackExtended {
                     override fun connectionLost(cause: Throwable?) {
                         val errorMsg = cause?.message ?: "Unknown reason"
-                        Log.e(TAG, "!!! MQTT CONNECTION LOST !!! Reason: $errorMsg", cause)
+                        Log.w(TAG, "MQTT connection lost (will rely on auto-reconnect). Reason: $errorMsg", cause)
                         mqttListener?.let {
                             it.onConnectionStatus(false)
+                            // Surface as a soft warning; do NOT mark auto-retry as exhausted here
                             it.onError("Connection lost: $errorMsg")
-                            it.onAutoRetryExhausted()
                         }
                     }
 
@@ -62,19 +62,10 @@ class MqttClientManager(
                         }
 
                         val payload = message?.payload?.let { String(it) } ?: ""
-                        if (payload.contains("CAL0K")) {
-                            // Check if the 17th digit (index 16) is '0'
-                            if (payload.length != 24 || payload[16] == '0') {
-//                                Log.w(TAG, "Skipping response: 17th digit is '0'. Payload: $payload")
-                                return
-                            }
 
-                            Log.i(
-                                TAG,
-                                "!!! INCOMING MQTT MESSAGE !!! Topic: [$topic], Payload: $payload"
-                            )
-                            mqttListener?.onMessageReceived(topic.orEmpty(), payload)
-                        }
+                        // Do NOT filter here. Forward ALL non-retained payloads to the ViewModel,
+                        // which maintains its own queue and applies business filters.
+                        mqttListener?.onMessageReceived(topic.orEmpty(), payload)
                     }
 
                     override fun deliveryComplete(token: IMqttDeliveryToken?) {
@@ -130,8 +121,10 @@ class MqttClientManager(
         val options = MqttConnectOptions().apply {
             isCleanSession = false // Enable persistent session to receive missed messages on reconnect
             isAutomaticReconnect = true
-            connectionTimeout = 20 // Increased to handle network jitter
-            keepAliveInterval = 30 // Increased to avoid false disconnects on busy networks
+            connectionTimeout = 25
+            // Very short keep-alive so PINGREQ is sent about every 20 seconds.
+            // Note: this increases network chatter and sensitivity to brief hiccups.
+            keepAliveInterval = 20
             mqttVersion = MqttConnectOptions.MQTT_VERSION_3_1_1
             if (!username.isNullOrEmpty() && !password.isNullOrEmpty()) {
                 userName = username
@@ -155,26 +148,51 @@ class MqttClientManager(
 
                 override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
                     isConnecting = false
-                    val errorText = "Initial connection failed: ${exception?.message ?: "Unknown error"}"
-                    Log.e(TAG, errorText, exception)
+                    val rawMsg = exception?.message ?: "Unknown error"
+                    val causeMsg = exception?.cause?.message.orEmpty()
+
+                    // Paho reasonCode 32103 = "Unable to connect to server"
+                    val isMqttUnableToConnect = (exception as? MqttException)?.reasonCode == 32103
+                    val isHostUnreachable = rawMsg.contains("EHOSTUNREACH", ignoreCase = true) ||
+                            rawMsg.contains("No route to host", ignoreCase = true) ||
+                            causeMsg.contains("EHOSTUNREACH", ignoreCase = true) ||
+                            causeMsg.contains("No route to host", ignoreCase = true)
+
+                    val errorText = "Initial connection failed: $rawMsg"
+
                     mqttListener?.let {
                         it.onConnectionStatus(false)
                         it.onError(errorText)
-                        it.onAutoRetryExhausted()
+
+                        if (isMqttUnableToConnect || isHostUnreachable) {
+                            // Network / broker unreachable: rely on automatic reconnect + our own retry logic.
+                            // Do NOT mark auto-retry as exhausted; avoid popping blocking UI dialogs.
+                            Log.w(TAG, "MQTT broker unreachable (soft failure, will retry). Details: $rawMsg", exception)
+                        } else {
+                            Log.e(TAG, errorText, exception)
+                            it.onAutoRetryExhausted()
+                        }
                     }
                 }
             })
-        } catch (e: Exception) {
-            val isAlreadyConnecting = (e is MqttException && e.reasonCode == 32110) ||
+        } catch (e: MqttException) {
+            val isAlreadyConnecting = e.reasonCode == 32110 ||
                     e.message?.contains("Connect already in progress") == true ||
                     e.cause?.message?.contains("Connect already in progress") == true
-            
+
             if (isAlreadyConnecting) {
                 Log.d(TAG, "MQTT connection is already in progress (Paho auto-reconnect or duplicate call). Ignoring.")
                 // Do not reset isConnecting here, since a connection is genuinely in progress.
                 return
             }
-            
+
+            isConnecting = false
+            val errorText = "Connection exception: ${e.message}"
+            Log.e(TAG, errorText, e)
+            mqttListener?.onConnectionStatus(false)
+            mqttListener?.onError(errorText)
+            mqttListener?.onAutoRetryExhausted()
+        } catch (e: Exception) {
             isConnecting = false
             val errorText = "Connection exception: ${e.message}"
             Log.e(TAG, errorText, e)
@@ -230,25 +248,36 @@ class MqttClientManager(
         }
     }
 
-    fun disconnect() {
-        Log.i(TAG, "Disconnecting from MQTT broker...")
-        isConnecting = false
+    fun publish(topic: String, payload: String, qos: Int = 0) {
+        if (!isConnected()) {
+            Log.w(TAG, "Cannot publish to $topic: Client not connected")
+            return
+        }
+
         try {
-            mqttClient?.disconnect(null, object : IMqttActionListener {
+            val message = MqttMessage(payload.toByteArray())
+            message.qos = qos
+            message.isRetained = false
+            
+            mqttClient?.publish(topic, message, null, object : IMqttActionListener {
                 override fun onSuccess(asyncActionToken: IMqttToken?) {
-                    Log.i(TAG, "Disconnected successfully")
-                    mqttListener?.onConnectionStatus(false)
+                    Log.d(TAG, "Successfully published message to $topic: $payload")
                 }
 
                 override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
-                    val error = "Disconnect failed: ${exception?.message}"
-                    Log.e(TAG, error, exception)
-                    mqttListener?.onError(error)
+                    Log.e(TAG, "Failed to publish message to $topic", exception)
                 }
             })
-        } catch (e: MqttException) {
-            Log.e(TAG, "Disconnect exception: ${e.message}", e)
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception during publish", e)
         }
+    }
+
+    fun disconnect() {
+        // Do not actively disconnect from the broker on user/UI requests anymore.
+        // We rely on Paho's automatic reconnect and higher-level reachability pings instead
+        // of forcing a disconnect, which was causing unnecessary flapping.
+        Log.i(TAG, "disconnect() called – ignoring (ping/reconnect strategy in use).")
     }
 
     fun close() {

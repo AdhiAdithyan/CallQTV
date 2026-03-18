@@ -12,6 +12,7 @@ import com.softland.callqtv.data.repository.TokenHistoryRepository
 import com.softland.callqtv.utils.SemanticMqttParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -24,9 +25,25 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     private val connectionDetailsMap = mutableMapOf<String, MqttConnectionDetails>()
     private val stateMutex = Mutex()
     private val gson = Gson()
-    
+
+    init {
+        loadPersistedHistory()
+    }
+
     private val retryAttempts = mutableMapOf<String, Int>()
     private val retryJobs = mutableMapOf<String, kotlinx.coroutines.Job>()
+
+    // Tracks whether a given serverUri has ever connected successfully. We only run our
+    // own retry loop until the first success; after that, rely on Paho's auto-reconnect.
+    private val everConnected = mutableMapOf<String, Boolean>()
+    private val reachabilityJobs = mutableMapOf<String, kotlinx.coroutines.Job>()
+    private var continuousPublishJob: kotlinx.coroutines.Job? = null
+
+    // Tracks the time of the last received MQTT message to avoid clashing with incoming traffic.
+    private var lastIncomingMessageTime: Long = 0L
+
+    // Tracks the number of verified tokens pending processing/announcement in UI.
+    val announcementQueueSize = java.util.concurrent.atomic.AtomicInteger(0)
 
     private val tokenHistoryRepo: TokenHistoryRepository by lazy {
         TokenHistoryRepository(AppDatabase.getInstance(application), application)
@@ -35,6 +52,12 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     private val connectedDeviceDao by lazy {
         AppDatabase.getInstance(application).connectedDeviceDao()
     }
+
+    // In-memory cache of allowed keypad serials (normalized uppercase),
+    // to avoid a DB lookup on every MQTT message.
+    private val keypadSerials = mutableSetOf<String>()
+    @Volatile
+    private var keypadSerialsLoaded = false
 
     private data class MqttConnectionDetails(
         val serverUri: String,
@@ -65,7 +88,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _connectTimer = MutableLiveData<Int>(0)
     fun getConnectTimer(): LiveData<Int> = _connectTimer
-    
+
     private var timerJob: kotlinx.coroutines.Job? = null
 
     private fun startConnectTimer() {
@@ -74,10 +97,17 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         timerJob?.cancel()
         timerJob = viewModelScope.launch(Dispatchers.Main) {
             var time = 0
-            while(true) {
+            while (true) {
                 delay(1000)
                 time++
                 _connectTimer.postValue(time)
+                
+                // If attempt reaches 30s without success, force a fresh retry loop.
+                if (time >= 30) {
+                    android.util.Log.w("MqttViewModel", "MQTT Connection attempt timed out after 30s; forcing a fresh retry.")
+                    retryConnect()
+                    break
+                }
             }
         }
     }
@@ -91,7 +121,21 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     private val _isAutoRetryExhausted = MutableLiveData<Boolean>(false)
     fun isAutoRetryExhausted(): LiveData<Boolean> = _isAutoRetryExhausted
 
-    val tokenUpdateChannel = kotlinx.coroutines.channels.Channel<Pair<String, String>>(capacity = kotlinx.coroutines.channels.Channel.UNLIMITED)
+    // Exposes current MQTT retry attempt (for UI display)
+    private val _mqttRetryAttempt = MutableLiveData<Int>(0)
+    fun getMqttRetryAttempt(): LiveData<Int> = _mqttRetryAttempt
+
+    // Exposes whether the broker host/port is reachable via a short TCP ping.
+    private val _isBrokerReachable = MutableLiveData<Boolean>(false)
+    fun isBrokerReachable(): LiveData<Boolean> = _isBrokerReachable
+
+    val tokenUpdateChannel =
+        kotlinx.coroutines.channels.Channel<Pair<String, String>>(capacity = kotlinx.coroutines.channels.Channel.UNLIMITED)
+
+    // Queue of ALL raw MQTT payloads received (no filtering). Business logic consumes and filters
+    // from this queue so we never lose received data due to early drops.
+    private val rawMessageQueue: java.util.Queue<String> =
+        java.util.concurrent.ConcurrentLinkedQueue<String>()
 
     private val _tokensPerCounter = MutableLiveData<Map<String, List<String>>>(emptyMap())
     fun getTokensPerCounter(): LiveData<Map<String, List<String>>> = _tokensPerCounter
@@ -99,7 +143,8 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     // Thread-safe internal state to prevent race conditions during updates
     private val internalTokenMap = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
     private val announcedTokenTimestamps = java.util.concurrent.ConcurrentHashMap<String, Long>()
-    @Volatile private var isHistoryLoaded = false
+    @Volatile
+    private var isHistoryLoaded = false
 
     /**
      * Deduplicate rapid MQTT messages. Returns true if announced within the last 2 seconds.
@@ -113,7 +158,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     fun markAsAnnounced(counterKey: String, token: String) {
         val key = "${counterKey.trim()}_${token.trim()}"
         announcedTokenTimestamps[key] = System.currentTimeMillis()
-        
+
         // Cleanup old entries (simple way to prevent memory leak)
         if (announcedTokenTimestamps.size > 100) {
             val now = System.currentTimeMillis()
@@ -137,7 +182,10 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                     isHistoryLoaded = true
                     _tokensPerCounter.postValue(internalTokenMap.toMap())
                 } catch (e: Exception) {
-                    android.util.Log.w("MqttViewModel", "Failed to load token history: ${e.message}")
+                    android.util.Log.w(
+                        "MqttViewModel",
+                        "Failed to load token history: ${e.message}"
+                    )
                 }
             }
         }
@@ -153,7 +201,10 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                     _tokensPerCounter.postValue(emptyMap())
                     announcedTokenTimestamps.clear()
                 } catch (e: Exception) {
-                    android.util.Log.w("MqttViewModel", "Failed to clear token history: ${e.message}")
+                    android.util.Log.w(
+                        "MqttViewModel",
+                        "Failed to clear token history: ${e.message}"
+                    )
                 }
             }
         }
@@ -168,13 +219,22 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         qos: Int,
         context: android.content.Context
     ) {
-        connectionDetailsMap[serverUri] = MqttConnectionDetails(serverUri, clientId, username, password, topic, qos)
+        connectionDetailsMap[serverUri] =
+            MqttConnectionDetails(serverUri, clientId, username, password, topic, qos)
 
         val existing = managers[serverUri]
         if (existing != null) {
             if (existing.clientId == clientId) {
                 existing.subscribe(topic, qos)
-                if (!existing.isConnected()) existing.connect(username, password)
+                if (existing.isConnected()) {
+                    // Already connected: make sure UI does NOT show "connecting..."
+                    stopConnectTimer()
+                    updateStatus(serverUri, true)
+                } else {
+                    // Not connected yet: trigger a new connect attempt and timer
+                    startConnectTimer()
+                    existing.connect(username, password)
+                }
                 return
             } else {
                 removeManager(serverUri)
@@ -184,22 +244,49 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         val manager = MqttClientManager(context.applicationContext, serverUri, clientId).apply {
             setMqttListener(object : MqttClientManager.MqttListener {
                 override fun onMessageReceived(topic: String, message: String) {
-                    viewModelScope.launch {
-                        val trimmed = message.trim()
+                    lastIncomingMessageTime = System.currentTimeMillis()
+                    // Enqueue ALL raw payloads first, without any filtering.
+                    val trimmed = message.trim()
+                    rawMessageQueue.add(trimmed)
+                    // Simple bound to avoid unbounded growth in extreme cases.
+                    while (rawMessageQueue.size > 2000) {
+                        rawMessageQueue.poll()
+                    }
 
+                    // Offload validation/processing to background so MQTT callback stays fast.
+                    viewModelScope.launch(Dispatchers.Default) {
+                        // Business filters (unchanged) operate on the queued payload content.
+                        // We re-use 'trimmed' here, but every raw message is already stored.
                         if (!trimmed.contains("CAL0K")) return@launch
                         if (!trimmed.startsWith("$")) return@launch
                         if (trimmed.length < 24) return@launch
-
-                        // Validate against Keypad Serial Number
-                        if (!isValidKeypadMessage(trimmed)) {
-                            // Detailed logging is done inside isValidKeypadMessage; keep this as a high-level marker
-                            android.util.Log.d("MqttViewModel", "Ignored message: Keypad serial mismatch or device not found")
+                        // Business rule: ignore responses where the 17th character is '0'
+                        if (trimmed[16] == '0') {
+                            android.util.Log.d(
+                                "MqttViewModel",
+                                "Ignoring CAL0K payload with 17th char '0': $trimmed"
+                            )
                             return@launch
                         }
 
+                        // Validate against Keypad Serial Number (runs on IO dispatcher internally)
+                        if (!isValidKeypadMessage(trimmed)) {
+                            android.util.Log.d(
+                                "MqttViewModel",
+                                "Ignored message: Keypad serial mismatch or device not found $trimmed"
+                            )
+                            return@launch
+                        }
+
+                        android.util.Log.i(
+                            "MqttViewModel",
+                            "!!! VERIFIED MQTT MESSAGE !!! Topic: [$topic], Payload: $trimmed"
+                        )
+
                         _receivedMessage.postValue(trimmed)
                         _lastPayload.postValue(trimmed)
+
+                        // Parse and route token in the same coroutine to avoid extra launches
                         parseMqttMessage(topic, trimmed)
                     }
                 }
@@ -207,19 +294,35 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 override fun onConnectionStatus(isConnected: Boolean) {
                     updateStatus(serverUri, isConnected)
                     if (isConnected) {
+                        everConnected[serverUri] = true
                         stopConnectTimer()
                         _isAutoRetryExhausted.postValue(false)
                         _errorMessage.postValue("")
                         // Connection success: reset backoff
                         retryAttempts[serverUri] = 0
                         retryJobs[serverUri]?.cancel()
+                        _mqttRetryAttempt.postValue(0)
+
+                        startContinuousPublishLoop()
+                    } else {
+                        stopContinuousPublishLoop()
                     }
                 }
 
                 override fun onError(error: String) {
                     stopConnectTimer()
-                    _errorMessage.postValue("[$serverUri] $error")
-                    // Initial connection failed or lost before Paho could handle auto-reconnect
+                    // Surface errors only until we've had at least one successful connection,
+                    // to avoid noisy UI during Paho's automatic reconnects.
+                    if (everConnected[serverUri] != true || !error.contains(
+                            "Connection lost",
+                            ignoreCase = true
+                        )
+                    ) {
+                        _errorMessage.postValue("[$serverUri] $error")
+                    }
+                    // For initial connection failures, use our backoff-based retry.
+                    // After first success, scheduleInitialRetry() is a no-op and Paho's
+                    // isAutomaticReconnect handles reconnects.
                     scheduleInitialRetry(serverUri)
                 }
 
@@ -228,7 +331,10 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 }
             })
         }
-        
+
+        // Start/ensure a reachability monitor for this broker host/port.
+        startReachabilityMonitor(serverUri)
+
         startConnectTimer()
         managers[serverUri] = manager
         manager.subscribe(topic, qos)
@@ -236,30 +342,137 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Checks if the character sequence after "$0" matches a connected device of type "KEYPAD".
+     * Extracts the keypad serial number from a raw MQTT message.
+     *
+     * Expected format (example): "$02026bCAL0K00071100030*"
+     * After removing '$' and '*', we get: "02026bCAL0K00071100030"
+     * The actual serial is characters 1..15 (Kotlin endIndex exclusive): "2026bCAL0K0007"
+     */
+    private fun extractKeypadSerial(message: String): String? {
+        val trimmed = message.trim()
+        if (!trimmed.startsWith("$") || !trimmed.endsWith("*")) return null
+
+        // Remove leading '$' and trailing '*'
+        val body = trimmed.substring(1, trimmed.length - 1)
+        if (body.length < 16) return null
+
+        // Protocol: serial is characters 1..15 of body (index 1 inclusive, 15 exclusive)
+        val serial = body.substring(1, 15).trim()
+        if (serial.isEmpty()) return null
+
+        return serial
+    }
+
+    /**
+     * Checks if the serial extracted from the keypad message matches a connected device
+     * of type "KEYPAD" for the current MAC and customer, using an in-memory cache to
+     * avoid DB lookups on every MQTT message.
      */
     private suspend fun isValidKeypadMessage(message: String): Boolean {
-        if (message.length < 16) return false
-        val serialInMessage = message.substring(2, 16).trim()
-        if (serialInMessage.isEmpty()) return false
+        val serialInMessage = extractKeypadSerial(message) ?: return false
+        val normalizedSerial = serialInMessage.trim().uppercase()
 
         return withContext(Dispatchers.IO) {
-            val authPrefs = getApplication<Application>().getSharedPreferences(com.softland.callqtv.data.local.AppSharedPreferences.AUTHENTICATION, android.content.Context.MODE_PRIVATE)
-            val customerId = String.format(java.util.Locale.ROOT, "%04d", authPrefs.getInt(com.softland.callqtv.utils.PreferenceHelper.customer_id, 0))
-            val macAddress = com.softland.callqtv.utils.Variables.getMacId(getApplication())
+            ensureKeypadSerialCache()
+            keypadSerials.contains(normalizedSerial)
+        }
+    }
 
-            connectedDeviceDao.getByMacAndCustomer(macAddress, customerId).any { device ->
-                device.deviceType?.uppercase() == "KEYPAD" && device.configJson?.contains(serialInMessage) == true
+    /**
+     * Populates the in-memory keypad serial cache from the connected_devices table.
+     * Called on-demand from the IO dispatcher; safe to call repeatedly.
+     */
+    private suspend fun ensureKeypadSerialCache() {
+        if (keypadSerialsLoaded) return
+
+        stateMutex.withLock {
+            if (keypadSerialsLoaded) return
+
+            try {
+                val app = getApplication<Application>()
+                val authPrefs = app.getSharedPreferences(
+                    com.softland.callqtv.data.local.AppSharedPreferences.AUTHENTICATION,
+                    android.content.Context.MODE_PRIVATE
+                )
+                val customerId = String.format(
+                    java.util.Locale.ROOT,
+                    "%04d",
+                    authPrefs.getInt(com.softland.callqtv.utils.PreferenceHelper.customer_id, 0)
+                )
+                val macAddress = com.softland.callqtv.utils.Variables.getMacId(app)
+
+                val devices = connectedDeviceDao.getByMacAndCustomer(macAddress, customerId)
+
+                keypadSerials.clear()
+                devices.forEach { device ->
+                    if (device.deviceType?.uppercase() == "KEYPAD") {
+                        device.serialNumber
+                            ?.trim()
+                            ?.takeIf { it.isNotEmpty() }
+                            ?.uppercase()
+                            ?.let { keypadSerials.add(it) }
+
+                        // Also inspect configJson once to capture any additional embedded serials.
+                        val cfg = device.configJson
+                        if (!cfg.isNullOrBlank()) {
+                            // Very lightweight scan: look for CAL0K-style serials and cache them.
+                            val regex = "20[0-9A-Za-z]{11}".toRegex()
+                            regex.findAll(cfg).forEach { m ->
+                                keypadSerials.add(m.value.uppercase())
+                            }
+                        }
+                    }
+                }
+
+                keypadSerialsLoaded = true
+            } catch (e: Exception) {
+                android.util.Log.w(
+                    "MqttViewModel",
+                    "Failed to build keypad serial cache: ${e.message}"
+                )
             }
+        }
+    }
+
+    /**
+     * Allows other parts of the app (e.g., after TV config refresh) to invalidate the
+     * keypad serial cache so it will be rebuilt on the next keypad message.
+     */
+    fun invalidateKeypadSerialCache() {
+        stateMutex.tryLock()?.let { lockAcquired ->
+            try {
+                if (lockAcquired) {
+                    keypadSerials.clear()
+                    keypadSerialsLoaded = false
+                }
+            } finally {
+                if (lockAcquired) stateMutex.unlock()
+            }
+        } ?: run {
+            // If mutex is busy, fall back to simple volatile flag reset; cache will be refilled later.
+            keypadSerialsLoaded = false
         }
     }
 
     fun retryConnect() {
         _errorMessage.postValue("")
         _isAutoRetryExhausted.postValue(false)
-        startConnectTimer()
+        _mqttRetryAttempt.postValue(0)
+        // Only show "connecting" if at least one broker is actually disconnected
+        val anyDisconnected = connectionDetailsMap.keys.any { managers[it]?.isConnected() != true }
+        if (anyDisconnected) {
+            startConnectTimer()
+        }
         connectionDetailsMap.values.forEach { details ->
-            initAndConnect(details.serverUri, details.clientId, details.username, details.password, details.topic, details.qos, getApplication())
+            initAndConnect(
+                details.serverUri,
+                details.clientId,
+                details.username,
+                details.password,
+                details.topic,
+                details.qos,
+                getApplication()
+            )
         }
     }
 
@@ -276,46 +489,124 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun scheduleInitialRetry(serverUri: String) {
         val details = connectionDetailsMap[serverUri] ?: return
-        
+
+        // If we've connected at least once, avoid our own retry loop and rely on Paho's
+        // automatic reconnect instead. This prevents constant disconnect/reconnect flapping
+        // once the broker is generally healthy.
+        if (everConnected[serverUri] == true) return
+
         // If already connected, no need to retry
         if (managers[serverUri]?.isConnected() == true) return
-        
+
         // Avoid overlapping retry jobs
         if (retryJobs[serverUri]?.isActive == true) return
 
         val attempt = retryAttempts[serverUri] ?: 0
-        // Exponential backoff: 5s, 10s, 30s, then capped at 1 min
+        // Faster backoff so broker can reconnect quickly: 2s, 4s, 6s, 8s, then 10s
         val delayMs = when (attempt) {
-            0 -> 5000L
-            1 -> 10000L
-            2 -> 30000L
-            else -> 60000L
+            0 -> 2000L
+            1 -> 4000L
+            2 -> 6000L
+            3 -> 8000L
+            else -> 5000L
         }
 
         retryJobs[serverUri] = viewModelScope.launch {
-            android.util.Log.d("MqttViewModel", "Retrying initial connection for $serverUri in ${delayMs/1000}s (Attempt ${attempt + 1})")
+            android.util.Log.d(
+                "MqttViewModel",
+                "Retrying initial connection for $serverUri in ${delayMs / 1000}s (Attempt ${attempt + 1})"
+            )
             delay(delayMs)
             retryAttempts[serverUri] = attempt + 1
+            _mqttRetryAttempt.postValue(attempt + 1)
             initAndConnect(
-                details.serverUri, 
-                details.clientId, 
-                details.username, 
-                details.password, 
-                details.topic, 
-                details.qos, 
+                details.serverUri,
+                details.clientId,
+                details.username,
+                details.password,
+                details.topic,
+                details.qos,
                 getApplication()
             )
         }
     }
 
-// Redundant retry loop removed. Relying on Paho's isAutomaticReconnect = true 
-// for optimized and conflict-free reconnection management.
+    /**
+     * Updates broker reachability from MQTT connection status only.
+     * Does NOT create any extra TCP sockets - many broker devices (e.g. BLUCON) accept
+     * only one connection; a second socket would hit connection limits and drop MQTT.
+     */
+    private fun startReachabilityMonitor(serverUri: String) {
+        if (reachabilityJobs[serverUri]?.isActive == true) return
+
+        val job = viewModelScope.launch(Dispatchers.IO) {
+            while (isActive) {
+                // Use MQTT connection status only. Never open a new socket - it would
+                // compete with the MQTT session and cause connection limit issues.
+                val connected = managers[serverUri]?.isConnected() == true
+                _isBrokerReachable.postValue(connected)
+                delay(5000L)
+            }
+        }
+
+        reachabilityJobs[serverUri] = job
+    }
+
+    /**
+     * Starts a background loop that publishes keypad serial heartbeats every 10 seconds.
+     * Payload format: "$<SERIAL>000000#"
+     */
+    private fun startContinuousPublishLoop() {
+        if (continuousPublishJob?.isActive == true) return
+
+        continuousPublishJob = viewModelScope.launch(Dispatchers.IO) {
+            while (isActive) {
+                    ensureKeypadSerialCache()
+                    val serials = stateMutex.withLock { keypadSerials.toList() }
+
+                    if (serials.isNotEmpty()) {
+                        managers.forEach { (serverUri, manager) ->
+                            if (manager.isConnected()) {
+                                val details = connectionDetailsMap[serverUri]
+                                // Publish heartbeats specifically to the "fr/status" topic
+                                val topic = "fr/status"
+
+                                if (topic.isNotEmpty()) {
+                                    serials.forEach { serial ->
+                                        val payload = "$${serial}000000#"
+                                        manager.publish(topic, payload)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                delay(5000)
+            }
+        }
+    }
+
+    /**
+     * Stops the continuous publish loop if no managers remain connected.
+     */
+    private fun stopContinuousPublishLoop() {
+        viewModelScope.launch {
+            stateMutex.withLock {
+                val anyConnected = managers.values.any { it.isConnected() }
+                if (!anyConnected) {
+                    continuousPublishJob?.cancel()
+                    continuousPublishJob = null
+                }
+            }
+        }
+    }
 
     private fun removeManager(serverUri: String) {
         viewModelScope.launch {
             stateMutex.withLock {
                 managers[serverUri]?.close()
                 managers.remove(serverUri)
+                reachabilityJobs[serverUri]?.cancel()
+                reachabilityJobs.remove(serverUri)
                 val current = _connectionStatusMap.value?.toMutableMap() ?: mutableMapOf()
                 current.remove(serverUri)
                 _connectionStatusMap.postValue(current)
@@ -326,26 +617,18 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun processTokenUpdate(counter: String, token: String): Boolean {
         val trimmedCounter = counter.trim()
         val trimmedToken = token.trim()
-        
+
         if (trimmedToken == "0" || trimmedToken.isBlank() || trimmedCounter == "0" || trimmedCounter.isBlank()) return false
         if (trimmedToken.contains("CAL", ignoreCase = true)) return false
 
         return stateMutex.withLock {
-            // If history isn't loaded yet, try to load it first
-            if (!isHistoryLoaded) {
-                val persisted = withContext(Dispatchers.IO) { tokenHistoryRepo.loadAll() }
-                persisted.forEach { (k, v) -> 
-                    if (!internalTokenMap.containsKey(k)) internalTokenMap[k] = v 
-                }
-                isHistoryLoaded = true
-            }
 
             val list = (internalTokenMap[trimmedCounter] ?: emptyList()).toMutableList()
             val existingPosition = list.indexOf(trimmedToken)
 
             // If already at top, per user request: DO NOT announce
             if (existingPosition == 0) {
-                return@withLock false 
+                return@withLock false
             }
 
             if (existingPosition > 0) {
@@ -369,7 +652,11 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
      * Prevents race where two processTokenUpdate calls overwrite each other.
      * Returns true if the token was new or moved for the primary key (should announce).
      */
-    suspend fun processTokenUpdateForKeys(primaryKey: String, token: String, fallbackKey: String?): Boolean {
+    suspend fun processTokenUpdateForKeys(
+        primaryKey: String,
+        token: String,
+        fallbackKey: String?
+    ): Boolean {
         val trimmedPrimary = primaryKey.trim()
         val trimmedToken = token.trim()
         val trimmedFallback = fallbackKey?.trim()
@@ -378,23 +665,18 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         if (trimmedToken.contains("CAL", ignoreCase = true)) return false
 
         return stateMutex.withLock {
-            if (!isHistoryLoaded) {
-                val persisted = withContext(Dispatchers.IO) { tokenHistoryRepo.loadAll() }
-                persisted.forEach { (k, v) -> 
-                    if (!internalTokenMap.containsKey(k)) internalTokenMap[k] = v 
-                }
-                isHistoryLoaded = true
-            }
 
             val keysToUpdate = mutableListOf(trimmedPrimary)
-            if (trimmedFallback != null && trimmedFallback != trimmedPrimary) keysToUpdate.add(trimmedFallback)
+            if (trimmedFallback != null && trimmedFallback != trimmedPrimary) keysToUpdate.add(
+                trimmedFallback
+            )
 
             var shouldAnnounce = false
 
             for (key in keysToUpdate) {
                 val list = (internalTokenMap[key] ?: emptyList()).toMutableList()
                 val existingPosition = list.indexOf(trimmedToken)
-                
+
                 // If it's already the most recent for this key, keep moving but don't set shouldAnnounce
                 if (existingPosition == 0) {
                     continue
@@ -410,16 +692,16 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                     // Clear flag so it can be re-announced since its position is changing
                     announcedTokenTimestamps.remove("${key}_$trimmedToken")
                 }
-                
+
                 list.add(0, trimmedToken)
                 internalTokenMap[key] = list.take(15)
                 persistToken(key, trimmedToken)
             }
-            
+
             if (shouldAnnounce) {
                 _tokensPerCounter.postValue(internalTokenMap.toMap())
             }
-            
+
             shouldAnnounce
         }
     }
@@ -434,19 +716,28 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun parseMqttMessage(topic: String, message: String) {
-        viewModelScope.launch(Dispatchers.Default) {
-             try {
-                 val result = SemanticMqttParser.parse(message, topic)
-                 if (result != null) {
-                     val (counter, token) = result
-                     if (token != "0" && token.isNotBlank() && counter != "0" && counter.isNotBlank()) {
-                         tokenUpdateChannel.send(counter to token)
-                     }
-                 }
-             } catch (e: Exception) {
-                 // Log error if needed
-             }
+    /**
+     * Parses a verified MQTT message and enqueues token updates for processing.
+     * Runs on a background dispatcher (caller responsibility).
+     */
+    private suspend fun parseMqttMessage(topic: String, message: String) {
+        try {
+            // Semantic parsing is pure/CPU-bound; keep it on Default.
+            val result = SemanticMqttParser.parse(message, topic)
+            if (result != null) {
+                val (counter, token) = result
+                if (token != "0" && token.isNotBlank() && counter != "0" && counter.isNotBlank()) {
+                    // Channel has UNLIMITED capacity; enqueue without blocking the MQTT thread.
+                    announcementQueueSize.incrementAndGet()
+                    tokenUpdateChannel.send(counter to token)
+                }
+            }
+        } catch (e: Exception) {
+            // Swallow and log – a bad payload should never break the stream.
+            android.util.Log.w(
+                "MqttViewModel",
+                "Failed to parse MQTT message '$message' on topic '$topic': ${e.message}"
+            )
         }
     }
 
@@ -454,6 +745,8 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         super.onCleared()
         val toClose = managers.values.toList()
         managers.clear()
+        reachabilityJobs.values.forEach { it.cancel() }
+        reachabilityJobs.clear()
         viewModelScope.launch(Dispatchers.IO) {
             toClose.forEach { it.close() }
         }

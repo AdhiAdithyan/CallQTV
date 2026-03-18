@@ -118,7 +118,8 @@ class TokenDisplayActivity : ComponentActivity() {
         viewModel = ViewModelProvider(this)[TokenDisplayViewModel::class.java]
         mqttViewModel = ViewModelProvider(this)[MqttViewModel::class.java]
         
-        viewModel.loadData(mqttViewModel)
+        // First launch: show the full-screen loading overlay once
+        viewModel.loadData(mqttViewModel, forceShowOverlay = true)
 
         setContent {
             // Theme State - load async to avoid blocking main thread during composition
@@ -185,65 +186,77 @@ suspend fun playTokenChime(soundKey: String) {
     withContext(Dispatchers.Default) {
         val (tone, durationMs) = when (soundKey) {
             // Dings
-            "ding"   -> ToneGenerator.TONE_PROP_BEEP2 to 350
-            "ding2"  -> ToneGenerator.TONE_PROP_BEEP2 to 500
-            "ding3"  -> ToneGenerator.TONE_PROP_BEEP2 to 650
+            "ding"   -> ToneGenerator.TONE_PROP_BEEP2 to 120
+            "ding2"  -> ToneGenerator.TONE_PROP_BEEP2 to 280
+            "ding3"  -> ToneGenerator.TONE_PROP_BEEP2 to 350
+            "ding4"  -> ToneGenerator.TONE_PROP_BEEP2 to 420
+            "ding5"  -> ToneGenerator.TONE_PROP_BEEP2 to 500
             // Doubles
-            "double"  -> ToneGenerator.TONE_PROP_ACK to 400
-            "double2" -> ToneGenerator.TONE_PROP_ACK to 550
-            "double3" -> ToneGenerator.TONE_PROP_ACK to 700
+            "double"  -> ToneGenerator.TONE_PROP_ACK to 240
+            "double2" -> ToneGenerator.TONE_PROP_ACK to 320
+            "double3" -> ToneGenerator.TONE_PROP_ACK to 400
+            "double4" -> ToneGenerator.TONE_PROP_ACK to 480
             // Soft beeps
-            "soft"  -> ToneGenerator.TONE_PROP_BEEP to 250
-            "soft2" -> ToneGenerator.TONE_PROP_BEEP to 400
-            "soft3" -> ToneGenerator.TONE_PROP_BEEP to 550
+            "soft"  -> ToneGenerator.TONE_PROP_BEEP to 150
+            "soft2" -> ToneGenerator.TONE_PROP_BEEP to 240
+            "soft3" -> ToneGenerator.TONE_PROP_BEEP to 320
+            "soft4" -> ToneGenerator.TONE_PROP_BEEP to 400
             // Alerts
-            "alert"  -> ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD to 450
-            "alert2" -> ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD to 600
-            "alert3" -> ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD to 750
+            "alert"  -> ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD to 260
+            "alert2" -> ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD to 360
+            "alert3" -> ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD to 450
+            "alert4" -> ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD to 520
             // Bells
-            "bell"  -> ToneGenerator.TONE_SUP_PIP to 400
-            "bell2" -> ToneGenerator.TONE_SUP_PIP to 550
-            "bell3" -> ToneGenerator.TONE_SUP_PIP to 700
+            "bell"  -> ToneGenerator.TONE_SUP_PIP to 240
+            "bell2" -> ToneGenerator.TONE_SUP_PIP to 320
+            "bell3" -> ToneGenerator.TONE_SUP_PIP to 400
+            "bell4" -> ToneGenerator.TONE_SUP_PIP to 480
             // Church bells
-            "church1" -> ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_NORMAL to 600
-            "church2" -> ToneGenerator.TONE_CDMA_HIGH_L to 650
-            "church3" -> ToneGenerator.TONE_CDMA_HIGH_PBX_L to 750
+            "church1" -> ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_NORMAL to 360
+            "church2" -> ToneGenerator.TONE_CDMA_HIGH_L to 390
+            "church3" -> ToneGenerator.TONE_CDMA_HIGH_PBX_L to 450
             // Pings
-            "ping"  -> ToneGenerator.TONE_PROP_PROMPT to 300
-            "ping2" -> ToneGenerator.TONE_PROP_PROMPT to 450
-            "ping3" -> ToneGenerator.TONE_PROP_PROMPT to 600
+            "ping"  -> ToneGenerator.TONE_PROP_PROMPT to 180
+            "ping2" -> ToneGenerator.TONE_PROP_PROMPT to 260
+            "ping3" -> ToneGenerator.TONE_PROP_PROMPT to 340
+            "ping4" -> ToneGenerator.TONE_PROP_PROMPT to 420
             // Long tones
-            "long"  -> ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_PING_RING to 700
-            "long2" -> ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_PING_RING to 900
-            "long3" -> ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_PING_RING to 1100
+            "long"  -> ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_PING_RING to 420
+            "long2" -> ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_PING_RING to 540
+            "long3" -> ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_PING_RING to 660
+            "long4" -> ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_PING_RING to 780
             // Chimes
-            "chime1" -> ToneGenerator.TONE_SUP_RINGTONE to 600
-            "chime2" -> ToneGenerator.TONE_SUP_RINGTONE to 800
-            "chime3" -> ToneGenerator.TONE_SUP_RINGTONE to 1000
+            "chime1" -> ToneGenerator.TONE_SUP_RINGTONE to 360
+            "chime2" -> ToneGenerator.TONE_SUP_RINGTONE to 480
+            "chime3" -> ToneGenerator.TONE_SUP_RINGTONE to 600
+            "chime4" -> ToneGenerator.TONE_SUP_RINGTONE to 720
             // High beeps
-            "hi1" -> ToneGenerator.TONE_SUP_RADIO_ACK to 300
-            "hi2" -> ToneGenerator.TONE_SUP_RADIO_ACK to 450
-            "hi3" -> ToneGenerator.TONE_SUP_RADIO_ACK to 600
+            "hi1" -> ToneGenerator.TONE_SUP_RADIO_ACK to 180
+            "hi2" -> ToneGenerator.TONE_SUP_RADIO_ACK to 260
+            "hi3" -> ToneGenerator.TONE_SUP_RADIO_ACK to 340
+            "hi4" -> ToneGenerator.TONE_SUP_RADIO_ACK to 420
             // Low beeps
-            "low1" -> ToneGenerator.TONE_SUP_CONGESTION to 300
-            "low2" -> ToneGenerator.TONE_SUP_CONGESTION to 450
-            "low3" -> ToneGenerator.TONE_SUP_CONGESTION to 600
+            "low1" -> ToneGenerator.TONE_SUP_CONGESTION to 180
+            "low2" -> ToneGenerator.TONE_SUP_CONGESTION to 260
+            "low3" -> ToneGenerator.TONE_SUP_CONGESTION to 340
+            "low4" -> ToneGenerator.TONE_SUP_CONGESTION to 420
             // Misc tones
-            "tone1" -> ToneGenerator.TONE_SUP_DIAL to 350
-            "tone2" -> ToneGenerator.TONE_SUP_BUSY to 350
-            "tone3" -> ToneGenerator.TONE_SUP_CALL_WAITING to 500
-            "tone4" -> ToneGenerator.TONE_SUP_CONFIRM to 500
-            "tone5" -> ToneGenerator.TONE_SUP_ERROR to 500
-            "tone6" -> ToneGenerator.TONE_SUP_INTERCEPT to 500
+            "tone1" -> ToneGenerator.TONE_SUP_DIAL to 210
+            "tone2" -> ToneGenerator.TONE_SUP_BUSY to 210
+            "tone3" -> ToneGenerator.TONE_SUP_CALL_WAITING to 300
+            "tone4" -> ToneGenerator.TONE_SUP_CONFIRM to 300
+            "tone5" -> ToneGenerator.TONE_SUP_ERROR to 300
+            "tone6" -> ToneGenerator.TONE_SUP_INTERCEPT to 300
             // use another valid system tone for tone7 (reorder is not available on all devices)
-            "tone7" -> ToneGenerator.TONE_SUP_CALL_WAITING to 650
-            else    -> ToneGenerator.TONE_PROP_BEEP2 to 400 // default ding
+            "tone7" -> ToneGenerator.TONE_SUP_CALL_WAITING to 390
+            else    -> ToneGenerator.TONE_PROP_BEEP2 to 240 // default ding
         }
 
         val toneGen = ToneGenerator(AudioManager.STREAM_MUSIC, 80)
         try {
             toneGen.startTone(tone, durationMs)
-            delay(durationMs + 50L)
+            // Keep total chime time very short
+            delay(durationMs + 5L)
         } catch (_: Exception) {
         } finally {
             toneGen.release()
@@ -263,7 +276,7 @@ fun TokenDisplayScreen(
 ) {
     val context = LocalContext.current
     
-    val isLoading by viewModel.isLoading.observeAsState(true)
+    val isLoading by viewModel.isLoading.observeAsState(false)
     val errorMessage by viewModel.errorMessage.observeAsState(null)
     val isPendingApproval by viewModel.isPendingApproval.observeAsState(false)
     val config by viewModel.config.observeAsState(null)
@@ -279,6 +292,13 @@ fun TokenDisplayScreen(
     val lastPayloadForFooter by mqttViewModel.getLastPayload().observeAsState("")
     val isConnectingToMqtt by mqttViewModel.isConnectingToMqtt().observeAsState(false)
     val connectTimer by mqttViewModel.getConnectTimer().observeAsState(0)
+    val mqttRetryAttempt by mqttViewModel.getMqttRetryAttempt().observeAsState(0)
+    val isBrokerReachable by mqttViewModel.isBrokerReachable().observeAsState(true)
+
+    // Trust MQTT when it reports connected. If MQTT is connected and publishing,
+    // we are connected - do NOT let the TCP ping override that.
+    // (Some broker devices accept only one connection; the ping would fail even when MQTT works.)
+    val brokerConnected = mqttConnected || isBrokerReachable
     
     val macAddress = viewModel.macAddress
     val appVersion = remember { context.getString(R.string.app_version) }
@@ -299,8 +319,8 @@ fun TokenDisplayScreen(
     }
     // Auto-close BLUCON dialog when connection is successfully restored.
     // This does NOT depend on error text, only on actual MQTT connection status.
-    LaunchedEffect(mqttConnected, showMqttRetryDialog) {
-        if (mqttConnected && showMqttRetryDialog) {
+    LaunchedEffect(brokerConnected, showMqttRetryDialog) {
+        if (brokerConnected && showMqttRetryDialog) {
             showMqttRetryDialog = false
             mqttRetryShownAt = null
         }
@@ -330,101 +350,116 @@ fun TokenDisplayScreen(
 
     LaunchedEffect(Unit) {
         mqttViewModel.tokenUpdateChannel.receiveAsFlow().collect { pair ->
-            val (counterIdOrName, tokenLabel) = pair
+            try {
+                val (counterIdOrName, tokenLabel) = pair
 
-            val currentConfig = latestConfigState.value
-            val currentCounters = latestCountersState.value
+                val currentConfig = latestConfigState.value
+                val currentCounters = latestCountersState.value
 
-            // 1. Drop any tokens whose counter does NOT match a buttonIndex
-            val mqttCounterIdx = counterIdOrName.toIntOrNull()
-            val actualCounter = currentCounters.find {
-                it.buttonIndex != null && it.buttonIndex == mqttCounterIdx
-            }
-
-            if (actualCounter == null) {
-                android.util.Log.d(
-                    "TokenDisplay",
-                    "Dropping token '$tokenLabel' for unknown counter '$counterIdOrName'"
-                )
-                return@collect
-            }
-
-            // 2. Use a canonical storage key so the same physical counter always shares history,
-            //    even if MQTT uses different identifiers (id, name, button index).
-            val storageKey =
-                actualCounter.counterId?.trim()?.takeIf { it.isNotBlank() }
-                    ?: actualCounter.name?.trim()?.takeIf { it.isNotBlank() }
-                    ?: actualCounter.defaultName?.trim()?.takeIf { it.isNotBlank() }
-                    ?: actualCounter.buttonIndex?.toString()
-                    ?: counterIdOrName.trim()
-            val btnKey = actualCounter.buttonIndex?.toString()?.trim()
-
-            // Update in-memory history & UI. processTokenUpdateForKeys is now a suspend function 
-            // and returns false if the token is already at index 0 (skip announcement).
-            val isNewOrMoved = mqttViewModel.processTokenUpdateForKeys(storageKey, tokenLabel, btnKey)
-            if (!isNewOrMoved) {
-                return@collect
-            }
-
-            // Deduplicate: skip announcement if we already announced this token call recently
-            if (mqttViewModel.isAlreadyAnnounced(storageKey, tokenLabel)) {
-                return@collect
-            }
-
-            // Announcements (chime + TTS) ONLY when token announcement is enabled.
-            if (currentConfig?.enableTokenAnnouncement != true) {
-                return@collect
-            }
-
-            // Mark before TTS so duplicate messages don't re-announce
-            mqttViewModel.markAsAnnounced(storageKey, tokenLabel)
-            if (btnKey != null) mqttViewModel.markAsAnnounced(btnKey, tokenLabel)
-
-            // Brief delay so UI updates before TTS (both visible at same time)
-            delay(150)
-
-            // 3. Play chime first
-            val soundKey = ThemeColorManager.getNotificationSoundKey(context)
-            playTokenChime(soundKey)
-
-            // 4. TTS: include counter name only when counter announcement is also enabled
-            val displayName =
-                (actualCounter.name?.takeIf { it.isNotBlank() }
-                    ?: actualCounter.defaultName?.takeIf { it.isNotBlank() }
-                    ?: "Counter ${actualCounter.buttonIndex}")
-
-            val announcementCounterName =
-                if (currentConfig.enableCounterAnnouncement == true) {
-                    displayName
-                } else {
-                    ""  // Token ann on, counter ann off → announce token only, no counter details
+                // 1. Drop any tokens whose counter does NOT match a buttonIndex
+                val mqttCounterIdx = counterIdOrName.toIntOrNull()
+                val actualCounter = currentCounters.find {
+                    it.buttonIndex != null && it.buttonIndex == mqttCounterIdx
                 }
 
-            // Token label with counter code prefix when enable_counter_prifix is true (e.g. "A-36")
-            val counterCode = actualCounter.code.orEmpty().trim().ifBlank {
-                actualCounter.defaultCode.orEmpty().trim()
-            }
-            val usePrefix = currentConfig?.enableCounterPrefix != false
-            val tokenLabelWithCode = if (usePrefix && counterCode.isNotBlank()) "$counterCode-$tokenLabel" else tokenLabel
+                if (actualCounter == null) {
+                    android.util.Log.d(
+                        "TokenDisplay",
+                        "Dropping token '$tokenLabel' for unknown counter '$counterIdOrName'"
+                    )
+                    return@collect
+                }
 
-            // Announce and suspend until TTS callback completes
-            suspendCancellableCoroutine<Unit> { continuation ->
-                TokenAnnouncer.announceToken(
-                    context = context,
-                    audioLanguage = currentConfig.audioLanguage,
-                    counterName = announcementCounterName,
-                    tokenLabel = tokenLabelWithCode,
-                    onDone = {
-                        if (continuation.isActive) continuation.resume(Unit)
+                // 2. Use a canonical storage key so the same physical counter always shares history,
+                //    even if MQTT uses different identifiers (id, name, button index).
+                val storageKey =
+                    actualCounter.counterId?.trim()?.takeIf { it.isNotBlank() }
+                        ?: actualCounter.name?.trim()?.takeIf { it.isNotBlank() }
+                        ?: actualCounter.defaultName?.trim()?.takeIf { it.isNotBlank() }
+                        ?: actualCounter.buttonIndex?.toString()
+                        ?: counterIdOrName.trim()
+                val btnKey = actualCounter.buttonIndex?.toString()?.trim()
+
+                // Update in-memory history & UI. processTokenUpdateForKeys is now a suspend function 
+                // and returns false if the token is already at index 0 (skip announcement).
+                val isNewOrMoved = mqttViewModel.processTokenUpdateForKeys(storageKey, tokenLabel, btnKey)
+                if (!isNewOrMoved) {
+                    return@collect
+                }
+
+                // Deduplicate: skip chime/TTS if we already announced this token call recently
+                if (mqttViewModel.isAlreadyAnnounced(storageKey, tokenLabel)) {
+                    return@collect
+                }
+
+                // Mark before playing any sound so duplicate messages don't re-play
+                mqttViewModel.markAsAnnounced(storageKey, tokenLabel)
+                if (btnKey != null) mqttViewModel.markAsAnnounced(btnKey, tokenLabel)
+
+                // Brief delay so UI updates before sound (both visible at same time)
+                delay(50)
+
+                // 3. Always play notification chime, even if TTS announcements are disabled
+                val soundKey = ThemeColorManager.getNotificationSoundKey(context)
+                playTokenChime(soundKey)
+
+                // 4. If token announcement is disabled, stop after chime
+                if (currentConfig?.enableTokenAnnouncement != true) {
+                    return@collect
+                }
+
+                // 5. TTS: include counter name only when counter announcement is also enabled
+                val displayName =
+                    (actualCounter.name?.takeIf { it.isNotBlank() }
+                        ?: actualCounter.defaultName?.takeIf { it.isNotBlank() }
+                        ?: "Counter ${actualCounter.buttonIndex}")
+
+                val announcementCounterName =
+                    if (currentConfig.enableCounterAnnouncement == true) {
+                        displayName
+                    } else {
+                        ""  // Token ann on, counter ann off → announce token only, no counter details
                     }
-                )
+
+                // Token label with counter code prefix when enable_counter_prifix is true (e.g. "A-36")
+                val counterCode = actualCounter.code.orEmpty().trim().ifBlank {
+                    actualCounter.defaultCode.orEmpty().trim()
+                }
+                val usePrefix = currentConfig?.enableCounterPrefix != false
+                val tokenLabelWithCode = if (usePrefix && counterCode.isNotBlank()) "$counterCode-$tokenLabel" else tokenLabel
+
+                // Announce and suspend until TTS callback completes
+                suspendCancellableCoroutine<Unit> { continuation ->
+                    TokenAnnouncer.announceToken(
+                        context = context,
+                        audioLanguage = currentConfig.audioLanguage,
+                        counterName = announcementCounterName,
+                        tokenLabel = tokenLabelWithCode,
+                        onDone = {
+                            if (continuation.isActive) continuation.resume(Unit)
+                        }
+                    )
+                }
+            } finally {
+                mqttViewModel.announcementQueueSize.decrementAndGet()
             }
         }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        if (mqttError.isNotBlank() && !showMqttRetryDialog) {
-            MqttErrorBar(mqttError, isAutoRetryExhausted) { mqttViewModel.retryConnect() }
+        // Show inline broker error only when BLUCON is effectively offline.
+        // If brokerConnected is true (MQTT session up and reachability considered OK),
+        // suppress the "Connection lost" banner even if we have stale errors.
+        if (!brokerConnected && !isBrokerReachable && !showMqttRetryDialog) {
+            val mqttRetryAttemptInline by mqttViewModel.getMqttRetryAttempt().observeAsState(0)
+//            MqttErrorBar(
+//                error = "Connection lost: broker host unreachable (TCP ping failed)",
+//                exhausted = isAutoRetryExhausted,
+//                retryAttempt = mqttRetryAttemptInline
+//            ) { mqttViewModel.retryConnect() }
+        } else if (!brokerConnected && mqttError.isNotBlank() && !showMqttRetryDialog) {
+            val mqttRetryAttemptInline by mqttViewModel.getMqttRetryAttempt().observeAsState(0)
+//            MqttErrorBar(mqttError, isAutoRetryExhausted, mqttRetryAttemptInline) { mqttViewModel.retryConnect() }
         }
 
         if (config != null) {
@@ -434,7 +469,7 @@ fun TokenDisplayScreen(
                 config = cfg,
                 macAddress = macAddress,
                 appVersion = appVersion,
-                isMqttConnected = mqttConnected,
+                isMqttConnected = brokerConnected,
                 isNetworkAvailable = isNetworkAvailable,
                 counters = counters,
                 adFiles = adFiles,
@@ -446,7 +481,7 @@ fun TokenDisplayScreen(
                 onThemeChange = onThemeChange,
                 onCounterBgChange = onCounterBgChange,
                 onTokenBgChange = onTokenBgChange,
-                onRefresh = { viewModel.loadData(mqttViewModel) }
+                onRefresh = { viewModel.loadData(mqttViewModel, forceShowOverlay = true) }
             )
         }
     }
@@ -461,9 +496,10 @@ fun TokenDisplayScreen(
             message = "Loading TV configuration.\nPlease wait...",
             isVisible = true
         )
-    } else if (isConnectingToMqtt) {
+    } else if (!brokerConnected && !showMqttRetryDialog) {
+        val retryInfo = if (mqttRetryAttempt > 0) " (Retry $mqttRetryAttempt)" else ""
         AnimatedLoadingOverlay(
-            message = "Connecting to BLUCON...\nTime elapsed: ${connectTimer}s",
+            message = "Connecting to BLUCON$retryInfo...\nTime elapsed: ${connectTimer}s",
             isVisible = true
         )
     } else if (isPendingApproval) {
@@ -499,30 +535,11 @@ fun TokenDisplayScreen(
             }
         )
     } else if (!errorMessage.isNullOrBlank() && !isAutoRetryExhausted) {
-        AlertDialog(
-            onDismissRequest = { },
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 1f),
-            title = { Text("Configuration Error", style = MaterialTheme.typography.titleMedium) },
-            text = {
-                Column {
-                    Text(
-                        text = /*errorMessage.orEmpty()*/"Connection timeout.\nPlease retry",
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Start
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "Device ID: $macAddress",
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                }
-            },
-            confirmButton = {
-                Button(onClick = { viewModel.loadData(mqttViewModel) }) {
-                    Text("Retry Loading")
-                }
-            }
-        )
+        // Do not show any Configuration Error dialog; just log the error once per value.
+        LaunchedEffect(errorMessage) {
+            android.util.Log.w("TokenDisplay", "Configuration error (UI suppressed): $errorMessage")
+            viewModel.clearConfigurationError()
+        }
     }
 
     // MQTT Retry Dialog - Move to the end so it always appears on top
@@ -589,7 +606,7 @@ fun TokenDisplayScreen(
 }
 
 @Composable
-fun MqttErrorBar(error: String, exhausted: Boolean, onRetry: () -> Unit) {
+fun MqttErrorBar(error: String, exhausted: Boolean, retryAttempt: Int, onRetry: () -> Unit) {
     val retryFocusRequester = remember { FocusRequester() }
     Row(
         modifier = Modifier
@@ -600,8 +617,20 @@ fun MqttErrorBar(error: String, exhausted: Boolean, onRetry: () -> Unit) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
+        val message = when {
+            exhausted -> "BROKER: Connection timeout"
+            error.contains("Connection lost", ignoreCase = true) && retryAttempt > 0 ->
+                "BROKER: Connection lost (Retrying $retryAttempt)"
+            error.contains("Connection lost", ignoreCase = true) ->
+                "BROKER: Connection lost (Retrying)"
+            retryAttempt > 0 ->
+                "BROKER : Connecting... (Retrying $retryAttempt)"
+            else ->
+                "BROKER : Connecting... (Retrying)"
+        }
+
         Text(
-            text = if (exhausted) "MQTT Error: Connection timeout" else "MQTT: Connecting... (Retrying)",
+            text = message,
             modifier = Modifier.weight(1f),
             color = MaterialTheme.colorScheme.onErrorContainer,
             fontSize = 13.sp
@@ -1103,6 +1132,7 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
     }
 }
 
+@androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 fun AdVideoPlayer(videoUrl: String, onVideoEnded: () -> Unit) {
     val context = LocalContext.current
@@ -1157,7 +1187,8 @@ fun AdVideoPlayer(videoUrl: String, onVideoEnded: () -> Unit) {
  */
 object MediaEngine {
     private var player: ExoPlayer? = null
-    
+
+    @androidx.annotation.OptIn(UnstableApi::class)
     fun get(context: Context): ExoPlayer {
         if (player == null) {
             val httpClient = UnsafeOkHttpClient.getUnsafeOkHttpClient()
@@ -1216,10 +1247,16 @@ fun CountersArea(
                 // Portrait: split horizontally (top/bottom)
                 Column(modifier = Modifier.fillMaxSize().padding(1.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                     Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
-                        firstHalf.forEach { CounterBoard(it, tokensPerCounter, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds) }
+                        firstHalf.forEach { counter ->
+                            val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
+                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds)
+                        }
                     }
                     Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
-                        secondHalf.forEach { CounterBoard(it, tokensPerCounter, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds) }
+                        secondHalf.forEach { counter ->
+                            val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
+                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds)
+                        }
                         if (secondHalf.size < firstHalf.size) {
                             Spacer(modifier = Modifier.weight(1f))
                         }
@@ -1229,10 +1266,16 @@ fun CountersArea(
                 // Landscape: split vertically (left/right)
                 Row(modifier = Modifier.fillMaxSize().padding(1.dp), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        firstHalf.forEach { CounterBoard(it, tokensPerCounter, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds) }
+                        firstHalf.forEach { counter ->
+                            val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
+                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds)
+                        }
                     }
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                        secondHalf.forEach { CounterBoard(it, tokensPerCounter, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds) }
+                        secondHalf.forEach { counter ->
+                            val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
+                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds)
+                        }
                         if (secondHalf.size < firstHalf.size) {
                             Spacer(modifier = Modifier.weight(1f))
                         }
@@ -1244,38 +1287,16 @@ fun CountersArea(
                 // Portrait: single vertical stack of counters
                 Column(modifier = Modifier.fillMaxSize().padding(1.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                     counters.forEach { counter ->
-                        CounterBoard(
-                            counter,
-                            tokensPerCounter,
-                            config,
-                            rows,
-                            columns,
-                            Modifier.weight(1f).fillMaxWidth(),
-                            scale,
-                            counterBgHex,
-                            tokenBgHex,
-                            isPortrait,
-                            hasAds
-                        )
+                        val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
+                        CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds)
                     }
                 }
             } else {
                 // Landscape: single horizontal row of counters
                 Row(modifier = Modifier.fillMaxSize().padding(1.dp), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
                     counters.forEach { counter ->
-                        CounterBoard(
-                            counter,
-                            tokensPerCounter,
-                            config,
-                            rows,
-                            columns,
-                            Modifier.weight(1f).fillMaxHeight(),
-                            scale,
-                            counterBgHex,
-                            tokenBgHex,
-                            isPortrait,
-                            hasAds
-                        )
+                        val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
+                        CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds)
                     }
                 }
             }
@@ -1286,7 +1307,7 @@ fun CountersArea(
 @Composable
 fun CounterBoard(
     counter: CounterEntity,
-    tokensPerCounter: Map<String, List<String>>,
+    tokens: List<String>,
     config: TvConfigEntity,
     rows: Int,
     columns: Int,
@@ -1301,29 +1322,6 @@ fun CounterBoard(
         (counter.name.orEmpty().ifBlank { counter.defaultName.orEmpty().ifBlank { "Counter" } }).uppercase()
     }
     
-    val tokens = remember(tokensPerCounter, counter, counterName) {
-        val cid = counter.counterId.orEmpty().trim()
-        val cname = counter.name.orEmpty().trim()
-        val dname = counter.defaultName.orEmpty().trim()
-        val btnKey = counter.buttonIndex?.toString()?.trim().orEmpty()
-
-        // Look up by counterId, name, defaultName, buttonIndex, or numeric match (handles MQTT counter "2" -> storageKey "2")
-        val rawList = (if (cid.isNotBlank()) tokensPerCounter[cid] else null)
-            ?: (if (cname.isNotBlank()) tokensPerCounter[cname] else null)
-            ?: (if (dname.isNotBlank()) tokensPerCounter[dname] else null)
-            ?: (if (btnKey.isNotBlank()) tokensPerCounter[btnKey] else null)
-            ?: tokensPerCounter.entries.find {
-                val keyTrimmed = it.key.trim()
-                val keyInt = keyTrimmed.toIntOrNull()
-                val cidInt = cid.toIntOrNull()
-                keyInt != null && (keyInt == cidInt || keyInt == counter.buttonIndex)
-            }?.value
-            ?: (if (tokensPerCounter.containsKey("__default__")) tokensPerCounter["__default__"] else null)
-            ?: emptyList()
-            
-        // Filter out "0", tokens containing "CAL", and maintain order (first is latest)
-        rawList.filter { it.trim() != "0" && !it.contains("CAL", ignoreCase = true) }.map { it.trim() }.distinct()
-    }
 
     // Counter code from CounterConfig - used to prefix token for display (e.g. "A-36")
     val counterCode = remember(counter.code, counter.defaultCode) {
@@ -2053,36 +2051,47 @@ fun NotificationSoundDialog(
         "ding"      to "Ding",
         "ding2"     to "Ding 2",
         "ding3"     to "Ding 3",
+        "ding4"     to "Ding 4",
+        "ding5"     to "Ding 5",
         "double"    to "Double beep",
         "double2"   to "Double beep 2",
         "double3"   to "Double beep 3",
+        "double4"   to "Double beep 4",
         "soft"      to "Soft beep",
         "soft2"     to "Soft beep 2",
         "soft3"     to "Soft beep 3",
+        "soft4"     to "Soft beep 4",
         "alert"     to "Alert",
         "alert2"    to "Alert 2",
         "alert3"    to "Alert 3",
+        "alert4"    to "Alert 4",
         "bell"      to "Bell",
         "bell2"     to "Bell 2",
         "bell3"     to "Bell 3",
+        "bell4"     to "Bell 4",
         "church1"   to "Church bell 1",
         "church2"   to "Church bell 2",
         "church3"   to "Church bell 3",
         "ping"      to "Ping",
         "ping2"     to "Ping 2",
         "ping3"     to "Ping 3",
+        "ping4"     to "Ping 4",
         "long"      to "Long tone",
         "long2"     to "Long tone 2",
         "long3"     to "Long tone 3",
+        "long4"     to "Long tone 4",
         "chime1"    to "Chime 1",
         "chime2"    to "Chime 2",
         "chime3"    to "Chime 3",
+        "chime4"    to "Chime 4",
         "hi1"       to "High beep 1",
         "hi2"       to "High beep 2",
         "hi3"       to "High beep 3",
+        "hi4"       to "High beep 4",
         "low1"      to "Low beep 1",
         "low2"      to "Low beep 2",
         "low3"      to "Low beep 3",
+        "low4"      to "Low beep 4",
         "tone1"     to "Tone 1",
         "tone2"     to "Tone 2",
         "tone3"     to "Tone 3",
@@ -2222,4 +2231,26 @@ fun ScrollingFooter(
             maxLines = 1
         )
     }
+}
+
+private fun getTokensForCounter(counter: CounterEntity, tokensPerCounter: Map<String, List<String>>): List<String> {
+    val cid = counter.counterId.orEmpty().trim()
+    val cname = counter.name.orEmpty().trim()
+    val dname = counter.defaultName.orEmpty().trim()
+    val btnKey = counter.buttonIndex?.toString()?.trim().orEmpty()
+
+    val rawList = (if (cid.isNotBlank()) tokensPerCounter[cid] else null)
+        ?: (if (cname.isNotBlank()) tokensPerCounter[cname] else null)
+        ?: (if (dname.isNotBlank()) tokensPerCounter[dname] else null)
+        ?: (if (btnKey.isNotBlank()) tokensPerCounter[btnKey] else null)
+        ?: tokensPerCounter.entries.find {
+            val keyTrimmed = it.key.trim()
+            val keyInt = keyTrimmed.toIntOrNull()
+            val cidInt = cid.toIntOrNull()
+            keyInt != null && (keyInt == cidInt || keyInt == counter.buttonIndex)
+        }?.value
+        ?: (if (tokensPerCounter.containsKey("__default__")) tokensPerCounter["__default__"] else null)
+        ?: emptyList()
+        
+    return rawList.filter { it.trim() != "0" && !it.contains("CAL", ignoreCase = true) }.map { it.trim() }.distinct()
 }

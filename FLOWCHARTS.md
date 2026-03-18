@@ -123,8 +123,12 @@ flowchart TD
     START([MQTT Message]) --> RECV[onMessageReceived]
     RECV --> FILTER{Contains CAL0K?}
     FILTER -->|No| DROP0([Discard])
-    FILTER -->|Yes| VALIDATE[isValidKeypadMessage]
-    VALIDATE --> D1{Serial matches keypad_sl_no_1?}
+    FILTER -->|Yes| LEN_CHK{Length >= 24?}
+    LEN_CHK -->|No| DROP0
+    LEN_CHK -->|Yes| CHAR17{17th char '0'?}
+    CHAR17 -->|Yes| DROP0
+    CHAR17 -->|No| VALIDATE[isValidKeypadMessage]
+    VALIDATE --> D1{Serial matches connected keypad?}
     D1 -->|No| DROP1([Discard])
     D1 -->|Yes| PARSE[SemanticMqttParser.parse]
     PARSE --> D2{Valid?}
@@ -133,7 +137,7 @@ flowchart TD
     SEND --> COLLECT[LaunchedEffect collects]
     COLLECT --> D3{Match button_index?}
     D3 -->|No| DROP3([Drop token])
-    D3 -->|Yes| ATOMIC[processTokenUpdateForKeys]
+    D3 -->|Yes| ATOMIC[processTokenUpdate]
     ATOMIC --> D4{Should announce?}
     D4 -->|No| END1([END])
     D4 -->|Yes| DEDUP{Already announced?}
@@ -219,6 +223,18 @@ flowchart TD
     NAV -->|Yes| TOKEN[Token Display]
     NAV -->|No| END([END])
     TOKEN --> END
+```
+
+## Flow Chart 8: MQTT Continuous Publishing Loop
+    
+```mermaid
+flowchart TD
+    START([Timer Loop 5s]) --> COND{Active Connection?}
+    COND -->|No| END1([Pause/Exit])
+    COND -->|Yes| LOAD[Fetch Keypad Serials]
+    LOAD --> TOPIC[Set topic: fr/status]
+    TOPIC --> PUB[Publish: $SERIAL000000#]
+    PUB --> END2([Next Cycle])
 ```
 
 ---

@@ -69,7 +69,9 @@
 
         <activity
             android:name=".ui.TokenDisplayActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:screenOrientation="landscape"
+            tools:ignore="DiscouragedApi,MissingPrefix" />
         <activity
             android:name=".ui.SplashScreenActivity"
             android:exported="true">

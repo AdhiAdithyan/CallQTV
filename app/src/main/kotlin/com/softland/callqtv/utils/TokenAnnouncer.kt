@@ -33,7 +33,8 @@ object TokenAnnouncer {
                     if (status == TextToSpeech.SUCCESS) {
                         isInitialized = true
                         Log.i(TAG, "TTS Initialized successfully")
-                        tts?.setSpeechRate(0.90f) // Slow down for clarity
+                        // Slightly faster speech so full announcement finishes quickly (~2s)
+                        tts?.setSpeechRate(1.0f)
                         
                         tts?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
                             override fun onStart(utteranceId: String?) {}
@@ -179,25 +180,26 @@ object TokenAnnouncer {
         
         val lang = currentLanguage?.lowercase() ?: "en"
 
-        // 1. Format the token string (Natural reading)
-        val tokenText = token.replace(Regex("[^a-zA-Z0-9]"), " ")
+        // 1. Format the token string (Natural reading) – keep parsing simple to avoid overhead
+        val tokenText = token.filter { it.isLetterOrDigit() || it.isWhitespace() }
 
         // 2. Select Phrase based on Language
         val phrase = when (lang) {
+            // Keep phrases very short so they complete quickly.
             "hi", "hindi" -> {
-                if (counter.isNotBlank()) "Token $tokenText,$counter vahaan jaen"
-                else "Token number $tokenText"
+                if (counter.isNotBlank()) "Token $tokenText, $counter"
+                else "Token $tokenText"
             }
             "ta", "tamil" -> {
-                if (counter.isNotBlank()) "Token $tokenText, $counter ange Cellavum"
-                else "Token number $tokenText"
+                if (counter.isNotBlank()) "Token $tokenText, $counter"
+                else "Token $tokenText"
             }
             "ml", "malayalam" -> {
-                if (counter.isNotBlank()) "Token $tokenText, $counter ilekku varuka"
-                else "Token number $tokenText"
+                if (counter.isNotBlank()) "Token $tokenText, $counter"
+                else "Token $tokenText"
             }
             else -> {
-                if (counter.isNotBlank()) "Token $tokenText,Counter $counter"
+                if (counter.isNotBlank()) "Token $tokenText, $counter"
                 else "Token $tokenText"
             }
         }
@@ -209,8 +211,10 @@ object TokenAnnouncer {
             completionCallbacks[utteranceId] = onDone
         }
         
-        // Use QUEUE_ADD to ensure each announcement COMPLETES without being "broken" or "interrupted"
-        tts?.speak(phrase, TextToSpeech.QUEUE_ADD, null, utteranceId)
+        // Use QUEUE_ADD so that announcements are spoken strictly in FIFO order.
+        // Older tokens will always be called before newer ones.
+        val queueMode = TextToSpeech.QUEUE_ADD
+        tts?.speak(phrase, queueMode, null, utteranceId)
     }
 
     fun shutdown() {

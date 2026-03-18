@@ -24,7 +24,7 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
 
     private val repository = TvConfigRepository(application)
     
-    private val _isLoading = MutableLiveData(true)
+    private val _isLoading = MutableLiveData(false)
     val isLoading: LiveData<Boolean> = _isLoading
     
     private val _errorMessage = MutableLiveData<String?>(null)
@@ -55,6 +55,10 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
 
     private val authPrefs = application.getSharedPreferences(AppSharedPreferences.AUTHENTICATION, Context.MODE_PRIVATE)
 
+    // Ensures the full-screen "Loading TV configuration" overlay is shown only once
+    // on the very first manual load trigger after app install/launch.
+    private var hasShownInitialLoadingOverlay = false
+
     init {
         // Initialize macAddress on a background thread to avoid blocking main thread at startup
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
@@ -68,6 +72,11 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
 
     fun setTimeFormat(is24Hour: Boolean) {
         is24HourFormat = is24Hour
+    }
+
+    /** Clears the configuration error so the Configuration Error dialog is not shown. */
+    fun clearConfigurationError() {
+        _errorMessage.value = null
     }
 
     private fun startDateTimeUpdates() {
@@ -105,9 +114,15 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
-    fun loadData(mqttViewModel: MqttViewModel) {
+    fun loadData(mqttViewModel: MqttViewModel, forceShowOverlay: Boolean = false) {
         viewModelScope.launch {
-            _isLoading.value = true
+            if (forceShowOverlay) {
+                _isLoading.value = true
+                hasShownInitialLoadingOverlay = true
+            } else {
+                // For automatic retries or subsequent hidden loads, keep the overlay hidden.
+                _isLoading.value = false
+            }
             _isPendingApproval.value = false
 
             // Seed the UI immediately with the last known token state from local DB
@@ -124,8 +139,8 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
             val customerId = String.format(Locale.ROOT, "%04d", customerIdInt)
 
             try {
-                // Outer safety timeout of 30 seconds to ensure the dialog ALWAYS closes
-                kotlinx.coroutines.withTimeoutOrNull(30_000L) {
+                // Safety timeout: allow the network layer (60s x retries) to exhaust itself first
+                kotlinx.coroutines.withTimeoutOrNull(300_000L) {
                     val result = repository.fetchAndCacheTvConfig(_macAddress, customerId)
                     when (result) {
                         is TvConfigResult.Success -> {
@@ -139,10 +154,21 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                         }
                         is TvConfigResult.Error -> {
                             _config.value = repository.getCachedConfig(_macAddress, customerId)
-                            _errorMessage.value = if (result.licenceStatus != null) {
+                            val msg = if (result.licenceStatus != null) {
                                 "${result.message}\n\n${result.licenceStatus}"
                             } else {
                                 result.message
+                            }
+                            val isTimeoutLike = msg.contains("timeout", ignoreCase = true) ||
+                                msg.contains("timed out", ignoreCase = true)
+                            if (isTimeoutLike) {
+                                // Retry internally without showing Configuration Error dialog
+                                viewModelScope.launch {
+                                    delay(5000L)
+                                    loadData(mqttViewModel)
+                                }
+                            } else {
+                                _errorMessage.value = msg
                             }
                         }
                     }
@@ -155,19 +181,33 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                         launch { initMqttIfNeeded(cfg, mqttViewModel) }
                     }
                 } ?: run {
-                    // Timeout occurred
-                    _errorMessage.value = "Connection timeout. Please check your network and try again."
+                    // Timeout occurred: retry internally without showing the Configuration Error dialog
+                    viewModelScope.launch {
+                        delay(5000L)
+                        loadData(mqttViewModel)
+                    }
                 }
             } catch (e: Exception) {
                 _config.value = repository.getCachedConfig(_macAddress, customerId)
                 _counters.value = repository.getCounters(_macAddress, customerId)
                 _adFiles.value = repository.getAdFiles(_macAddress, customerId)
                 _connectedDevices.value = repository.getConnectedDevices(_macAddress, customerId)
-                if (_config.value == null) {
+                val isTimeoutLike = e.message?.contains("timeout", ignoreCase = true) == true ||
+                    e.message?.contains("timed out", ignoreCase = true) == true
+                if (_config.value == null && !isTimeoutLike) {
                     _errorMessage.value = "Failed to load TV configuration: ${e.message}"
+                } else if (_config.value == null && isTimeoutLike) {
+                    // Retry internally without showing Configuration Error dialog
+                    viewModelScope.launch {
+                        delay(5000L)
+                        loadData(mqttViewModel)
+                    }
                 }
             } finally {
                 _isLoading.value = false
+                // Connected devices may have changed; invalidate keypad serial cache so that
+                // subsequent keypad validation uses the latest mapping.
+                mqttViewModel.invalidateKeypadSerialCache()
             }
         }
     }
@@ -197,7 +237,14 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
             val port = broker.port?.trim().orEmpty()
             val mqttPort = port.ifEmpty { "1883" }
             val serverUri = "tcp://$host:$mqttPort"
-            val clientId = "callqtv_${_macAddress.replace(":", "")}_${broker.brokerId ?: Random().nextInt(1000)}"
+
+            // Use a stable clientId so we do NOT force-disconnect and recreate the MQTT client
+            // on every retry. If broker.brokerId is null, derive a deterministic suffix from
+            // the broker connection parameters instead of a random value.
+            val baseMac = _macAddress.replace(":", "")
+            val brokerSuffix = broker.brokerId?.toString()
+                ?: "${host}_${mqttPort}_${topic}".replace(Regex("[^A-Za-z0-9]"), "")
+            val clientId = "callqtv_${baseMac}_$brokerSuffix"
 
             mqttViewModel.initAndConnect(
                 serverUri = serverUri,

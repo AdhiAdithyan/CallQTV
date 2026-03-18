@@ -1,6 +1,7 @@
 package com.softland.callqtv.data.repository
 
 import android.content.Context
+import android.util.Log
 import com.google.gson.Gson
 import com.softland.callqtv.data.model.MappedBroker
 import com.softland.callqtv.data.model.TvConfigPayload
@@ -69,7 +70,9 @@ class TvConfigRepository(private val context: Context) {
         } catch (e: HttpException) {
             val errorBody = e.response()?.errorBody()?.string() ?: ""
             val logMsg = "HTTP Error ${e.code()} at $url Response: $errorBody"
+            // Log to both file and Logcat so errors are visible during debugging.
             com.softland.callqtv.utils.FileLogger.logError(context, "TvConfigRepo", logMsg, e)
+            Log.e("TvConfigRepo", logMsg, e)
 
             // Attempt to parse the error body to check for "pending" status
             try {
@@ -86,12 +89,21 @@ class TvConfigRepository(private val context: Context) {
 
             return@withContext TvConfigResult.Error("HTTP error ${e.code()}")
         } catch (e: Exception) {
-            com.softland.callqtv.utils.FileLogger.logError(context, "TvConfigRepo", "Request failed at $url", e)
+            val msg = "Request failed at $url"
+            com.softland.callqtv.utils.FileLogger.logError(context, "TvConfigRepo", msg, e)
+            Log.e("TvConfigRepo", msg, e)
             return@withContext TvConfigResult.Error(e.message ?: "Request failed")
         }
 
         if (body == null) {
             return@withContext TvConfigResult.Error("Empty response from configuration server")
+        }
+
+        // Log full API response for debugging/verification
+        try {
+            Log.i("TvConfigRepo", "TV config API response for mac=$macAddress, customer=$customerId: ${gson.toJson(body)}")
+        } catch (_: Exception) {
+            // Ignore logging errors; never break flow because of logging
         }
 
         val messageText = body.message ?: body.error ?: ""
@@ -131,25 +143,31 @@ class TvConfigRepository(private val context: Context) {
             db.runInTransaction {
                 dao.upsert(entity)
 
-                body.toMappedBrokerEntityOrNull(macAddress, customerId)?.let {
-                    mappedBrokerDao.upsert(it)
+                // Always replace mapped_broker rows for this mac+customer so it stays in sync
+                // with the latest API response (avoids stale rows when broker id/host/topic change).
+                val mappedBrokerEntity = body.toMappedBrokerEntityOrNull(macAddress, customerId)
+                mappedBrokerDao.deleteByMacAndCustomer(macAddress, customerId)
+                if (mappedBrokerEntity != null) {
+                    mappedBrokerDao.upsert(mappedBrokerEntity)
                 }
 
+                // Always replace child tables with the latest API response so DB stays in sync
+                // with the configuration service, even when lists are empty.
                 val counterEntities = body.toCounterEntities(macAddress, customerId)
+                counterDao.deleteByDeviceAndCustomer(entity.deviceId, macAddress, customerId)
                 if (counterEntities.isNotEmpty()) {
-                    counterDao.deleteByDeviceAndCustomer(entity.deviceId, macAddress, customerId)
                     counterDao.insertAll(counterEntities)
                 }
 
                 val adFileEntities = body.toAdFileEntities(macAddress, customerId)
+                adFileDao.deleteByDeviceAndCustomer(entity.deviceId, macAddress, customerId)
                 if (adFileEntities.isNotEmpty()) {
-                    adFileDao.deleteByDeviceAndCustomer(entity.deviceId, macAddress, customerId)
                     adFileDao.insertAll(adFileEntities)
                 }
 
                 val connectedDeviceEntities = body.toConnectedDeviceEntities(macAddress, customerId)
+                connectedDeviceDao.deleteByDeviceAndCustomer(entity.deviceId, macAddress, customerId)
                 if (connectedDeviceEntities.isNotEmpty()) {
-                    connectedDeviceDao.deleteByDeviceAndCustomer(entity.deviceId, macAddress, customerId)
                     connectedDeviceDao.insertAll(connectedDeviceEntities)
                 }
             }

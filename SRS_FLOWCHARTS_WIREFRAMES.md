@@ -24,6 +24,7 @@ CallQTV is an Android TV app for queue token display, MQTT token reception, TTS 
 - **Orientation:** Config-driven (portrait/landscape) overrides device; affects layout and token grid.
 - **Token prefix:** When enable_counter_prifix=true, tokens show as "A-36"; otherwise "36".
 - **MQTT:** Fixed protocol `$<serial><counter><token>*`; keypad serial validated against connected devices.
+- **Continuous Publishing:** Every 5s heartbeats ($SERIAL000000#) are sent to "fr/status" unconditionally as long as MQTT is connected.
 - **TTS:** Deduplication, atomic storage, 150ms delay for UI sync.
 
 ---
