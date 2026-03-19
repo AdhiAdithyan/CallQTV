@@ -9,6 +9,7 @@ import com.google.gson.Gson
 import com.softland.callqtv.data.local.AppDatabase
 import com.softland.callqtv.data.repository.MqttClientManager
 import com.softland.callqtv.data.repository.TokenHistoryRepository
+import com.softland.callqtv.utils.FileLogger
 import com.softland.callqtv.utils.SemanticMqttParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -92,9 +93,9 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     private var timerJob: kotlinx.coroutines.Job? = null
 
     private fun startConnectTimer() {
+        if (timerJob?.isActive == true) return // Already running
         _isConnectingToMqtt.postValue(true)
         _connectTimer.postValue(0)
-        timerJob?.cancel()
         timerJob = viewModelScope.launch(Dispatchers.Main) {
             var time = 0
             while (true) {
@@ -305,21 +306,21 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
 
                         startContinuousPublishLoop()
                     } else {
+                        startConnectTimer()
                         stopContinuousPublishLoop()
                     }
                 }
 
-                override fun onError(error: String) {
-                    stopConnectTimer()
-                    // Surface errors only until we've had at least one successful connection,
-                    // to avoid noisy UI during Paho's automatic reconnects.
-                    if (everConnected[serverUri] != true || !error.contains(
-                            "Connection lost",
-                            ignoreCase = true
-                        )
-                    ) {
-                        _errorMessage.postValue("[$serverUri] $error")
-                    }
+                override fun onError(error: String, code: Int?) {
+                    // Log the error to a date-wise file instead of showing it in the UI.
+                    val logTag = "MQTT_ERROR"
+                    val logMessage = if (code != null) "[$serverUri] $error (Code: $code)" else "[$serverUri] $error"
+                    FileLogger.logError(getApplication(), logTag, logMessage)
+
+                    // Stop surfacing specific MQTT errors to the UI per user request.
+                    // We keep the LiveData for state if needed, but we clear it or just don't update it.
+                    _errorMessage.postValue("")
+
                     // For initial connection failures, use our backoff-based retry.
                     // After first success, scheduleInitialRetry() is a no-op and Paho's
                     // isAutomaticReconnect handles reconnects.
@@ -327,6 +328,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 override fun onAutoRetryExhausted() {
+                    stopConnectTimer()
                     _isAutoRetryExhausted.postValue(true)
                 }
             })
@@ -504,11 +506,11 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         val attempt = retryAttempts[serverUri] ?: 0
         // Faster backoff so broker can reconnect quickly: 2s, 4s, 6s, 8s, then 10s
         val delayMs = when (attempt) {
-            0 -> 2000L
-            1 -> 4000L
-            2 -> 6000L
+            0 -> 1000L
+            1 -> 2000L
+            2 -> 4000L
             3 -> 8000L
-            else -> 5000L
+            else -> 10000L
         }
 
         retryJobs[serverUri] = viewModelScope.launch {

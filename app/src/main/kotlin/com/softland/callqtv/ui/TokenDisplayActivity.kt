@@ -275,6 +275,9 @@ fun TokenDisplayScreen(
     onTokenBgChange: (String) -> Unit
 ) {
     val context = LocalContext.current
+
+    // State map to track the last call timestamp per counter, used to restart blinking on re-call.
+    val blinkTriggers = remember { mutableStateMapOf<String, Long>() }
     
     val isLoading by viewModel.isLoading.observeAsState(false)
     val errorMessage by viewModel.errorMessage.observeAsState(null)
@@ -383,6 +386,10 @@ fun TokenDisplayScreen(
                 // Update in-memory history & UI. processTokenUpdateForKeys is now a suspend function 
                 // and returns false if the token is already at index 0 (skip announcement).
                 val isNewOrMoved = mqttViewModel.processTokenUpdateForKeys(storageKey, tokenLabel, btnKey)
+
+                // Signal re-call by updating the timestamp, which will restart the blink in CounterBoard
+                blinkTriggers[storageKey] = System.currentTimeMillis()
+
                 if (!isNewOrMoved) {
                     return@collect
                 }
@@ -469,7 +476,7 @@ fun TokenDisplayScreen(
                 config = cfg,
                 macAddress = macAddress,
                 appVersion = appVersion,
-                isMqttConnected = brokerConnected,
+                isMqttConnected = mqttConnected,
                 isNetworkAvailable = isNetworkAvailable,
                 counters = counters,
                 adFiles = adFiles,
@@ -481,7 +488,8 @@ fun TokenDisplayScreen(
                 onThemeChange = onThemeChange,
                 onCounterBgChange = onCounterBgChange,
                 onTokenBgChange = onTokenBgChange,
-                onRefresh = { viewModel.loadData(mqttViewModel, forceShowOverlay = true) }
+                onRefresh = { viewModel.loadData(mqttViewModel, forceShowOverlay = true) },
+                blinkTriggers = blinkTriggers
             )
         }
     }
@@ -572,12 +580,6 @@ fun TokenDisplayScreen(
                         "Device ID: $macAddress",
                         style = MaterialTheme.typography.labelSmall
                     )
-                    /*Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Error: $mqttError",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )*/
                 }
             },
             confirmButton = {
@@ -672,7 +674,8 @@ private fun TokenDisplayContent(
     onThemeChange: (String) -> Unit,
     onCounterBgChange: (String) -> Unit,
     onTokenBgChange: (String) -> Unit,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    blinkTriggers: Map<String, Long>
 ) {
     val viewModel = viewModel<com.softland.callqtv.viewmodel.TokenDisplayViewModel>()
     val mqttViewModel = viewModel<MqttViewModel>()
@@ -688,6 +691,8 @@ private fun TokenDisplayContent(
     LaunchedEffect(is24HourPref) {
         viewModel.setTimeFormat(is24HourPref)
     }
+
+    // Removed blinkTriggers definition from here as it is now passed down from TokenDisplayScreen
 
     val configuration = androidx.compose.ui.platform.LocalConfiguration.current
     val screenWidth = configuration.screenWidthDp.dp
@@ -762,7 +767,7 @@ private fun TokenDisplayContent(
             onRefresh = onRefresh,
             onClearTokenHistoryAndRefresh = {
                 mqttViewModel.clearTokenHistory()
-                viewModel.loadData(mqttViewModel)
+                viewModel.loadData(mqttViewModel, forceShowOverlay = true)
             }
         )
 
@@ -807,7 +812,8 @@ private fun TokenDisplayContent(
                                 counterBgHex,
                                 tokenBgHex,
                                 isPortrait = usePortraitLayout,
-                                hasAds = hasAds
+                                hasAds = hasAds,
+                                blinkTriggers = blinkTriggers
                             )
                         }
                     }
@@ -824,7 +830,8 @@ private fun TokenDisplayContent(
                         counterBgHex,
                         tokenBgHex,
                         isPortrait = usePortraitLayout,
-                        hasAds = hasAds
+                        hasAds = hasAds,
+                        blinkTriggers = blinkTriggers
                     )
                 }
             } else {
@@ -834,17 +841,17 @@ private fun TokenDisplayContent(
                         if (adPlacement.equals("left", ignoreCase = true)) {
                             Box(modifier = Modifier.weight(adWeight).fillMaxHeight()) { AdArea(adFiles, config) }
                             Box(modifier = Modifier.weight(countersWeight).fillMaxHeight()) {
-                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout)
+                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers)
                             }
                         } else {
                             Box(modifier = Modifier.weight(countersWeight).fillMaxHeight()) {
-                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout)
+                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers)
                             }
                             Box(modifier = Modifier.weight(adWeight).fillMaxHeight()) { AdArea(adFiles, config) }
                         }
                     }
                 } else {
-                    CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds)
+                    CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers)
                 }
             }
         }
@@ -943,7 +950,7 @@ fun HeaderArea(
                 contentDescription = "App Logo",
                 modifier = Modifier
                     .align(Alignment.CenterStart)
-                    .height((if (isPortrait) 48 else 68).dp * scale),
+                    .height((if (isPortrait) 48 else 58).dp * scale),
                 contentScale = ContentScale.Fit
             )
         }
@@ -954,7 +961,7 @@ fun HeaderArea(
                 text = companyName,
                 style = MaterialTheme.typography.titleLarge.copy(
                     fontWeight = FontWeight.Bold, 
-                    fontSize = (if (isPortrait) 26 else 36).sp * scale
+                    fontSize = (if (isPortrait) 26 else 30).sp * scale
                 ),
                 color = MaterialTheme.colorScheme.onBackground,
                 modifier = Modifier.align(Alignment.Center),
@@ -969,7 +976,7 @@ fun HeaderArea(
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
                         text = dateTime, 
-                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = (if (isPortrait) 12 else 18).sp * scale),
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = (if (isPortrait) 16 else 24).sp * scale),
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f)
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -990,7 +997,7 @@ fun HeaderArea(
                 Box(
                     modifier = Modifier
                         .clickable { onRefresh() }
-                        .padding(8.dp)
+                        .padding(4.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Refresh,
@@ -1006,7 +1013,7 @@ fun HeaderArea(
                 Box(
                     modifier = Modifier
                         .clickable { showThemeDialog = true }
-                        .padding(8.dp)
+                        .padding(4.dp)
                 ) {
                     Icon(
                         painter = painterResource(id = R.drawable.ic_settings),
@@ -1022,8 +1029,8 @@ fun HeaderArea(
 
 @Composable
 fun BluconStatusIndicator(isOnline: Boolean, isPortrait: Boolean, scale: Float) {
-    val color = if (isOnline) Color(0xFF056009) else MaterialTheme.colorScheme.error
-    val iconSize = ((if (isPortrait) 16 else 20) * scale).dp
+    val color = if (isOnline) Color(0xFF4AFF52) else Color(0xFFFF0000)
+    val iconSize = ((if (isPortrait) 20 else 28) * scale).dp
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
         Icon(
             imageVector = if (isOnline) Icons.Filled.Bluetooth else Icons.Filled.BluetoothDisabled,
@@ -1031,20 +1038,20 @@ fun BluconStatusIndicator(isOnline: Boolean, isPortrait: Boolean, scale: Float) 
             tint = color,
             modifier = Modifier.size(iconSize)
         )
-        Text(
+/*        Text(
 //            text = "BLUCON: ${if (isOnline) "Online" else "Offline"}",
             text = ": ${if (isOnline) "Online" else "Offline"}",
             style = MaterialTheme.typography.bodySmall.copy(fontSize = (if (isPortrait) 12 else 18).sp * scale),
             color = MaterialTheme.colorScheme.onBackground
-        )
+        )*/
     }
 }
 
 @Composable
 fun NetworkStatusIndicator(isOnline: Boolean, isPortrait: Boolean, scale: Float) {
     val networkIconRes = if (isOnline) R.drawable.ic_network_available else R.drawable.ic_network_unavailable
-    val networkIconColor = if (isOnline) Color(0xFF2E7D32) else Color(0xFFB71C1C)
-    val iconSize = ((if (isPortrait) 16 else 20) * scale).dp
+    val networkIconColor = if (isOnline) Color(0xFF4AFF52) else Color(0xFFFF0000)
+    val iconSize = ((if (isPortrait) 20 else 28) * scale).dp
     val labelFontSize = (if (isPortrait) 12 else 18).sp * scale
     
     Row(
@@ -1057,12 +1064,12 @@ fun NetworkStatusIndicator(isOnline: Boolean, isPortrait: Boolean, scale: Float)
             tint = networkIconColor,
             modifier = Modifier.size(iconSize)
         )
-        Text(
+      /*  Text(
 //            text = "NETWORK: ${if (isOnline) "Online" else "Offline"}",
             text = ": ${if (isOnline) "Online" else "Offline"}",
             style = MaterialTheme.typography.bodySmall.copy(fontSize = labelFontSize),
             color = MaterialTheme.colorScheme.onBackground
-        )
+        )*/
     }
 }
 
@@ -1228,7 +1235,8 @@ fun CountersArea(
     counterBgHex: String,
     tokenBgHex: String,
     isPortrait: Boolean = false,
-    hasAds: Boolean = false
+    hasAds: Boolean = false,
+    blinkTriggers: Map<String, Long> = emptyMap()
 ) {
     Box(modifier = Modifier.fillMaxSize().padding(1.dp)) {
         val numCounters = counters.size
@@ -1254,8 +1262,9 @@ fun CountersArea(
                     }
                     Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
                         secondHalf.forEach { counter ->
+                            val sKey = counter.counterId?.trim() ?: counter.name?.trim() ?: counter.defaultName?.trim() ?: counter.buttonIndex?.toString() ?: ""
                             val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
-                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds)
+                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sKey] ?: 0L)
                         }
                         if (secondHalf.size < firstHalf.size) {
                             Spacer(modifier = Modifier.weight(1f))
@@ -1267,14 +1276,16 @@ fun CountersArea(
                 Row(modifier = Modifier.fillMaxSize().padding(1.dp), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                         firstHalf.forEach { counter ->
+                            val sKey = counter.counterId?.trim() ?: counter.name?.trim() ?: counter.defaultName?.trim() ?: counter.buttonIndex?.toString() ?: ""
                             val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
-                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds)
+                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sKey] ?: 0L)
                         }
                     }
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                         secondHalf.forEach { counter ->
+                            val sKey = counter.counterId?.trim() ?: counter.name?.trim() ?: counter.defaultName?.trim() ?: counter.buttonIndex?.toString() ?: ""
                             val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
-                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds)
+                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sKey] ?: 0L)
                         }
                         if (secondHalf.size < firstHalf.size) {
                             Spacer(modifier = Modifier.weight(1f))
@@ -1287,16 +1298,18 @@ fun CountersArea(
                 // Portrait: single vertical stack of counters
                 Column(modifier = Modifier.fillMaxSize().padding(1.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                     counters.forEach { counter ->
+                        val sKey = counter.counterId?.trim() ?: counter.name?.trim() ?: counter.defaultName?.trim() ?: counter.buttonIndex?.toString() ?: ""
                         val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
-                        CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds)
+                        CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sKey] ?: 0L)
                     }
                 }
             } else {
                 // Landscape: single horizontal row of counters
                 Row(modifier = Modifier.fillMaxSize().padding(1.dp), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
                     counters.forEach { counter ->
+                        val sKey = counter.counterId?.trim() ?: counter.name?.trim() ?: counter.defaultName?.trim() ?: counter.buttonIndex?.toString() ?: ""
                         val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
-                        CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds)
+                        CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sKey] ?: 0L)
                     }
                 }
             }
@@ -1316,7 +1329,8 @@ fun CounterBoard(
     counterBgHex: String,
     tokenBgHex: String,
     isPortrait: Boolean,
-    hasAds: Boolean
+    hasAds: Boolean,
+    blinkTrigger: Long = 0L
 ) {
     val counterName = remember(counter.name, counter.defaultName) { 
         (counter.name.orEmpty().ifBlank { counter.defaultName.orEmpty().ifBlank { "Counter" } }).uppercase()
@@ -1351,7 +1365,7 @@ fun CounterBoard(
     // Restart blink timer whenever the current token changes.
     val currentTokenForBlink = tokens.firstOrNull()
     var blinkActive by remember { mutableStateOf(true) }
-    LaunchedEffect(shouldBlink, blinkSeconds, currentTokenForBlink) {
+    LaunchedEffect(shouldBlink, blinkSeconds, currentTokenForBlink, blinkTrigger) {
         blinkActive = true
         if (shouldBlink && blinkSeconds > 0 && currentTokenForBlink != null) {
             delay(blinkSeconds * 1000L)
@@ -1623,6 +1637,7 @@ fun AppearanceSettingsDialog(
     var showSoundPicker by remember { mutableStateOf(false) }
     var showCounterColorPicker by remember { mutableStateOf(false) }
     var showTokenColorPicker by remember { mutableStateOf(false) }
+
     var showClearConfirmDialog by remember { mutableStateOf(false) }
 
     var currentCounterHex by remember { mutableStateOf("#FFFFFF") }
@@ -1758,6 +1773,30 @@ fun AppearanceSettingsDialog(
                                     InfoRow("Token Announcement", tokenAnnText)
                                     InfoRow("Counter Announcement", counterAnnText)
                                     InfoRow("Counter Prefix", counterPrefixText)
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                                    
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text(
+                                            text = "Developed by",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        androidx.compose.foundation.Image(
+                                            painter = painterResource(id = R.drawable.ic_softland_logo),
+                                            contentDescription = "Softland India Ltd",
+                                            modifier = Modifier
+                                                .fillMaxWidth(0.8f)
+                                                .height(60.dp),
+                                            contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                                        )
+                                    }
                                 }
                             }
                         }

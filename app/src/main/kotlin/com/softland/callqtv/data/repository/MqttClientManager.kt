@@ -21,7 +21,7 @@ class MqttClientManager(
     interface MqttListener {
         fun onMessageReceived(topic: String, message: String)
         fun onConnectionStatus(isConnected: Boolean)
-        fun onError(error: String)
+        fun onError(error: String, code: Int? = null)
         fun onAutoRetryExhausted()
     }
 
@@ -50,8 +50,9 @@ class MqttClientManager(
                         Log.w(TAG, "MQTT connection lost (will rely on auto-reconnect). Reason: $errorMsg", cause)
                         mqttListener?.let {
                             it.onConnectionStatus(false)
+                            val code = (cause as? MqttException)?.reasonCode
                             // Surface as a soft warning; do NOT mark auto-retry as exhausted here
-                            it.onError("Connection lost: $errorMsg")
+                            it.onError("Connection lost: $errorMsg", code)
                         }
                     }
 
@@ -98,7 +99,7 @@ class MqttClientManager(
         if (!isInitialized) {
             val errorText = "MQTT client not initialized, cannot connect."
             Log.e(TAG, errorText)
-            mqttListener?.onError(errorText)
+            mqttListener?.onError(errorText, -1)
             mqttListener?.onAutoRetryExhausted()
             return
         }
@@ -121,10 +122,11 @@ class MqttClientManager(
         val options = MqttConnectOptions().apply {
             isCleanSession = false // Enable persistent session to receive missed messages on reconnect
             isAutomaticReconnect = true
-            connectionTimeout = 25
-            // Very short keep-alive so PINGREQ is sent about every 20 seconds.
+            connectionTimeout = 10
+            maxReconnectDelay = 20
+            // Very short keep-alive so PINGREQ is sent about every 120 seconds.
             // Note: this increases network chatter and sensitivity to brief hiccups.
-            keepAliveInterval = 20
+            keepAliveInterval = 120
             mqttVersion = MqttConnectOptions.MQTT_VERSION_3_1_1
             if (!username.isNullOrEmpty() && !password.isNullOrEmpty()) {
                 userName = username
@@ -162,7 +164,8 @@ class MqttClientManager(
 
                     mqttListener?.let {
                         it.onConnectionStatus(false)
-                        it.onError(errorText)
+                        val code = (exception as? MqttException)?.reasonCode
+                        it.onError(errorText, code)
 
                         if (isMqttUnableToConnect || isHostUnreachable) {
                             // Network / broker unreachable: rely on automatic reconnect + our own retry logic.
@@ -190,7 +193,7 @@ class MqttClientManager(
             val errorText = "Connection exception: ${e.message}"
             Log.e(TAG, errorText, e)
             mqttListener?.onConnectionStatus(false)
-            mqttListener?.onError(errorText)
+            mqttListener?.onError(errorText, e.reasonCode)
             mqttListener?.onAutoRetryExhausted()
         } catch (e: Exception) {
             isConnecting = false
