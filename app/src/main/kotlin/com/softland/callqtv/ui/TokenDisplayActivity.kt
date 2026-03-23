@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -34,6 +35,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BluetoothDisabled
@@ -328,8 +330,13 @@ fun TokenDisplayScreen(
     val blinkTriggers = remember { mutableStateMapOf<String, Long>() }
     
     val isLoading by viewModel.isLoading.observeAsState(false)
-    val errorMessage by viewModel.errorMessage.observeAsState(null)
     val isPendingApproval by viewModel.isPendingApproval.observeAsState(false)
+    val isLicenseExpired by viewModel.isLicenseExpired.observeAsState(false)
+    val errorMessage by viewModel.errorMessage.observeAsState(null)
+
+    LaunchedEffect(isLicenseExpired) {
+        mqttViewModel.setLicenseExpired(isLicenseExpired)
+    }
     val config by viewModel.config.observeAsState(null)
     val counters by viewModel.counters.observeAsState(emptyList())
     val adFiles by viewModel.adFiles.observeAsState(emptyList())
@@ -527,7 +534,7 @@ fun TokenDisplayScreen(
                 isMqttConnected = mqttConnected,
                 isNetworkAvailable = isNetworkAvailable,
                 counters = counters,
-                adFiles = adFiles,
+                adFiles = viewModel.localAdFiles.observeAsState(emptyList()).value,
                 tokensPerCounter = tokensPerCounter,
                 daysUntilLicenseExpiry = daysUntilExpiry,
                 dateTime = currentDateTime,
@@ -589,6 +596,12 @@ fun TokenDisplayScreen(
                     Text("Retry")
                 }
             }
+        )
+    } else if (isLicenseExpired) {
+        LicenseExpiredDialog(
+            macAddress = macAddress,
+            errorMessage = errorMessage,
+            onRefresh = { viewModel.loadData(mqttViewModel, forceShowOverlay = true) }
         )
     } else if (!errorMessage.isNullOrBlank() && !isAutoRetryExhausted) {
         // Do not show any Configuration Error dialog; just log the error once per value.
@@ -1154,12 +1167,12 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
         isNextReady = false
 
         val path = targetAd.filePath.lowercase()
-        val isVideo = path.endsWith(".mp4") || path.endsWith(".mkv") || path.endsWith(".mov") || path.endsWith(".3gp") || path.endsWith(".webm")
+        val isVideo = isAdVideo(path)
         val isYouTube = path.contains("youtube.com") || path.contains("youtu.be")
 
         if (isVideo || isYouTube) {
             // Video or YouTube: wait for onReady or timeout
-            withTimeoutOrNull(12000) { // 12s for YouTube
+            withTimeoutOrNull(30000) { // 30s timeout for high-res/remote buffering
                 while (!isNextReady) { delay(200) }
             }
             if (!isNextReady) {
@@ -1186,7 +1199,7 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
             Crossfade(targetState = visibleAd, animationSpec = tween(600), label = "ad_fade") { ad ->
                 if (ad != null) {
                     val path = ad.filePath.lowercase()
-                    val adIsVideo = path.endsWith(".mp4") || path.endsWith(".mkv") || path.endsWith(".mov") || path.endsWith(".3gp") || path.endsWith(".webm")
+                    val adIsVideo = isAdVideo(path)
                     val adIsYouTube = path.contains("youtube.com") || path.contains("youtu.be")
                     
                     if (adIsYouTube) {
@@ -1226,7 +1239,7 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
             // Background Preloader (uses the OTHER player)
             if (!isNextReady && preparingAd != visibleAd && preparingAd != null) {
                 val nextPath = preparingAd!!.filePath.lowercase()
-                val nextIsVideo = nextPath.endsWith(".mp4") || nextPath.endsWith(".mkv") || nextPath.endsWith(".mov") || nextPath.endsWith(".3gp") || nextPath.endsWith(".webm")
+                val nextIsVideo = isAdVideo(nextPath)
                 val nextIsYouTube = nextPath.contains("youtube.com") || nextPath.contains("youtu.be")
                 
                 if (nextIsYouTube) {
@@ -1261,6 +1274,14 @@ private fun extractYoutubeVideoId(url: String): String? {
     val regex = "^.*((youtu.be\\/)|(v\\/)|(\\/u\\/\\w\\/)|(embed\\/)|(watch\\?))\\??v?=?([^#&?]*).*".toRegex()
     val matchResult = regex.find(url)
     return matchResult?.groupValues?.get(7)?.takeIf { it.length == 11 }
+}
+
+private fun isAdVideo(path: String): Boolean {
+    val lc = path.lowercase()
+    return lc.endsWith(".mp4") || lc.endsWith(".mkv") || lc.endsWith(".mov") || 
+           lc.endsWith(".3gp") || lc.endsWith(".webm") || lc.endsWith(".avi") || 
+           lc.endsWith(".flv") || lc.endsWith(".ts") || lc.endsWith(".m4v") || 
+           lc.endsWith(".mpg") || lc.endsWith(".mpeg") || lc.endsWith(".m2ts")
 }
 
 @Composable
@@ -1326,6 +1347,7 @@ fun AdVideoPlayer(videoUrl: String, player: ExoPlayer, onVideoEnded: () -> Unit,
                 }
             }
             override fun onPlayerError(e: androidx.media3.common.PlaybackException) {
+                Log.e("AdVideoPlayer", "ExoPlayer error playing $videoUrl: ${e.message}", e)
                 mainHandler.post { latestOnError() }
             }
         }
@@ -1353,6 +1375,7 @@ fun AdVideoPlayer(videoUrl: String, player: ExoPlayer, onVideoEnded: () -> Unit,
     )
 }
 
+@UnstableApi
 object MediaEngine {
     private var player1: ExoPlayer? = null
     private var player2: ExoPlayer? = null
@@ -1366,7 +1389,8 @@ object MediaEngine {
         
         if (simpleCache == null) {
             val cacheDir = File(context.cacheDir, "ad_video_cache")
-            val evictor = androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor(100 * 1024 * 1024)
+            // Increase cache size to 500MB for higher resolution videos
+            val evictor = androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor(500 * 1024 * 1024)
             simpleCache = androidx.media3.datasource.cache.SimpleCache(cacheDir, evictor, androidx.media3.database.StandaloneDatabaseProvider(context))
         }
         
@@ -1379,7 +1403,8 @@ object MediaEngine {
         }
 
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(2000, 5000, 1000, 1500)
+            // Standard buffers (in ms): Min 15s, Max 50s, For Playback 2.5s, After Rebuffer 5s
+            .setBufferDurationsMs(15000, 50000, 2500, 5000)
             .build()
 
         return ExoPlayer.Builder(context.applicationContext)
@@ -1861,6 +1886,7 @@ fun AppearanceSettingsDialog(
     var notificationSoundKey by remember { mutableStateOf("ding") }
     var is24Hour by remember { mutableStateOf(true) }
     var isAdSoundEnabled by remember { mutableStateOf(false) }
+    var isOfflineAdsEnabled by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         withContext(Dispatchers.Default) {
             currentCounterHex = ThemeColorManager.getCounterBackgroundColor(context)
@@ -1870,11 +1896,16 @@ fun AppearanceSettingsDialog(
             customerId = context.getSharedPreferences(AppSharedPreferences.AUTHENTICATION, Context.MODE_PRIVATE)
                 .getInt(PreferenceHelper.customer_id, 0)
             is24Hour = context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
-                .getBoolean("use_24_hour_format", true)
+                    .getBoolean("use_24_hour_format", true)
             isAdSoundEnabled = context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
                 .getBoolean("enable_ad_sound", false)
+            isOfflineAdsEnabled = PreferenceHelper.isOfflineAdsEnabled(context)
         }
     }
+
+    var selectedTabIndex by remember { mutableIntStateOf(0) }
+    var showOfflineConfirmDialog by remember { mutableStateOf(false) }
+    val tabs = listOf("System", "Display", "Audios", "Other")
 
     if (showSoundPicker) {
         NotificationSoundDialog(
@@ -1899,317 +1930,230 @@ fun AppearanceSettingsDialog(
     } else if (showCounterColorPicker) {
         PresetColorDialog(
             title = "Counter Background",
-            onColorSelected = { 
+            onColorSelected = {
                 onCounterBgChange(it)
                 currentCounterHex = it
-                showCounterColorPicker = false 
+                showCounterColorPicker = false
             },
             onDismiss = { showCounterColorPicker = false }
         )
     } else if (showTokenColorPicker) {
         PresetColorDialog(
             title = "Token Background",
-            onColorSelected = { 
+            onColorSelected = {
                 onTokenBgChange(it)
                 currentTokenHex = it
-                showTokenColorPicker = false 
+                showTokenColorPicker = false
             },
             onDismiss = { showTokenColorPicker = false }
         )
+    } else if (showOfflineConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showOfflineConfirmDialog = false },
+            title = { Text("Confirm Switch", style = MaterialTheme.typography.titleSmall) },
+            text = {
+                Text(
+                    "Online streaming requires a reliable high-speed internet connection for smooth playback. Switching from offline mode will stop using locally saved videos. Do you want to proceed with online streaming?",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        isOfflineAdsEnabled = false
+                        PreferenceHelper.setOfflineAdsEnabled(context, false)
+                        showOfflineConfirmDialog = false
+                    }
+                ) { Text("Proceed") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showOfflineConfirmDialog = false
+                    }
+                ) { Text("Cancel") }
+            }
+        )
     } else {
         AlertDialog(
-            modifier = Modifier
-                .fillMaxWidth(0.65f),
+            modifier = Modifier.fillMaxWidth(0.55f),
             onDismissRequest = onDismiss,
             properties = DialogProperties(usePlatformDefaultWidth = false),
-            title = { Text("Settings", style = MaterialTheme.typography.titleSmall) },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(0.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        // Left column: Company / device details
-                        Column(
-                            modifier = Modifier.width(320.dp),
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            Card(
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            title = {
+                Column {
+                    Text("Settings", style = MaterialTheme.typography.titleMedium)
+                    TabRow(
+                        selectedTabIndex = selectedTabIndex,
+                        containerColor = Color.Transparent,
+                        contentColor = MaterialTheme.colorScheme.primary,
+                        divider = {},
+                        indicator = { tabPositions ->
+                            if (selectedTabIndex < tabPositions.size) {
+                                TabRowDefaults.SecondaryIndicator(
+                                    modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
+                                    color = MaterialTheme.colorScheme.primary
                                 )
+                            }
+                        }
+                    ) {
+                        tabs.forEachIndexed { index, title ->
+                            Tab(
+                                selected = selectedTabIndex == index,
+                                onClick = { selectedTabIndex = index },
+                                text = { Text(title, fontSize = 13.sp) }
+                            )
+                        }
+                    }
+                }
+            },
+            text = {
+                Box(modifier = Modifier.fillMaxWidth().height(260.dp)) {
+                    when (selectedTabIndex) {
+                        0 -> { // System Tab
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    androidx.compose.foundation.Image(
+                                        painter = painterResource(id = R.drawable.callq_tv_logo),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(60.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(companyName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                        Text("System Information", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                                    }
+                                }
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 1.dp))
+                                InfoRow("Company ID", String.format("%04d", customerId))
+                                InfoRow("Device ID", macAddress)
+                                InfoRow("App Version", appVersion)
+                                if (daysUntilExpiry != null) {
+                                    val expiryText = if (daysUntilExpiry <= 0) "Expired" else "Expires in $daysUntilExpiry days"
+                                    val color = if (daysUntilExpiry <= 10) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                                    InfoRow("License", expiryText, color)
+                                }
+                                InfoRow("Tokens", if (isTokenAnnouncementEnabled == true) "Enabled" else "Disabled")
+                                InfoRow("Counters", if (isCounterAnnouncementEnabled == true) "Enabled" else "Disabled")
+                                InfoRow("Prefix", if (isCounterPrefixEnabled == true) "Enabled" else "Disabled")
+                                
+                                Spacer(modifier = Modifier.height(4.dp))
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+                                Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("Developed by", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                    androidx.compose.foundation.Image(
+                                        painter = painterResource(id = R.drawable.ic_softland_logo),
+                                        contentDescription = "Softland India Ltd",
+                                        modifier = Modifier.fillMaxWidth(0.5f).height(35.dp),
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                                    )
+                                }
+                            }
+                        }
+                        1 -> { // Display Tab
+                            LazyVerticalGrid(
+                                columns = GridCells.Fixed(2),
+                                modifier = Modifier.fillMaxWidth().height(260.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                contentPadding = PaddingValues(top = 4.dp, bottom = 4.dp)
                             ) {
-                                Column(
-                                    modifier = Modifier
-                                        .padding(2.dp)
-                                        .fillMaxWidth()
-                                ) {
-                                    // Header: Icon + Company Name
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        androidx.compose.foundation.Image(
-                                            painter = painterResource(id = R.drawable.callq_tv_logo),
-                                            contentDescription = null,
-                                            modifier = Modifier.size(100.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Column {
-                                            Text(
-                                                text = companyName,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                            Text(
-                                                text = "System Information",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-                                    }
-                                    HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
-
-                                    InfoRow("Company ID", String.format("%04d", customerId))
-                                    InfoRow("Device ID", macAddress)
-                                    InfoRow("App Version", appVersion)
-                                    if (daysUntilExpiry != null) {
-                                        val expiryText =
-                                            if (daysUntilExpiry <= 0) "Expired" else "Expires in $daysUntilExpiry days"
-                                        val color =
-                                            if (daysUntilExpiry <= 10) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-                                        InfoRow("License", expiryText, color)
-                                    }
-                                    val tokenAnnText =
-                                        if (isTokenAnnouncementEnabled == true) "Enabled" else "Disabled"
-                                    val counterAnnText =
-                                        if (isCounterAnnouncementEnabled == true) "Enabled" else "Disabled"
-                                    val counterPrefixText =
-                                        if (isCounterPrefixEnabled == true) "Enabled" else "Disabled"
-                                    InfoRow("Token Announcement", tokenAnnText)
-                                    InfoRow("Counter Announcement", counterAnnText)
-                                    InfoRow("Counter Prefix", counterPrefixText)
-
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                                    
-                                    Column(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalAlignment = Alignment.CenterHorizontally
+                                item { ColorPickerButton("App Theme", currentThemeHex) { showThemeColorPicker = true } }
+                                item { ColorPickerButton("Counter BG", currentCounterHex) { showCounterColorPicker = true } }
+                                item { ColorPickerButton("Token BG", currentTokenHex) { showTokenColorPicker = true } }
+                            }
+                        }
+                        2 -> { // Audios Tab
+                            LazyVerticalGrid(
+                                columns = GridCells.Fixed(2),
+                                modifier = Modifier.fillMaxWidth().height(260.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                contentPadding = PaddingValues(top = 4.dp, bottom = 4.dp)
+                            ) {
+                                val soundOptions = listOf("ding" to "Ding", "soft" to "Soft", "alert" to "Alert", "bell" to "Bell", "ping" to "Ping")
+                                val currentSoundLabel = soundOptions.firstOrNull { it.first == notificationSoundKey }?.second ?: notificationSoundKey.replaceFirstChar { it.uppercase() }
+                                
+                                item {
+                                    GridSettingsItem(
+                                        title = "Notification Sound",
+                                        onClick = { showSoundPicker = true }
                                     ) {
-                                        Text(
-                                            text = "Developed by",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        androidx.compose.foundation.Image(
-                                            painter = painterResource(id = R.drawable.ic_softland_logo),
-                                            contentDescription = "Softland India Ltd",
-                                            modifier = Modifier
-                                                .fillMaxWidth(0.8f)
-                                                .height(60.dp),
-                                            contentScale = androidx.compose.ui.layout.ContentScale.Fit
-                                        )
+                                        Text(currentSoundLabel, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                                    }
+                                }
+
+                                item {
+                                    GridSettingsItem(
+                                        title = "Advertisement Sound",
+                                        onClick = {
+                                            isAdSoundEnabled = !isAdSoundEnabled
+                                            context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE).edit().putBoolean("enable_ad_sound", isAdSoundEnabled).apply()
+                                            MediaEngine.updateVolume(context)
+                                        }
+                                    ) {
+                                        Checkbox(checked = isAdSoundEnabled, onCheckedChange = { 
+                                            isAdSoundEnabled = it
+                                            context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE).edit().putBoolean("enable_ad_sound", it).apply()
+                                            MediaEngine.updateVolume(context)
+                                        }, modifier = Modifier.scale(0.8f).offset(x = (-12).dp))
                                     }
                                 }
                             }
                         }
-
-                        // Right column: Appearance + actions (fixed width)
-                        Column(
-                            modifier = Modifier.weight(0.9f),
-                            verticalArrangement = Arrangement.spacedBy(1.dp)
-                        ) {
-                            Text(
-                                "Appearance",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            HorizontalDivider(modifier = Modifier.padding(top = 2.dp, bottom = 2.dp))
-                            Text(
-                                "Notification sound",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-
-                            // Notification sound + App theme, Counter BG, Token BG in a single vertical column
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(1.dp)
+                        3 -> { // Other Tab
+                            LazyVerticalGrid(
+                                columns = GridCells.Fixed(2),
+                                modifier = Modifier.fillMaxWidth().height(260.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                contentPadding = PaddingValues(top = 4.dp, bottom = 4.dp)
                             ) {
-                                // Notification sound selector
-                                val soundOptions = listOf(
-                                    "ding"      to "Ding",
-                                    "ding2"     to "Ding 2",
-                                    "ding3"     to "Ding 3",
-                                    "double"    to "Double beep",
-                                    "double2"   to "Double beep 2",
-                                    "double3"   to "Double beep 3",
-                                    "soft"      to "Soft beep",
-                                    "soft2"     to "Soft beep 2",
-                                    "soft3"     to "Soft beep 3",
-                                    "alert"     to "Alert",
-                                    "alert2"    to "Alert 2",
-                                    "alert3"    to "Alert 3",
-                                    "bell"      to "Bell",
-                                    "bell2"     to "Bell 2",
-                                    "bell3"     to "Bell 3",
-                                    "church1"   to "Church bell 1",
-                                    "church2"   to "Church bell 2",
-                                    "church3"   to "Church bell 3",
-                                    "ping"      to "Ping",
-                                    "ping2"     to "Ping 2",
-                                    "ping3"     to "Ping 3",
-                                    "long"      to "Long tone",
-                                    "long2"     to "Long tone 2",
-                                    "long3"     to "Long tone 3",
-                                    "chime1"    to "Chime 1",
-                                    "chime2"    to "Chime 2",
-                                    "chime3"    to "Chime 3",
-                                    "hi1"       to "High beep 1",
-                                    "hi2"       to "High beep 2",
-                                    "hi3"       to "High beep 3",
-                                    "low1"      to "Low beep 1",
-                                    "low2"      to "Low beep 2",
-                                    "low3"      to "Low beep 3",
-                                    "tone1"     to "Tone 1",
-                                    "tone2"     to "Tone 2",
-                                    "tone3"     to "Tone 3",
-                                    "tone4"     to "Tone 4",
-                                    "tone5"     to "Tone 5",
-                                    "tone6"     to "Tone 6",
-                                    "tone7"     to "Tone 7"
-                                )
-                                val currentSoundLabel = soundOptions.firstOrNull { it.first == notificationSoundKey }?.second ?: "Ding"
-
-                                Box(modifier = Modifier.fillMaxWidth()) {
-                                    OutlinedButton(
-                                        onClick = { showSoundPicker = true },
-                                        modifier = Modifier.fillMaxWidth()
+                                item {
+                                    GridSettingsItem(
+                                        title = "24-Hour Format",
+                                        onClick = {
+                                            is24Hour = !is24Hour
+                                            context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE).edit().putBoolean("use_24_hour_format", is24Hour).apply()
+                                        }
                                     ) {
-                                        Text(
-                                            "sound: $currentSoundLabel",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
+                                        Checkbox(checked = is24Hour, onCheckedChange = { 
+                                            is24Hour = it
+                                            context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE).edit().putBoolean("use_24_hour_format", it).apply()
+                                        }, modifier = Modifier.scale(0.8f).offset(x = (-12).dp))
                                     }
                                 }
 
-                                Box(modifier = Modifier.fillMaxWidth()) {
-                                    ColorPickerButton("App Theme", currentThemeHex) {
-                                        showThemeColorPicker = true
+                                item {
+                                    GridSettingsItem(
+                                        title = "Offline Advertisements",
+                                        onClick = {
+                                            if (isOfflineAdsEnabled) showOfflineConfirmDialog = true
+                                            else { isOfflineAdsEnabled = true; com.softland.callqtv.utils.PreferenceHelper.setOfflineAdsEnabled(context, true) }
+                                        }
+                                    ) {
+                                        Checkbox(checked = isOfflineAdsEnabled, onCheckedChange = { 
+                                            if (!it) showOfflineConfirmDialog = true 
+                                            else { isOfflineAdsEnabled = true; com.softland.callqtv.utils.PreferenceHelper.setOfflineAdsEnabled(context, true) }
+                                        }, modifier = Modifier.scale(0.8f).offset(x = (-12).dp))
                                     }
                                 }
 
-                                Box(modifier = Modifier.fillMaxWidth()) {
-                                    ColorPickerButton("Counter BG", currentCounterHex) {
-                                        showCounterColorPicker = true
+                                item(span = { GridItemSpan(2) }) {
+                                    GridSettingsItem(
+                                        title = "Clear saved token history",
+                                        onClick = { showClearConfirmDialog = true }
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text("Action to reset active token list", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f), modifier = Modifier.weight(1f))
+                                            Checkbox(
+                                                checked = false, 
+                                                onCheckedChange = { if (it) showClearConfirmDialog = true },
+                                                modifier = Modifier.scale(0.8f).offset(x = (-6).dp),
+                                                colors = CheckboxDefaults.colors(uncheckedColor = MaterialTheme.colorScheme.error)
+                                            )
+                                        }
                                     }
                                 }
-
-                                Box(modifier = Modifier.fillMaxWidth()) {
-                                    ColorPickerButton("Token BG", currentTokenHex) {
-                                        showTokenColorPicker = true
-                                    }
-                                }
-                            }
-
-                            // Clear saved token details (with confirmation)
-                            HorizontalDivider()
-                            OutlinedButton(
-                                onClick = { showClearConfirmDialog = true },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.Start,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        "Clear saved token details",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-
-                            HorizontalDivider()
-
-                            // Time Format
-                            val viewModel =
-                                viewModel<com.softland.callqtv.viewmodel.TokenDisplayViewModel>()
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        val newState = !is24Hour
-                                        is24Hour = newState
-                                        context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
-                                            .edit().putBoolean("use_24_hour_format", newState).apply()
-                                        viewModel.setTimeFormat(newState)
-                                    },
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column {
-                                    Text("Time Format", style = MaterialTheme.typography.bodyMedium)
-                                    Text(
-                                        if (is24Hour) "24-Hour (14:30)" else "12-Hour (2:30 PM)",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color.Gray
-                                    )
-                                }
-                                Switch(
-                                    checked = is24Hour,
-                                    onCheckedChange = {
-                                        is24Hour = it
-                                        context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
-                                            .edit().putBoolean("use_24_hour_format", it).apply()
-                                        viewModel.setTimeFormat(it)
-                                    },
-                                    modifier = Modifier.scale(0.85f)
-                                )
-                            }
-
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
-                            // Advertisement Sound Toggle
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        val newState = !isAdSoundEnabled
-                                        isAdSoundEnabled = newState
-                                        context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
-                                            .edit().putBoolean("enable_ad_sound", newState).apply()
-                                        MediaEngine.updateVolume(context)
-                                    },
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column {
-                                    Text("Advertisement Sound", style = MaterialTheme.typography.bodyMedium)
-                                    Text(
-                                        if (isAdSoundEnabled) "Enabled" else "Disabled",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color.Gray
-                                    )
-                                }
-                                Switch(
-                                    checked = isAdSoundEnabled,
-                                    onCheckedChange = {
-                                        isAdSoundEnabled = it
-                                        context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
-                                            .edit().putBoolean("enable_ad_sound", it).apply()
-                                        MediaEngine.updateVolume(context)
-                                    },
-                                    modifier = Modifier.scale(0.85f)
-                                )
                             }
                         }
                     }
@@ -2255,17 +2199,61 @@ fun InfoRow(label: String, value: String, valueColor: Color = MaterialTheme.colo
         Text(
             label,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(0.35f)
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.width(90.dp)
         )
         Text(
             value,
             style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.SemiBold,
             color = valueColor,
-            modifier = Modifier.weight(0.65f)
+            modifier = Modifier.weight(1f)
         )
     }
+}
+
+@Composable
+fun LicenseExpiredDialog(
+    macAddress: String,
+    errorMessage: String?,
+    onRefresh: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = { /* Prevent dismiss */ },
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 1f),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    painter = painterResource(id = com.softland.callqtv.R.drawable.ic_network_unavailable),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("License Expired", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        text = {
+            Column {
+                Text(
+                    errorMessage ?: "Your application license has expired.\nPlease contact support to renew your license and resume operations.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    "Device ID: $macAddress",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onRefresh,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Text("Refresh License")
+            }
+        }
+    )
 }
 
 @Composable
@@ -2284,7 +2272,31 @@ fun ColorPickerButton(label: String, hex: String, onClick: () -> Unit) {
                     .border(2.dp, Color.Gray, RoundedCornerShape(4.dp))
             )
             Spacer(modifier = Modifier.width(6.dp))
-            Text(label, fontSize = 11.sp)
+            Text(label, fontSize = 13.sp)
+        }
+    }
+}
+
+@Composable
+fun GridSettingsItem(
+    title: String,
+    onClick: (() -> Unit)? = null,
+    content: @Composable () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    ) {
+        Column(
+            modifier = Modifier.padding(8.dp).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(title, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            content()
         }
     }
 }

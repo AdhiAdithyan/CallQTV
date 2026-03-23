@@ -18,7 +18,7 @@ import java.util.Locale
  */
 object FileLogger {
     private const val TAG = "FileLogger"
-    private const val BASE_FOLDER = "CallQTV"
+    private const val BASE_FOLDER = "CALLQTV_CONFIG"
 
     private fun getLogFile(context: Context): File {
         @Suppress("DEPRECATION")
@@ -50,6 +50,11 @@ object FileLogger {
         return "errors_$dateStr.txt"
     }
 
+    private fun getApiResponseLogFileName(): String {
+        val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        return "api_responses_$dateStr.txt"
+    }
+
     /**
      * Returns the log file path for display.
      */
@@ -64,16 +69,26 @@ object FileLogger {
     }
 
     private fun getLogDirectory(context: Context): File {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // App-specific external library dir (stable on Android 15)
+        val root = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val callqDir = File(root, BASE_FOLDER)
+        if (!callqDir.exists()) {
+            try {
+                callqDir.mkdirs()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to create public log directory", e)
+            }
+        }
+        
+        return if (callqDir.exists() && callqDir.canWrite()) {
+            callqDir
+        } else {
+            // Fallback to app-specific external dir or internal filesDir
             val downloads = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
                 ?: context.getExternalFilesDir(null)
                 ?: context.filesDir
-            File(downloads, BASE_FOLDER)
-        } else {
-            @Suppress("DEPRECATION")
-            val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            File(dir, BASE_FOLDER)
+            val fallbackDir = File(downloads, BASE_FOLDER)
+            if (!fallbackDir.exists()) fallbackDir.mkdirs()
+            fallbackDir
         }
     }
 
@@ -108,25 +123,42 @@ object FileLogger {
     /**
      * Logs an error message and optional throwable.
      */
-    fun logError(context: Context, tag: String, message: String, throwable: Throwable? = null) {
-        // Automatically clean up old logs before writing new ones
-        performCleanup(context)
+    fun logError(context: Context, tag: String, message: String, exception: Throwable? = null) {
+        val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+        val logEntry = if (exception != null) {
+            "[$timestamp] [$tag] $message\n${Log.getStackTraceString(exception)}\n"
+        } else {
+            "[$timestamp] [$tag] $message\n"
+        }
         
+        // Trigger cleanup before writing new log
+        performCleanup(context)
+
         try {
-            getLogOutputStream(context)?.use { fos ->
-                val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
-                val logEntry = "[$timestamp] [$tag] $message\n"
-                fos.write(logEntry.toByteArray())
-                throwable?.let {
-                    val writer = PrintWriter(fos)
-                    it.printStackTrace(writer)
-                    writer.flush()
-                }
-                fos.write("\n-----------------------------------\n".toByteArray())
-                fos.flush()
-            }
+            val logDir = getLogDirectory(context)
+            if (!logDir.exists()) logDir.mkdirs()
+            val logFile = File(logDir, getLogFileName()) // Use date-wise file
+            Log.d(TAG, "Logging error to: ${logFile.absolutePath}")
+            logFile.appendText(logEntry)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to write to log file", e)
+        }
+    }
+
+    /**
+     * Logs an API response with timestamp and API name.
+     */
+    fun logResponse(context: Context, apiName: String, response: String) {
+        val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+        val logEntry = "[$timestamp] [$apiName] $response\n"
+        
+        try {
+            val logDir = getLogDirectory(context)
+            if (!logDir.exists()) logDir.mkdirs()
+            val logFile = File(logDir, getApiResponseLogFileName())
+            logFile.appendText(logEntry)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to write API response to log file", e)
         }
     }
 
@@ -135,30 +167,30 @@ object FileLogger {
      */
     private fun performCleanup(context: Context) {
         try {
-            val logDir = getLogDirectory(context)
-            if (!logDir.exists() || !logDir.isDirectory) return
-
-            val files = logDir.listFiles() ?: return
-            val now = System.currentTimeMillis()
-            val sevenDaysInMillis = 7L * 24 * 60 * 60 * 1000
+            val logDir = getLogDirectory(context) ?: return
+            val files = logDir.listFiles { _, name -> 
+                (name.startsWith("errors_") || name.startsWith("api_responses_") || name.startsWith("backup_")) && name.endsWith(".txt") || name.endsWith(".db") 
+            } ?: return
+            
+            val sevenDaysAgo = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000L)
             val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
             for (file in files) {
-                if (file.isFile && file.name.startsWith("errors_") && file.name.endsWith(".txt")) {
-                    try {
-                        // Extract date string: errors_2026-03-19.txt -> 2026-03-19
-                        val datePart = file.name.substringAfter("errors_").substringBefore(".txt")
-                        val fileDate = dateFormat.parse(datePart)
-                        if (fileDate != null) {
-                            val diff = now - fileDate.time
-                            if (diff > sevenDaysInMillis) {
-                                if (file.delete()) {
-                                    Log.d(TAG, "Deleted old log file: ${file.name}")
-                                }
+                try {
+                    // Extract date string: errors_2026-03-19.txt -> 2026-03-19
+                    val datePart = file.name.substringAfter("errors_").substringBefore(".txt")
+                    val fileDate = dateFormat.parse(datePart)
+                    if (fileDate != null) {
+                        if (fileDate.time < sevenDaysAgo) {
+                            if (file.delete()) {
+                                Log.d(TAG, "Deleted old log file: ${file.name}")
                             }
                         }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to process file for cleanup: ${file.name}", e)
+                    }
+                } catch (e: Exception) {
+                    // Fallback to last modified time if parsing fails
+                    if (file.lastModified() < sevenDaysAgo) {
+                        file.delete()
                     }
                 }
             }

@@ -35,7 +35,7 @@ sealed class TvConfigResult {
 
 class TvConfigRepository(private val context: Context) {
 
-    private val api: ApiService = RetrofitClient.getApiLicenseService()
+    private val api: ApiService = RetrofitClient.getApiLicenseService(context)
     private val authPrefs = context.getSharedPreferences(AppSharedPreferences.AUTHENTICATION, Context.MODE_PRIVATE)
     private val dao = AppDatabase.getInstance(context).tvConfigDao()
     private val mappedBrokerDao = AppDatabase.getInstance(context).mappedBrokerDao()

@@ -13,9 +13,9 @@ import com.softland.callqtv.data.network.ApiService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class ProjectRepository {
+class ProjectRepository(private val context: android.content.Context) {
 
-    private val api: ApiService = RetrofitClient.getApiLicenseService()
+    private val api: ApiService = RetrofitClient.getApiLicenseService(context)
     private val gson = Gson()
 
     suspend fun authenticateProduct(url: String, request: ProductAuthenticationReq): ProductAuthenticationRes =

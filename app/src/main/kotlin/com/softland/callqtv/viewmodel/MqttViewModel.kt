@@ -74,6 +74,16 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         val qos: Int
     )
 
+    @Volatile
+    private var isLicenseExpired = false
+
+    fun setLicenseExpired(expired: Boolean) {
+        isLicenseExpired = expired
+        if (expired) {
+            android.util.Log.w("MqttViewModel", "License expired; MQTT message processing is BLOCKED.")
+        }
+    }
+
     private val _receivedMessage = MutableLiveData<String>()
     fun getReceivedMessage(): LiveData<String> = _receivedMessage
 
@@ -262,6 +272,8 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         val manager = MqttClientManager(context.applicationContext, serverUri, clientId).apply {
             setMqttListener(object : MqttClientManager.MqttListener {
                 override fun onMessageReceived(topic: String, message: String) {
+                    if (isLicenseExpired) return
+
                     lastIncomingMessageTime = System.currentTimeMillis()
                     // Enqueue ALL raw payloads first, without any filtering.
                     val trimmed = message.trim()

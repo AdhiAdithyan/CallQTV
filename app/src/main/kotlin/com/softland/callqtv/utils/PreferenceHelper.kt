@@ -11,6 +11,7 @@ object PreferenceHelper {
     const val project_code = "ProjectCode"
     const val TOKEN_VOICE = "token_voice"
     const val FCM_TOKEN = "fcm_token"
+    const val OFFLINE_ADS = "offline_ads"
     private const val CURRENT_DATE = "current_date"
 
     private fun getAuthPrefs(context: Context): SharedPreferences {
@@ -44,5 +45,13 @@ object PreferenceHelper {
 
     fun getFcmToken(context: Context): String {
         return getAuthPrefs(context).getString(FCM_TOKEN, "") ?: ""
+    }
+
+    fun isOfflineAdsEnabled(context: Context): Boolean {
+        return getAuthPrefs(context).getBoolean(OFFLINE_ADS, false)
+    }
+
+    fun setOfflineAdsEnabled(context: Context, enabled: Boolean) {
+        getAuthPrefs(context).edit().putBoolean(OFFLINE_ADS, enabled).apply()
     }
 }

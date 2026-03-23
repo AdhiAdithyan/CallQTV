@@ -40,8 +40,8 @@ sealed class RegistrationState {
 
 class RegistrationViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val projectRepository = ProjectRepository()
-    private val serviceRepository = ServiceUrlRepository()
+    private val projectRepository = ProjectRepository(application)
+    private val serviceRepository = ServiceUrlRepository(application)
     private val authPrefs = application.getSharedPreferences(AppSharedPreferences.AUTHENTICATION, Context.MODE_PRIVATE)
     private val gson = Gson()
 

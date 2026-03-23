@@ -39,6 +39,9 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
     private val _adFiles = MutableLiveData<List<AdFileEntity>>(emptyList())
     val adFiles: LiveData<List<AdFileEntity>> = _adFiles
 
+    private val _localAdFiles = MutableLiveData<List<AdFileEntity>>(emptyList())
+    val localAdFiles: LiveData<List<AdFileEntity>> = _localAdFiles
+
     private val _connectedDevices = MutableLiveData<List<ConnectedDeviceEntity>>(emptyList())
     val connectedDevices: LiveData<List<ConnectedDeviceEntity>> = _connectedDevices
     
@@ -52,6 +55,9 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
     val macAddress: String get() = _macAddress
     private val _isPendingApproval = MutableLiveData(false)
     val isPendingApproval: LiveData<Boolean> = _isPendingApproval
+
+    private val _isLicenseExpired = MutableLiveData(false)
+    val isLicenseExpired: LiveData<Boolean> = _isLicenseExpired
 
     private val authPrefs = application.getSharedPreferences(AppSharedPreferences.AUTHENTICATION, Context.MODE_PRIVATE)
 
@@ -145,7 +151,11 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                     when (result) {
                         is TvConfigResult.Success -> {
                             _config.value = result.entity
+                            _isLicenseExpired.value = false
                             _errorMessage.value = null
+                            
+                            // Successful sync: back up the database
+                            com.softland.callqtv.utils.DatabaseBackup.backupDatabase(getApplication())
                         }
                         is TvConfigResult.Pending -> {
                             _config.value = repository.getCachedConfig(_macAddress, customerId)
@@ -159,6 +169,10 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                             } else {
                                 result.message
                             }
+                            
+                            if (msg.contains("license expired", ignoreCase = true) || result.licenceStatus?.contains("expire", ignoreCase = true) == true) {
+                                _isLicenseExpired.value = true
+                            }
                             val isTimeoutLike = msg.contains("timeout", ignoreCase = true) ||
                                 msg.contains("timed out", ignoreCase = true)
                             if (isTimeoutLike) {
@@ -169,11 +183,21 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                                 }
                             } else {
                                 _errorMessage.value = msg
+                                com.softland.callqtv.utils.FileLogger.logError(getApplication(), "TVConfig", "Error: $msg")
                             }
                         }
                     }
                     _counters.value = repository.getCounters(_macAddress, customerId)
-                    _adFiles.value = repository.getAdFiles(_macAddress, customerId)
+                    val remoteFiles = repository.getAdFiles(_macAddress, customerId)
+                    _adFiles.value = remoteFiles
+                    
+                    // Offline ad synchronization
+                    if (PreferenceHelper.isOfflineAdsEnabled(getApplication())) {
+                        _localAdFiles.value = com.softland.callqtv.utils.AdDownloader.syncAds(getApplication(), remoteFiles)
+                    } else {
+                        _localAdFiles.value = remoteFiles
+                    }
+
                     _connectedDevices.value = repository.getConnectedDevices(_macAddress, customerId)
 
                     _config.value?.let { cfg ->
@@ -196,6 +220,7 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                     e.message?.contains("timed out", ignoreCase = true) == true
                 if (_config.value == null && !isTimeoutLike) {
                     _errorMessage.value = "Failed to load TV configuration: ${e.message}"
+                    com.softland.callqtv.utils.FileLogger.logError(getApplication(), "TVConfig", "Exception: ${e.message}", e)
                 } else if (_config.value == null && isTimeoutLike) {
                     // Retry internally without showing Configuration Error dialog
                     viewModelScope.launch {

@@ -4,9 +4,9 @@ import com.softland.callqtv.data.model.ServiceUrlResponse
 import com.softland.callqtv.data.network.RetrofitClient
 import com.softland.callqtv.data.network.ApiService
 
-class ServiceUrlRepository {
+class ServiceUrlRepository(private val context: android.content.Context) {
 
-    private val apiService: ApiService = RetrofitClient.getApiService()
+    private val apiService: ApiService = RetrofitClient.getApiService(context)
 
     suspend fun getServiceUrl(projectCode: String, baseUrl: String): ServiceUrlResponse? {
         val json = "{\"ProjectCode\":\"$projectCode\"}"

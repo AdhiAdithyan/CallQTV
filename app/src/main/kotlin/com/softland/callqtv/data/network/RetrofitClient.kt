@@ -1,5 +1,7 @@
 package com.softland.callqtv.data.network
 
+import android.content.Context
+
 import com.softland.callqtv.utils.UnsafeOkHttpClient
 import com.softland.callqtv.utils.Variables
 import okhttp3.OkHttpClient
@@ -43,6 +45,25 @@ object RetrofitClient {
     @JvmStatic
     var BASE_URL: String = "https://webtest.softlandindia.co.in/"
 
+    private var appContext: Context? = null
+
+    private val responseLoggingInterceptor by lazy {
+        Interceptor { chain ->
+            val request = chain.request()
+            val response = chain.proceed(request)
+            appContext?.let { ctx ->
+                try {
+                    val responseBody = response.peekBody(1024 * 1024) // Peek up to 1MB
+                    val apiName = request.url.encodedPath
+                    com.softland.callqtv.utils.FileLogger.logResponse(ctx, apiName, responseBody.string())
+                } catch (e: Exception) {
+                    android.util.Log.e("RetrofitClient", "Response logging failed", e)
+                }
+            }
+            response
+        }
+    }
+
     private var retrofit: Retrofit? = null
     private var licenseRetrofit: Retrofit? = null
 
@@ -54,6 +75,7 @@ object RetrofitClient {
         UnsafeOkHttpClient.getUnsafeOkHttpClient()
             .newBuilder()
             .addInterceptor(loggingInterceptor)
+            .addInterceptor(responseLoggingInterceptor)
             .addInterceptor(RetryInterceptor(maxRetries = 2))
             .addInterceptor { chain ->
                 val original = chain.request()
@@ -83,6 +105,7 @@ object RetrofitClient {
         UnsafeOkHttpClient.getUnsafeOkHttpClient()
             .newBuilder()
             .addInterceptor(loggingInterceptor)
+            .addInterceptor(responseLoggingInterceptor)
             .addInterceptor(RetryInterceptor(maxRetries = 3))
             .addInterceptor { chain ->
                 val original = chain.request()
@@ -108,7 +131,8 @@ object RetrofitClient {
     private var cachedApiLicenseService: ApiService? = null
 
     @JvmStatic
-    fun getApiService(): ApiService {
+    fun getApiService(context: Context): ApiService {
+        appContext = context.applicationContext
         val instance = retrofit
         if (instance == null || instance.baseUrl().toString() != BASE_URL) {
             val newRetrofit = Retrofit.Builder()
@@ -125,7 +149,8 @@ object RetrofitClient {
     }
 
     @JvmStatic
-    fun getApiLicenseService(): ApiService {
+    fun getApiLicenseService(context: Context): ApiService {
+        appContext = context.applicationContext
         val licenseUrl = Variables.getLicenseBaseUrl()
         var instance = licenseRetrofit
         
