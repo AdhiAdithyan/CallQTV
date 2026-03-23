@@ -20,6 +20,28 @@ object FileLogger {
     private const val TAG = "FileLogger"
     private const val BASE_FOLDER = "CallQTV"
 
+    private fun getLogFile(context: Context): File {
+        @Suppress("DEPRECATION")
+        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val callQtvDir = File(downloadsDir, BASE_FOLDER)
+        if (!callQtvDir.exists()) {
+            callQtvDir.mkdirs()
+        }
+        return File(callQtvDir, "log.txt")
+    }
+
+    private fun getErrorLogFile(context: Context): File {
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val dateString = dateFormat.format(Date())
+        @Suppress("DEPRECATION")
+        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val callQtvDir = File(downloadsDir, BASE_FOLDER)
+        if (!callQtvDir.exists()) {
+            callQtvDir.mkdirs()
+        }
+        return File(callQtvDir, "errors_$dateString.txt")
+    }
+
     /**
      * Generates a date-wise filename. e.g. errors_2026-03-19.log
      */
@@ -87,6 +109,9 @@ object FileLogger {
      * Logs an error message and optional throwable.
      */
     fun logError(context: Context, tag: String, message: String, throwable: Throwable? = null) {
+        // Automatically clean up old logs before writing new ones
+        performCleanup(context)
+        
         try {
             getLogOutputStream(context)?.use { fos ->
                 val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
@@ -102,6 +127,43 @@ object FileLogger {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to write to log file", e)
+        }
+    }
+
+    /**
+     * Deletes log files in the CallQTV directory that are older than 7 days.
+     */
+    private fun performCleanup(context: Context) {
+        try {
+            val logDir = getLogDirectory(context)
+            if (!logDir.exists() || !logDir.isDirectory) return
+
+            val files = logDir.listFiles() ?: return
+            val now = System.currentTimeMillis()
+            val sevenDaysInMillis = 7L * 24 * 60 * 60 * 1000
+            val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+
+            for (file in files) {
+                if (file.isFile && file.name.startsWith("errors_") && file.name.endsWith(".txt")) {
+                    try {
+                        // Extract date string: errors_2026-03-19.txt -> 2026-03-19
+                        val datePart = file.name.substringAfter("errors_").substringBefore(".txt")
+                        val fileDate = dateFormat.parse(datePart)
+                        if (fileDate != null) {
+                            val diff = now - fileDate.time
+                            if (diff > sevenDaysInMillis) {
+                                if (file.delete()) {
+                                    Log.d(TAG, "Deleted old log file: ${file.name}")
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to process file for cleanup: ${file.name}", e)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Cleanup failed", e)
         }
     }
 }

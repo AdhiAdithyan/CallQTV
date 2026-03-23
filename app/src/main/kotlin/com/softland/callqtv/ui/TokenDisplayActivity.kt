@@ -1,9 +1,17 @@
 package com.softland.callqtv.ui
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -88,10 +96,12 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DataSource
+import androidx.media3.exoplayer.DefaultLoadControl
+import java.io.File
 import android.media.MediaPlayer
 import android.media.AudioManager
 import android.media.ToneGenerator
-import android.net.Uri
 import android.util.Log
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -124,6 +134,12 @@ class TokenDisplayActivity : ComponentActivity() {
         setContent {
             // Theme State - load async to avoid blocking main thread during composition
             val context = LocalContext.current
+            
+            // Check & Request Storage Permissions
+            LaunchedEffect(Unit) {
+                checkAndRequestStoragePermissions()
+            }
+
             var currentThemeHex by remember { mutableStateOf("#2196F3") }
             var counterBgHex by remember { mutableStateOf("#FFFFFF") }
             var tokenBgHex by remember { mutableStateOf("#FFFFFF") }
@@ -177,6 +193,32 @@ class TokenDisplayActivity : ComponentActivity() {
         super.onDestroy()
         MediaEngine.shutdown()
         TokenAnnouncer.shutdown()
+    }
+
+    private fun checkAndRequestStoragePermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!Environment.isExternalStorageManager()) {
+                try {
+                    val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                    intent.data = Uri.parse("package:$packageName")
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                    startActivity(intent)
+                }
+            }
+        } else {
+            val permissions = arrayOf(
+                android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+            )
+            val needsRequest = permissions.any {
+                ContextCompat.checkSelfPermission(this, it) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            }
+            if (needsRequest) {
+                ActivityCompat.requestPermissions(this, permissions, 1001)
+            }
+        }
     }
 }
 
@@ -571,7 +613,7 @@ fun TokenDisplayScreen(
             text = { 
                 Column {
                     Text(
-                        "The display could not connect to the messaging server.\n" +
+                        "The display could not connect to the messaging server (Attempt $mqttRetryAttempt).\n" +
                         "Please check your network or broker settings, then tap Retry.",
                         style = MaterialTheme.typography.bodyMedium
                     )
@@ -1096,10 +1138,23 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
         }
     }
 
-    // Timer logic for IMAGES only
+    val context = LocalContext.current
+    // Timer logic and Pre-fetching
     LaunchedEffect(safeIndex, isVideo, orderedAds.size) {
         if (orderedAds.isEmpty()) return@LaunchedEffect
         
+        // Pre-fetch the NEXT ad while current is playing
+        if (orderedAds.size > 1) {
+            val nextIndex = (safeIndex + 1) % orderedAds.size
+            val nextAd = orderedAds[nextIndex]
+            val nextPath = nextAd.filePath.lowercase()
+            val nextIsVideo = nextPath.endsWith(".mp4") || nextPath.endsWith(".mkv") || nextPath.endsWith(".mov") || nextPath.endsWith(".3gp") || nextPath.endsWith(".webm")
+            
+            if (nextIsVideo) {
+                MediaEngine.prepareNext(context, nextAd.filePath)
+            }
+        }
+
         if (!isVideo) {
             // Delay for images, then move to next
             delay(intervalSeconds * 1000L)
@@ -1194,27 +1249,66 @@ fun AdVideoPlayer(videoUrl: String, onVideoEnded: () -> Unit) {
  */
 object MediaEngine {
     private var player: ExoPlayer? = null
+    private var simpleCache: androidx.media3.datasource.cache.Cache? = null
+    private var cacheFactory: DataSource.Factory? = null
 
     @androidx.annotation.OptIn(UnstableApi::class)
     fun get(context: Context): ExoPlayer {
         if (player == null) {
             val httpClient = UnsafeOkHttpClient.getUnsafeOkHttpClient()
-            val dataSourceFactory = OkHttpDataSource.Factory(httpClient)
+            val okHttpFactory = OkHttpDataSource.Factory(httpClient)
             
+            // Initialize Cache if not exists
+            if (simpleCache == null) {
+                val cacheDir = File(context.cacheDir, "ad_video_cache")
+                val evictor = androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor(100 * 1024 * 1024) // 100MB
+                simpleCache = androidx.media3.datasource.cache.SimpleCache(cacheDir, evictor, androidx.media3.database.StandaloneDatabaseProvider(context))
+            }
+            
+            // Shared Cache Factory
+            val upstreamFactory = DefaultDataSource.Factory(context, okHttpFactory)
+            cacheFactory = androidx.media3.datasource.cache.CacheDataSource.Factory()
+                .setCache(simpleCache!!)
+                .setUpstreamDataSourceFactory(upstreamFactory)
+                .setFlags(androidx.media3.datasource.cache.CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+ 
+            // Faster Load Control
+            val loadControl = DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                    2000,
+                    5000,
+                    1000,
+                    1500
+                )
+                .build()
+ 
             player = ExoPlayer.Builder(context.applicationContext)
-                .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+                .setMediaSourceFactory(DefaultMediaSourceFactory(cacheFactory!!))
+                .setLoadControl(loadControl)
                 .build().apply {
                     repeatMode = Player.REPEAT_MODE_OFF
-                    volume = 0f // Mute advertisement audio
+                    // Respect user preference for ad sound
+                    val isAdSoundEnabled = context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
+                        .getBoolean("enable_ad_sound", false)
+                    volume = if (isAdSoundEnabled) 1f else 0f
                 }
         }
         return player!!
     }
+
+    fun updateVolume(context: Context) {
+        val isAdSoundEnabled = context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
+            .getBoolean("enable_ad_sound", false)
+        player?.volume = if (isAdSoundEnabled) 1f else 0f
+    }
     
+    @androidx.annotation.OptIn(UnstableApi::class)
     fun prepareNext(context: Context, url: String) {
-        // Optional: Pre-fill buffers for next video
-        // ExoPlayer 2/Media3 handles some of this if items are added to a playlist,
-        // but for now we reuse the instance to save initialization time (the biggest delay).
+        if (url.isBlank()) return
+        // Optional: Trigger a background load into cache
+        // Media3 doesn't have a simple "pre-download" single URL call without a full downloader,
+        // but adding it to a hidden player or just creating the media source and "preparing" it 
+        // silently can help. For now, the disk cache will store items once played once.
     }
 
     fun shutdown() {
@@ -1373,18 +1467,21 @@ fun CounterBoard(
         }
     }
 
-    val blinkAlpha by if (shouldBlink && blinkActive) {
-        rememberInfiniteTransition(label = "counter_blink").animateFloat(
-            initialValue = 1f,
-            targetValue = 0.3f,
+    val isInverted by if (shouldBlink && blinkActive) {
+        val transition = rememberInfiniteTransition(label = "counter_invert")
+        val step by transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 2f,
             animationSpec = infiniteRepeatable(
-                animation = tween(800, easing = LinearEasing),
-                repeatMode = RepeatMode.Reverse
+                animation = tween(1000, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
             ),
-            label = "alpha"
+            label = "invert_step"
         )
+        // Step 0..1 = Inverted, 1..2 = Normal
+        remember(step) { mutableStateOf(step < 1f) }
     } else {
-        remember { mutableStateOf(1f) }
+        remember { mutableStateOf(false) }
     }
 
     Card(
@@ -1451,7 +1548,7 @@ fun CounterBoard(
                                     textColor = textColorToUse,
                                     bgBrush = tokenBgBrush,
                                     fontSize = currentFontSize,
-                                    blinkAlpha = if (isFirst && shouldBlink && token != null) blinkAlpha else 1f
+                                    isInverted = if (isFirst && shouldBlink && token != null) isInverted else false
                                 )
                             }
                         }
@@ -1490,15 +1587,15 @@ fun CounterBoard(
                             }
                             val currentFontSize = if (isFirst) tokenFontSize else tokenFontSize
                             val textColorToUse = if (isFirst) currentTokenTextColor else previousTokenTextColor
-                            TokenCard(
-                                token = displayToken,
-                                isPrimary = isFirst,
-                                scale = scale,
-                                textColor = textColorToUse,
-                                bgBrush = tokenBgBrush,
-                                fontSize = currentFontSize,
-                                blinkAlpha = if (isFirst && shouldBlink && token != null) blinkAlpha else 1f
-                            )
+                                TokenCard(
+                                    token = displayToken,
+                                    isPrimary = isFirst,
+                                    scale = scale,
+                                    textColor = textColorToUse,
+                                    bgBrush = tokenBgBrush,
+                                    fontSize = currentFontSize,
+                                    isInverted = if (isFirst && shouldBlink && token != null) isInverted else false
+                                )
                         }
                     }
                 }
@@ -1515,7 +1612,7 @@ fun TokenCard(
     textColor: Color,
     bgBrush: Brush,
     fontSize: Float,
-    blinkAlpha: Float = 1f
+    isInverted: Boolean = false
 ) {
     // Dynamic height based on font size to prevent clipping
     // Reduced height multiplier to tighten padding around the text
@@ -1530,19 +1627,34 @@ fun TokenCard(
         elevation = CardDefaults.cardElevation(2.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent)
     ) {
+        // Swap colors if inverted
+        val finalBg = if (isInverted) {
+            // If we swap, text color becomes background. 
+            // Since bg is Brush, we'll use SolidColor for simplicity when inverted
+            SolidColor(textColor)
+        } else {
+            bgBrush
+        }
+        
+        // Attempt to find a suitable text color when inverted (the old background).
+        // If the background is a brush, we might need a default or extract a primary color.
+        // For now, if inverted, we'll try to pick a fallback (e.g. white or black) or 
+        // if we have a counterBgHex, use that.
+        // A simple approach: Inverted mode = White text on original TextColor background
+        val finalTextColor = if (isInverted) Color.White else textColor
+
         Box(
-            modifier = Modifier.fillMaxSize().background(bgBrush),
+            modifier = Modifier.fillMaxSize().background(finalBg),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = token ?: "",
                 fontWeight = FontWeight.Bold,
                 fontSize = (fontSize * scale).sp,
-                color = textColor,
+                color = finalTextColor,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
-                softWrap = false,
-                modifier = Modifier.graphicsLayer { alpha = blinkAlpha }
+                softWrap = false
             )
         }
     }
@@ -1646,6 +1758,7 @@ fun AppearanceSettingsDialog(
     var currentThemeHex by remember { mutableStateOf("#2196F3") }
     var notificationSoundKey by remember { mutableStateOf("ding") }
     var is24Hour by remember { mutableStateOf(true) }
+    var isAdSoundEnabled by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         withContext(Dispatchers.Default) {
             currentCounterHex = ThemeColorManager.getCounterBackgroundColor(context)
@@ -1656,6 +1769,8 @@ fun AppearanceSettingsDialog(
                 .getInt(PreferenceHelper.customer_id, 0)
             is24Hour = context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
                 .getBoolean("use_24_hour_format", true)
+            isAdSoundEnabled = context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
+                .getBoolean("enable_ad_sound", false)
         }
     }
 
@@ -1954,6 +2069,42 @@ fun AppearanceSettingsDialog(
                                         context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
                                             .edit().putBoolean("use_24_hour_format", it).apply()
                                         viewModel.setTimeFormat(it)
+                                    },
+                                    modifier = Modifier.scale(0.85f)
+                                )
+                            }
+
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                            // Advertisement Sound Toggle
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        val newState = !isAdSoundEnabled
+                                        isAdSoundEnabled = newState
+                                        context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
+                                            .edit().putBoolean("enable_ad_sound", newState).apply()
+                                        MediaEngine.updateVolume(context)
+                                    },
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text("Advertisement Sound", style = MaterialTheme.typography.bodyMedium)
+                                    Text(
+                                        if (isAdSoundEnabled) "Enabled" else "Disabled",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.Gray
+                                    )
+                                }
+                                Switch(
+                                    checked = isAdSoundEnabled,
+                                    onCheckedChange = {
+                                        isAdSoundEnabled = it
+                                        context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
+                                            .edit().putBoolean("enable_ad_sound", it).apply()
+                                        MediaEngine.updateVolume(context)
                                     },
                                     modifier = Modifier.scale(0.85f)
                                 )

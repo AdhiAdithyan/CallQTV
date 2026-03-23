@@ -14,9 +14,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         CounterEntity::class,
         AdFileEntity::class,
         TokenHistoryEntity::class,
-        ConnectedDeviceEntity::class
+        ConnectedDeviceEntity::class,
+        TokenRecordEntity::class
     ],
-    version = 14,
+    version = 15,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -27,6 +28,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun adFileDao(): AdFileDao
     abstract fun tokenHistoryDao(): TokenHistoryDao
     abstract fun connectedDeviceDao(): ConnectedDeviceDao
+    abstract fun tokenRecordDao(): TokenRecordDao
 
     companion object {
         @Volatile

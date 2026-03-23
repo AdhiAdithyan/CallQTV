@@ -29,6 +29,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         loadPersistedHistory()
+        performRecordsCleanup()
     }
 
     private val retryAttempts = mutableMapOf<String, Int>()
@@ -52,6 +53,10 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
 
     private val connectedDeviceDao by lazy {
         AppDatabase.getInstance(application).connectedDeviceDao()
+    }
+
+    private val tokenRecordRepo: com.softland.callqtv.data.repository.TokenRecordRepository by lazy {
+        com.softland.callqtv.data.repository.TokenRecordRepository(AppDatabase.getInstance(application))
     }
 
     // In-memory cache of allowed keypad serials (normalized uppercase),
@@ -91,23 +96,25 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     fun getConnectTimer(): LiveData<Int> = _connectTimer
 
     private var timerJob: kotlinx.coroutines.Job? = null
+    private var connectTime = 0
 
     private fun startConnectTimer() {
-        if (timerJob?.isActive == true) return // Already running
-        _isConnectingToMqtt.postValue(true)
+        connectTime = 0
         _connectTimer.postValue(0)
+        
+        if (timerJob?.isActive == true) return
+
+        _isConnectingToMqtt.postValue(true)
         timerJob = viewModelScope.launch(Dispatchers.Main) {
-            var time = 0
             while (true) {
                 delay(1000)
-                time++
-                _connectTimer.postValue(time)
+                connectTime++
+                _connectTimer.postValue(connectTime)
                 
                 // If attempt reaches 30s without success, force a fresh retry loop.
-                if (time >= 30) {
+                if (connectTime >= 30) {
                     android.util.Log.w("MqttViewModel", "MQTT Connection attempt timed out after 30s; forcing a fresh retry.")
                     retryConnect()
-                    break
                 }
             }
         }
@@ -207,6 +214,16 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                         "Failed to clear token history: ${e.message}"
                     )
                 }
+            }
+        }
+    }
+
+    private fun performRecordsCleanup() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                tokenRecordRepo.performDailyCleanup()
+            } catch (e: Exception) {
+                android.util.Log.e("MqttViewModel", "Token records cleanup failed", e)
             }
         }
     }
@@ -628,8 +645,14 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
             val list = (internalTokenMap[trimmedCounter] ?: emptyList()).toMutableList()
             val existingPosition = list.indexOf(trimmedToken)
 
-            // If already at top, per user request: DO NOT announce
+            // If already at top, per user request: DO NOT announce unless > 10s passed
             if (existingPosition == 0) {
+                val lastTime = announcedTokenTimestamps["${trimmedCounter}_$trimmedToken"] ?: 0L
+                if (System.currentTimeMillis() - lastTime > 10000L) {
+                    // Re-announce
+                    persistToken(trimmedCounter, trimmedToken)
+                    return@withLock true
+                }
                 return@withLock false
             }
 
@@ -679,8 +702,14 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 val list = (internalTokenMap[key] ?: emptyList()).toMutableList()
                 val existingPosition = list.indexOf(trimmedToken)
 
-                // If it's already the most recent for this key, keep moving but don't set shouldAnnounce
+                // If it's already the most recent for this key
                 if (existingPosition == 0) {
+                    if (key == trimmedPrimary) {
+                        val lastTime = announcedTokenTimestamps["${key}_$trimmedToken"] ?: 0L
+                        if (System.currentTimeMillis() - lastTime > 10000L) {
+                            shouldAnnounce = true
+                        }
+                    }
                     continue
                 }
 
@@ -729,6 +758,9 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
             if (result != null) {
                 val (counter, token) = result
                 if (token != "0" && token.isNotBlank() && counter != "0" && counter.isNotBlank()) {
+                    // Log to the new detailed token_records table
+                    saveTokenRecord(message, counter, token)
+
                     // Channel has UNLIMITED capacity; enqueue without blocking the MQTT thread.
                     announcementQueueSize.incrementAndGet()
                     tokenUpdateChannel.send(counter to token)
@@ -740,6 +772,52 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 "MqttViewModel",
                 "Failed to parse MQTT message '$message' on topic '$topic': ${e.message}"
             )
+        }
+    }
+
+    private fun saveTokenRecord(message: String, counterKey: String, token: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val app = getApplication<Application>()
+                val authPrefs = app.getSharedPreferences(
+                    com.softland.callqtv.data.local.AppSharedPreferences.AUTHENTICATION,
+                    android.content.Context.MODE_PRIVATE
+                )
+                val customerId = String.format(
+                    java.util.Locale.ROOT,
+                    "%04d",
+                    authPrefs.getInt(com.softland.callqtv.utils.PreferenceHelper.customer_id, 0)
+                )
+                val macAddress = com.softland.callqtv.utils.Variables.getMacId(app)
+                
+                // Find counter details for ID and Name
+                val counters = AppDatabase.getInstance(app).counterDao().getByMacAndCustomer(macAddress, customerId)
+                val matchingCounter = counters.find { 
+                    it.code?.trim() == counterKey.trim() || it.defaultCode?.trim() == counterKey.trim() 
+                }
+                
+                val counterId = matchingCounter?.counterId?.toIntOrNull() ?: 0
+                val counterName = matchingCounter?.name ?: matchingCounter?.defaultName ?: counterKey
+                val serial = extractKeypadSerial(message) ?: "UNKNOWN"
+                
+                // Extract called_time from payload (e.g., "$02026bCAL0K00071100030*")
+                // In this protocol, the bytes after serial might contain time info, 
+                // but if not explicit, we use the message receive time from the payload if possible, 
+                // or just pass the raw "CAL0K" part as a placeholder if requested.
+                // The user requested 'called_time' as a string.
+                val calledTime = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+
+                tokenRecordRepo.saveRecord(
+                    macAddress = macAddress,
+                    counterId = counterId,
+                    counterName = counterName,
+                    tokenNumber = token,
+                    keypadSerialNumber = serial,
+                    calledTime = calledTime
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("MqttViewModel", "Failed to save detailed token record", e)
+            }
         }
     }
 
