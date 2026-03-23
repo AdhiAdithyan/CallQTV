@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
@@ -84,6 +85,7 @@ import com.softland.callqtv.utils.PreferenceHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 import android.graphics.Color as AndroidColor
 import androidx.compose.ui.viewinterop.AndroidView
@@ -98,6 +100,10 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DataSource
 import androidx.media3.exoplayer.DefaultLoadControl
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView
+import androidx.lifecycle.LifecycleOwner
 import java.io.File
 import android.media.MediaPlayer
 import android.media.AudioManager
@@ -1117,75 +1123,132 @@ fun NetworkStatusIndicator(isOnline: Boolean, isPortrait: Boolean, scale: Float)
 
 @Composable
 fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
-    // Sort and remember ads stably
     val orderedAds = remember(adFiles) { adFiles.sortedBy { it.position } }
-    var currentAdIndex by remember { mutableStateOf(0) }
+    val context = LocalContext.current
     val intervalSeconds = (config.adInterval ?: 5).coerceAtLeast(1)
-    
-    // Safety check: ensure index is within current list bounds
-    val safeIndex = if (orderedAds.isNotEmpty()) currentAdIndex % orderedAds.size else 0
-    val currentAd = orderedAds.getOrNull(safeIndex)
-    
-    val isVideo = remember(currentAd) { 
-        val path = currentAd?.filePath?.lowercase() ?: ""
-        path.endsWith(".mp4") || path.endsWith(".mkv") || path.endsWith(".mov") || path.endsWith(".3gp") || path.endsWith(".webm")
-    }
 
-    // Single source of truth for moving to the next ad
-    val moveToNext = {
+    // visibleAd: Ad currently on screen
+    var visibleAd by remember { mutableStateOf(orderedAds.getOrNull(0)) }
+    // preparingAd: Ad currently being loaded in background
+    var preparingAd by remember { mutableStateOf<AdFileEntity?>(null) }
+    // nextAdIndex: Sequence counter
+    var nextAdIndex by remember { mutableStateOf(0) }
+    
+    // Player indexing for dual-player setup
+    var activePlayerIdx by remember { mutableStateOf(0) }
+    var isNextReady by remember { mutableStateOf(false) }
+
+    val triggerNext = {
         if (orderedAds.isNotEmpty()) {
-            currentAdIndex = (currentAdIndex + 1) % orderedAds.size
+            nextAdIndex = (nextAdIndex + 1) % orderedAds.size
+            isNextReady = false
         }
     }
 
-    val context = LocalContext.current
-    // Timer logic and Pre-fetching
-    LaunchedEffect(safeIndex, isVideo, orderedAds.size) {
+    // Logic to start preloading the next ad
+    LaunchedEffect(nextAdIndex, orderedAds.size) {
         if (orderedAds.isEmpty()) return@LaunchedEffect
         
-        // Pre-fetch the NEXT ad while current is playing
-        if (orderedAds.size > 1) {
-            val nextIndex = (safeIndex + 1) % orderedAds.size
-            val nextAd = orderedAds[nextIndex]
-            val nextPath = nextAd.filePath.lowercase()
-            val nextIsVideo = nextPath.endsWith(".mp4") || nextPath.endsWith(".mkv") || nextPath.endsWith(".mov") || nextPath.endsWith(".3gp") || nextPath.endsWith(".webm")
-            
-            if (nextIsVideo) {
-                MediaEngine.prepareNext(context, nextAd.filePath)
-            }
-        }
+        val targetAd = orderedAds[nextAdIndex]
+        preparingAd = targetAd
+        isNextReady = false
 
-        if (!isVideo) {
-            // Delay for images, then move to next
-            delay(intervalSeconds * 1000L)
-            moveToNext()
+        val path = targetAd.filePath.lowercase()
+        val isVideo = path.endsWith(".mp4") || path.endsWith(".mkv") || path.endsWith(".mov") || path.endsWith(".3gp") || path.endsWith(".webm")
+        val isYouTube = path.contains("youtube.com") || path.contains("youtu.be")
+
+        if (isVideo || isYouTube) {
+            // Video or YouTube: wait for onReady or timeout
+            withTimeoutOrNull(12000) { // 12s for YouTube
+                while (!isNextReady) { delay(200) }
+            }
+            if (!isNextReady) {
+                triggerNext() 
+            } else {
+                activePlayerIdx = 1 - activePlayerIdx
+                visibleAd = targetAd
+            }
+        } else {
+            // Image logic: delay then switch
+            if (visibleAd != null) {
+                delay(intervalSeconds * 1000L)
+            }
+            visibleAd = targetAd
+            isNextReady = true
         }
-        // For videos, we rely strictly on the player listener
     }
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant).padding(4.dp), contentAlignment = Alignment.Center) {
         if (orderedAds.isEmpty()) {
             Text("No Ads", color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
-            Crossfade(targetState = currentAd, animationSpec = tween(600), label = "ad_fade") { ad ->
+            // Main Display
+            Crossfade(targetState = visibleAd, animationSpec = tween(600), label = "ad_fade") { ad ->
                 if (ad != null) {
                     val path = ad.filePath.lowercase()
                     val adIsVideo = path.endsWith(".mp4") || path.endsWith(".mkv") || path.endsWith(".mov") || path.endsWith(".3gp") || path.endsWith(".webm")
+                    val adIsYouTube = path.contains("youtube.com") || path.contains("youtu.be")
                     
-                    if (adIsVideo) {
+                    if (adIsYouTube) {
+                        val videoId = extractYoutubeVideoId(ad.filePath)
+                        if (videoId != null) {
+                            YouTubeAdPlayer(
+                                videoId = videoId,
+                                onVideoEnded = { triggerNext() },
+                                onReady = { if (ad == preparingAd) isNextReady = true },
+                                onError = { triggerNext() }
+                            )
+                        } else triggerNext()
+                    } else if (adIsVideo) {
                         AdVideoPlayer(
                             videoUrl = ad.filePath,
-                            onVideoEnded = { moveToNext() }
+                            player = MediaEngine.get(context, activePlayerIdx),
+                            onVideoEnded = { triggerNext() },
+                            onReady = { if (ad == preparingAd) isNextReady = true },
+                            onError = { triggerNext() }
                         )
                     } else {
                         AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
+                            model = ImageRequest.Builder(context)
                                 .data(ad.filePath)
                                 .crossfade(true)
                                 .build(),
                             contentDescription = "Ad",
                             modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Fit
+                            contentScale = ContentScale.Fit,
+                            onSuccess = { if (ad == preparingAd) isNextReady = true },
+                            onError = { triggerNext() }
+                        )
+                    }
+                }
+            }
+            
+            // Background Preloader (uses the OTHER player)
+            if (!isNextReady && preparingAd != visibleAd && preparingAd != null) {
+                val nextPath = preparingAd!!.filePath.lowercase()
+                val nextIsVideo = nextPath.endsWith(".mp4") || nextPath.endsWith(".mkv") || nextPath.endsWith(".mov") || nextPath.endsWith(".3gp") || nextPath.endsWith(".webm")
+                val nextIsYouTube = nextPath.contains("youtube.com") || nextPath.contains("youtu.be")
+                
+                if (nextIsYouTube) {
+                    val videoId = extractYoutubeVideoId(preparingAd!!.filePath)
+                    if (videoId != null) {
+                        Box(modifier = Modifier.size(1.dp).alpha(0.01f)) {
+                            YouTubeAdPlayer(
+                                videoId = videoId,
+                                onVideoEnded = { },
+                                onReady = { isNextReady = true },
+                                onError = { triggerNext() }
+                            )
+                        }
+                    } else isNextReady = true
+                } else if (nextIsVideo) {
+                    Box(modifier = Modifier.size(1.dp).alpha(0.01f)) {
+                        AdVideoPlayer(
+                            videoUrl = preparingAd!!.filePath,
+                            player = MediaEngine.get(context, 1 - activePlayerIdx),
+                            onVideoEnded = { },
+                            onReady = { isNextReady = true },
+                            onError = { triggerNext() }
                         )
                     }
                 }
@@ -1194,44 +1257,90 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
     }
 }
 
+private fun extractYoutubeVideoId(url: String): String? {
+    val regex = "^.*((youtu.be\\/)|(v\\/)|(\\/u\\/\\w\\/)|(embed\\/)|(watch\\?))\\??v?=?([^#&?]*).*".toRegex()
+    val matchResult = regex.find(url)
+    return matchResult?.groupValues?.get(7)?.takeIf { it.length == 11 }
+}
+
+@Composable
+fun YouTubeAdPlayer(
+    videoId: String,
+    onVideoEnded: () -> Unit,
+    onReady: () -> Unit = {},
+    onError: () -> Unit = {}
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    
+    val latestOnVideoEnded by rememberUpdatedState(onVideoEnded)
+    val latestOnReady by rememberUpdatedState(onReady)
+    val latestOnError by rememberUpdatedState(onError)
+
+    AndroidView(
+        factory = { ctx ->
+            YouTubePlayerView(ctx).apply {
+                lifecycleOwner.lifecycle.addObserver(this)
+                addYouTubePlayerListener(object : AbstractYouTubePlayerListener() {
+                    override fun onReady(youTubePlayer: YouTubePlayer) {
+                        youTubePlayer.loadVideo(videoId, 0f)
+                        latestOnReady()
+                    }
+
+                    override fun onStateChange(youTubePlayer: YouTubePlayer, state: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerState) {
+                        if (state == com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerState.ENDED) {
+                            latestOnVideoEnded()
+                        }
+                    }
+
+                    override fun onError(youTubePlayer: YouTubePlayer, error: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerError) {
+                        latestOnError()
+                    }
+                })
+            }
+        },
+        modifier = Modifier.fillMaxSize()
+    )
+}
+
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
-fun AdVideoPlayer(videoUrl: String, onVideoEnded: () -> Unit) {
+fun AdVideoPlayer(videoUrl: String, player: ExoPlayer, onVideoEnded: () -> Unit, onReady: () -> Unit = {}, onError: () -> Unit = {}) {
     val context = LocalContext.current
-    val player = remember(context) { MediaEngine.get(context) }
     
-    // Use a stable reference to the callback to avoid listener leaks and multiple calls
     val latestOnVideoEnded by rememberUpdatedState(onVideoEnded)
+    val latestOnReady by rememberUpdatedState(onReady)
+    val latestOnError by rememberUpdatedState(onError)
 
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
-    DisposableEffect(videoUrl) {
+    DisposableEffect(videoUrl, player) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
-                if (state == Player.STATE_ENDED) {
-                    mainHandler.post { latestOnVideoEnded() }
+                when (state) {
+                    Player.STATE_READY -> {
+                        mainHandler.post { latestOnReady() }
+                    }
+                    Player.STATE_ENDED -> {
+                        mainHandler.post { latestOnVideoEnded() }
+                    }
                 }
             }
             override fun onPlayerError(e: androidx.media3.common.PlaybackException) {
-                mainHandler.post { latestOnVideoEnded() }
+                mainHandler.post { latestOnError() }
             }
         }
         
         player.addListener(listener)
-        
-        onDispose {
-            player.removeListener(listener)
-        }
+        onDispose { player.removeListener(listener) }
     }
     
-    // Load and play the video
-    LaunchedEffect(videoUrl) {
+    LaunchedEffect(videoUrl, player) {
         val mediaItem = MediaItem.fromUri(videoUrl)
         player.setMediaItem(mediaItem)
         player.prepare()
         player.playWhenReady = true
     }
 
-    // Shared player: never stop() on dispose of a single view, as it might kill the next video's start
     AndroidView(
         factory = {
             PlayerView(context).apply {
@@ -1244,76 +1353,69 @@ fun AdVideoPlayer(videoUrl: String, onVideoEnded: () -> Unit) {
     )
 }
 
-/**
- * Global Media Engine to reuse ExoPlayer instance and reduce loading overhead
- */
 object MediaEngine {
-    private var player: ExoPlayer? = null
+    private var player1: ExoPlayer? = null
+    private var player2: ExoPlayer? = null
     private var simpleCache: androidx.media3.datasource.cache.Cache? = null
     private var cacheFactory: DataSource.Factory? = null
 
     @androidx.annotation.OptIn(UnstableApi::class)
-    fun get(context: Context): ExoPlayer {
-        if (player == null) {
-            val httpClient = UnsafeOkHttpClient.getUnsafeOkHttpClient()
-            val okHttpFactory = OkHttpDataSource.Factory(httpClient)
-            
-            // Initialize Cache if not exists
-            if (simpleCache == null) {
-                val cacheDir = File(context.cacheDir, "ad_video_cache")
-                val evictor = androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor(100 * 1024 * 1024) // 100MB
-                simpleCache = androidx.media3.datasource.cache.SimpleCache(cacheDir, evictor, androidx.media3.database.StandaloneDatabaseProvider(context))
-            }
-            
-            // Shared Cache Factory
+    private fun createPlayer(context: Context): ExoPlayer {
+        val httpClient = UnsafeOkHttpClient.getUnsafeOkHttpClient()
+        val okHttpFactory = OkHttpDataSource.Factory(httpClient)
+        
+        if (simpleCache == null) {
+            val cacheDir = File(context.cacheDir, "ad_video_cache")
+            val evictor = androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor(100 * 1024 * 1024)
+            simpleCache = androidx.media3.datasource.cache.SimpleCache(cacheDir, evictor, androidx.media3.database.StandaloneDatabaseProvider(context))
+        }
+        
+        if (cacheFactory == null) {
             val upstreamFactory = DefaultDataSource.Factory(context, okHttpFactory)
             cacheFactory = androidx.media3.datasource.cache.CacheDataSource.Factory()
                 .setCache(simpleCache!!)
                 .setUpstreamDataSourceFactory(upstreamFactory)
                 .setFlags(androidx.media3.datasource.cache.CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
- 
-            // Faster Load Control
-            val loadControl = DefaultLoadControl.Builder()
-                .setBufferDurationsMs(
-                    2000,
-                    5000,
-                    1000,
-                    1500
-                )
-                .build()
- 
-            player = ExoPlayer.Builder(context.applicationContext)
-                .setMediaSourceFactory(DefaultMediaSourceFactory(cacheFactory!!))
-                .setLoadControl(loadControl)
-                .build().apply {
-                    repeatMode = Player.REPEAT_MODE_OFF
-                    // Respect user preference for ad sound
-                    val isAdSoundEnabled = context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
-                        .getBoolean("enable_ad_sound", false)
-                    volume = if (isAdSoundEnabled) 1f else 0f
-                }
         }
-        return player!!
+
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(2000, 5000, 1000, 1500)
+            .build()
+
+        return ExoPlayer.Builder(context.applicationContext)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(cacheFactory!!))
+            .setLoadControl(loadControl)
+            .build().apply {
+                repeatMode = Player.REPEAT_MODE_OFF
+                val isAdSoundEnabled = context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
+                    .getBoolean("enable_ad_sound", false)
+                volume = if (isAdSoundEnabled) 1f else 0f
+            }
+    }
+
+    fun get(context: Context, index: Int = 0): ExoPlayer {
+        return if (index == 0) {
+            if (player1 == null) player1 = createPlayer(context)
+            player1!!
+        } else {
+            if (player2 == null) player2 = createPlayer(context)
+            player2!!
+        }
     }
 
     fun updateVolume(context: Context) {
         val isAdSoundEnabled = context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
             .getBoolean("enable_ad_sound", false)
-        player?.volume = if (isAdSoundEnabled) 1f else 0f
-    }
-    
-    @androidx.annotation.OptIn(UnstableApi::class)
-    fun prepareNext(context: Context, url: String) {
-        if (url.isBlank()) return
-        // Optional: Trigger a background load into cache
-        // Media3 doesn't have a simple "pre-download" single URL call without a full downloader,
-        // but adding it to a hidden player or just creating the media source and "preparing" it 
-        // silently can help. For now, the disk cache will store items once played once.
+        val vol = if (isAdSoundEnabled) 1f else 0f
+        player1?.volume = vol
+        player2?.volume = vol
     }
 
     fun shutdown() {
-        player?.release()
-        player = null
+        player1?.release()
+        player2?.release()
+        player1 = null
+        player2 = null
     }
 }
 

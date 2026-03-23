@@ -183,6 +183,9 @@ dependencies {
     // Coil
     implementation("io.coil-kt:coil-compose:2.7.0")
 
+    // YouTube Player
+    implementation("com.pierfrancescosoffritti.androidyoutubeplayer:core:12.1.0")
+
     // AI ML Kit
     implementation("com.google.mlkit:entity-extraction:16.0.0-beta5")
 

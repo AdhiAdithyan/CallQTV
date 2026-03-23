@@ -1,6 +1,6 @@
-# CallQTV – Software Requirements Specification (SRS)
+# CallQTV – Software Requirements Specification (SRS) Detailed
 
-**Document Version:** 2.0  
+**Document Version:** 3.0  
 **Application:** CallQTV (Android TV Token Display)  
 **Last Updated:** March 2026
 
@@ -9,229 +9,94 @@
 ## 1. Introduction
 
 ### 1.1 Purpose
+This Software Requirements Specification (SRS) provides a comprehensive description of the **CallQTV** application. It is designed to be a definitive reference for developers, testers, and stakeholders, detailing every functional and non-functional aspect of the system.
 
-This Software Requirements Specification (SRS) describes the functional and non-functional requirements for **CallQTV**, an Android application designed for Android TV and similar devices. The application displays queue tokens for multiple counters, plays advertisements, receives token updates via MQTT, and announces tokens using on-device Text-to-Speech (TTS).
-
-### 1.2 Scope
-
-- **In scope:** Splash screen, Customer ID entry and license validation, TV configuration loading, token display with configurable layouts and orientation, advertisement rotation (image + video), MQTT integration with keypad serial validation, TTS announcements (counter/token/counter-prefix configurable), dynamic theming, Firebase Cloud Messaging (FCM) for remote config refresh, token history persistence, connected devices display, notification sound selection, and responsive UI for various TV screen sizes.
-- **Out of scope:** Backend API implementation, MQTT broker setup, content management for ads (content is provided via URLs in configuration).
-
-### 1.3 Definitions and Acronyms
-
-| Term | Definition |
-|------|------------|
-| **Token** | A queue number assigned to a customer for a specific counter (e.g., 20, A-36). |
-| **Counter** | A service point (e.g., counter 1, Ortho) that displays its own token list. |
-| **MQTT** | Message Queuing Telemetry Transport; protocol used for real-time token updates. |
-| **TTS** | Text-to-Speech; on-device announcement of token numbers and counter names. |
-| **TV Config** | Backend configuration (layout, orientation, colors, counters, ads, MQTT broker) fetched per device/customer. |
-| **Display Type 1** | Horizontal layout: counters in a row; optional ad column on left/right. |
-| **Display Type 2** | Vertical layout: counters stacked in a column; optional ad column on left/right. |
-| **Fixed Protocol** | MQTT message format: `$<15-char-serial><1-char-counter><1-char-separator><4-char-token><1-char-padding>*` (e.g., `$02026bCAL0K00071100030*`). |
-
-### 1.4 References
-
-- Architecture & Workflow: `ARCHITECTURE_AND_WORKFLOW.md`
-- Flow Charts & Wireframes: `SRS_FLOWCHARTS_WIREFRAMES.md`
-- Android TV Design Guidelines
+### 1.2 Product Scope
+CallQTV is a high-performance Android TV application for real-time queue management. It integrates MQTT for instant token updates, Text-to-Speech (TTS) for accessible announcements, and a dynamic advertisement engine for visual communication.
+### 2. Advertisement Rotation Fix
+- **Issue**: Large videos caused a long black screen or occasional "hangs" during buffering.
+- **Solution**: Implemented a "Wait Until Ready" preloading strategy and a 10-second watchdog timer.
+- **Benefit**: Seamless transitions between ads and 100% reliability in the rotation cycle, even with slow network or large media files.
 
 ---
 
-## 2. Product Overview
+## 2. Visual Identity & UI Design
 
-### 2.1 Product Perspective
+### 2.1 Splash Screen
+The initial entry point of the application, designed for branding and silent license verification.
 
-CallQTV is a standalone Android application that:
+![Splash Screen Mockup](file:///C:/Users/SILLAP-048/.gemini/antigravity/brain/69565e73-d029-4874-88ef-edbe184adfa9/splash_screen_mockup_1774241243053.png)
+*Figure 1: Splash Screen featuring the pulse-animated logo and primary theme gradient.*
 
-1. Runs on Android TV and compatible devices (minimum SDK 26).
-2. Requires a 4-digit Customer ID and license validation via backend.
-3. Fetches TV-specific configuration from a REST API and caches it in Room.
-4. Displays company name, date/time, multiple counter boards with tokens, and optional advertisements.
-5. Connects to an MQTT broker and validates messages against connected keypad device serial (keypad_sl_no_1).
-6. Announces called tokens via TTS in a configurable language (en, ml, hi, ta, etc.).
-7. Supports configurable orientation (portrait/landscape) and token display with optional counter code prefix.
-8. Allows theme customization and notification sound selection.
+- **Requirement**: Logo must pulse with an infinite transition (scale 0.95 to 1.05).
+- **Requirement**: Background uses a vertical gradient derived from the `ThemeColorManager` primary color.
+- **Requirement**: Automated navigation after 3 seconds to the appropriate landing screen.
 
-### 2.2 User Classes
+### 2.2 Customer ID & License Registration
+The secure gateway for device provisioning and license activation.
 
-| User Class | Description |
-|------------|-------------|
-| **TV Operator / Reception** | Views token display and ads; uses Test Call to verify TTS. |
-| **Setup / Admin** | Enters Customer ID, checks license, changes theme and notification sound. |
+![Customer ID Mockup](file:///C:/Users/SILLAP-048/.gemini/antigravity/brain/69565e73-d029-4874-88ef-edbe184adfa9/customer_id_mockup_1774241258311.png)
+*Figure 2: Registration screen with 4-digit input and license validation status.*
 
-### 2.3 Operating Environment
-
-- **Platform:** Android OS (API 26+), optimized for Android TV.
-- **Network:** Internet for license, TV config API, MQTT; HTTPS for APIs; TCP for MQTT.
-- **Storage:** Room database; SharedPreferences for theme and auth.
+- **Requirement**: User must enter a 4-digit numeric Customer ID.
+- **Requirement**: The system validates the ID against the backend using the device's unique MAC address.
+- **Requirement**: On successful validation, the system fetches and stores the `product_license_end` date and the project-specific `base_url`.
 
 ---
 
-## 3. Functional Requirements
+## 3. Functional Requirements Detail
 
-### 3.1 Splash Screen
+### 3.1 TV Configuration & Data Persistence
+- **FR-T1**: The application shall fetch a complete JSON configuration (`TvConfigPayload`) from the REST API using the MAC address and Customer ID.
+- **FR-T2**: **Offline First Strategy**: All configuration data, including counters and advertisement files, must be persisted in a local Room database.
+- **FR-T3**: Upon network failure, the application shall automatically load and display the last successfully cached configuration.
+- **FR-T4**: Supports remote configuration refresh via **Firebase Cloud Messaging (FCM)**.
 
-| ID | Requirement | Priority |
-|----|-------------|----------|
-| FR-S1 | Display splash screen with application logo. | High |
-| FR-S2 | Splash background shall use gradient based on selected theme color. | Medium |
-| FR-S3 | Logo shall scale responsively with subtle pulse animation. | Medium |
-| FR-S4 | Check license validity using stored license end date. | High |
-| FR-S5 | After ~3 seconds, navigate to Customer ID or registration flow. | High |
+### 3.2 Token Display Engine
+- **FR-D1**: The dashboard must support dual layouts:
+  - **Type 1 (Horizontal)**: Counters arranged in rows.
+  - **Type 2 (Vertical)**: Counters stacked in columns.
+- **FR-D2**: **Dynamic Orientation**: The `config.orientation` field allows overriding the device's physical orientation (Portrait/Landscape) to optimize for specific TV mounts.
+- **FR-D3**: **Counter Prefixing**: When `enable_counter_prifix` is true, tokens are displayed with their counter code (e.g., "A-12"). If false, only the number "12" is shown.
+- **FR-D4**: **Responsive Scaling**: All UI elements (fonts, cards, paddings) are scaled based on a 1920x1080 design baseline to ensure perfect display on screens from 32" to 85"+ TV panels.
 
-### 3.2 Customer ID & License
+### 3.3 MQTT & Real-Time Sync
+- **FR-M1**: Maintain a persistent connection to the configured MQTT broker with automatic exponential backoff on disconnect.
+- **FR-M2**: **Fixed Protocol Parsing**:
+  - Format: `$<15-char-serial><1-char-counter><1-skip><4-char-token>*`.
+  - Messages must be ignored if the 17th character is '0' (protocol status bit).
+- **FR-M3**: **Keypad Validation**: Only messages from authorized keypad serial numbers (stored in `connected_devices` table) shall be processed.
+- **FR-M4**: **Heartbeat Publishing**: Every 5 seconds, the app must publish a `$SERIAL000000#` payload to the `"fr/status"` topic to maintain visibility in the manage system.
 
-| ID | Requirement | Priority |
-|----|-------------|----------|
-| FR-C1 | Provide 4-digit numeric Customer ID input (digit boxes). | High |
-| FR-C2 | Validate input: exactly 4 digits only. | High |
-| FR-C3 | Allow user to trigger license check against backend. | High |
-| FR-C4 | Display license status (valid/invalid) with messaging. | High |
-| FR-C5 | Support optional APK update check and install flow. | Medium |
-| FR-C6 | Allow theme selection (color picker) from this screen. | Medium |
-| FR-C7 | Background shall reflect selected theme (gradient). | Low |
-| FR-C8 | On valid license, store Customer ID and navigate to Token Display. | High |
+### 3.4 Audio Announcements (TTS)
+- **FR-A1**: Use **TextToSpeech.QUEUE_ADD** to ensure sequential, non-overlapping announcements of tokens and counter names.
+- **FR-A2**: **Deduplication Logic**: Do not re-announce the same token for the same counter within a 2-second window to prevent echo or noise from duplicate MQTT packets.
+- **FR-A3**: Optional Chime: Play a notification sound immediately before the TTS announcement.
 
-### 3.3 TV Configuration & Token Display
+### 3.5 Advertisement Rotation
+- **FR-Ad1**: Supports mixed media (Images via Coil, Videos via ExoPlayer).
+- **FR-Ad2**: Order is strictly dictated by the `position` field in the API.
+- **FR-Ad3**: **Seamless Transition (Wait Until Ready)**: The application shall keep the current advertisement visible while the next one (especially video) is preloading in the background. The transition occurs only when the next media is `STATE_READY`.
+- **FR-Ad4**: **Hang-Prevention**: If an advertisement fails to load or prepare within 10 seconds, it must be automatically skipped to the next item in the rotation to prevent a frozen or black screen.
+- **FR-Ad5**: **Expansion Logic**: If the number of active counters is less than the screen capacity, the advertisement area automatically expands to utilize the "free weight" on the screen.
 
-| ID | Requirement | Priority |
-|----|-------------|----------|
-| FR-T1 | Fetch TV configuration from REST API (mac_address, customer_id). | High |
-| FR-T2 | Cache configuration in Room (config, counters, ads, mapped broker). | High |
-| FR-T3 | On network failure, fall back to last cached configuration. | High |
-| FR-T4 | Display loading overlay while fetching. | High |
-| FR-T5 | Display error when configuration unavailable and no cache exists. | High |
-| FR-T6 | Show company name, date/time (1s update), MQTT status, network status. | High |
-| FR-T7 | Show counter boards; each has header and token grid (rows × columns). | High |
-| FR-T8 | Number of counter boards from config no_of_counters or counters size. | High |
-| FR-T9 | **Display Type 1:** Counters in horizontal row; >4 splits into two rows. | High |
-| FR-T10 | **Display Type 2:** Counters in vertical column; >4 splits into two columns. | High |
-| FR-T11 | Layout type from config (layout_type "1" or "2"). | High |
-| FR-T12 | **Orientation:** Layout (portrait/landscape) driven by config.orientation; when set, overrides device orientation for ad placement and token grid. | High |
-| FR-T13 | Token grid rows/columns swap based on orientation: portrait = taller grid, landscape = wider. | High |
-| FR-T14 | When ads enabled and ad files exist, show ad area (left/right per ad_placement). | High |
-| FR-T15 | Ad area rotates through images/videos; videos advance on completion. | High |
-| FR-T16 | Display MAC address and app version at bottom. | Medium |
-| FR-T17 | Provide "Test Call" button for sample TTS. | Medium |
-| FR-T18 | Allow theme picker and apply with preview. | Medium |
-| FR-T19 | **Counter Prefix:** When enable_counter_prifix is true, display token with counter code prefix (e.g., A-36). When false, display token only (e.g., 36). | High |
-| FR-T20 | Settings dialog shall display: Token Announcement, Counter Announcement, Counter Prefix status (Enabled/Disabled). | Medium |
-
-### 3.4 Advertisements
-
-| ID | Requirement | Priority |
-|----|-------------|----------|
-| FR-A1 | Load ad content from URLs in ad_files. | High |
-| FR-A2 | Order ads by position field. | High |
-| FR-A3 | Use smooth crossfade between ads. | Medium |
-| FR-A4 | Support HTTP/HTTPS; show placeholder on invalid URL. | High |
-
-### 3.5 MQTT & Token Announcements
-
-| ID | Requirement | Priority |
-|----|-------------|----------|
-| FR-M1 | Connect to MQTT broker from mapped_broker config using Paho Async Client with auto-reconnect. | High |
-| FR-M2 | Subscribe to configurable topic after connection. | High |
-| FR-M3 | Parse fixed protocol: `$<15-char-serial><1-char-counter><1-skip><4-char-token><1-skip>*` (>=22 chars). | High |
-| FR-M4 | Support fallback formats: TOKEN:X, COUNTER:Y; regex; topic fallback. | High |
-| FR-M5 | **Keypad validation:** Accept message only if serial (chars 2–16) matches keypad_sl_no_1 of a connected KEYPAD device for this customer/MAC. | High |
-| FR-M6 | Expose connection status and error messages in UI, soft-failing on connection lost to allow auto-retry. | High |
-| FR-M7 | When enable_token_announcement is true, announce new tokens via TTS. | High |
-| FR-M8 | Phrasing: Language-specific (EN, HI, TA, ML). "Token [Number], Counter [Counter Name]". | High |
-| FR-M9 | Token label with counter code when enable_counter_prifix is true (e.g., A-36). | High |
-| FR-M10 | Only announce when MQTT counter matches configured button_index. | High |
-| FR-M11 | Deduplicate: do not announce same (counter, token) twice; mark before TTS. | High |
-| FR-M12 | Store token atomically using `processTokenUpdateForKeys` to prevent race conditions. | High |
-| FR-M13 | Brief delay (~150ms) before TTS so UI updates first. | Medium |
-| FR-M14 | Ignore zero-value tokens and "CAL" prefix tokens. | Medium |
-| FR-M15 | TTS uses `QUEUE_ADD` to ensure sequential, non-interrupted announcements. | High |
-| FR-M16 | Maintain a heartbeat ping every 8s to keep TTS service warm. | Medium |
-| FR-M17 | **Continuous Publishing:** Every 5 seconds, publish a heartbeat payload `$<SERIAL>000000#` to the "fr/status" topic for all connected keypad devices. | High |
-| FR-M18 | **Publishing Cycle:** The heartbeat loop shall run unconditionally every 5 seconds to ensure the broker maintains an active association with the device ID. | High |
-| FR-M19 | **Publishing Lifecycle:** The loop shall start upon the first successful MQTT connection and pause if all broker connections are lost. | Medium |
-
-### 3.6 Firebase Cloud Messaging (FCM)
-
-| ID | Requirement | Priority |
-|----|-------------|----------|
-| FR-F1 | Integrate FCM for push notifications. | High |
-| FR-F2 | On FCM payload received, trigger TV config refresh. | High |
-| FR-F3 | Store and send FCM token in TV config API requests. | High |
-
-### 3.7 Theming & Settings
-
-| ID | Requirement | Priority |
-|----|-------------|----------|
-| FR-Th1 | Theme color selection (hue, saturation, intensity). | Medium |
-| FR-Th2 | Counter and token background color selection. | Medium |
-| FR-Th3 | Notification sound selection (ding, chime, bell, etc.). | Medium |
-| FR-Th4 | Preview before applying theme. | Medium |
-| FR-Th5 | Settings dialog: Company info, Token/Counter Announcement, Counter Prefix, sound, theme, colors. | Medium |
+### 3.6 Media Specifications & Limitations
+- **Supported Formats**: MP4, MKV, MOV, 3GP, WEBM (Direct URLs only).
+- **Max Video Size**: No hard limit for playback, but local cache is optimized for files up to **100MB**. Videos exceeding this will be streamed directly.
+- **YouTube Support**: **Fully Supported**. Both direct `youtube.com` and `youtu.be` links are compatible.
+- **Recommended Bitrate**: 2-5 Mbps for 1080p content to ensure smooth buffering on standard TV hardware.
 
 ---
 
 ## 4. Non-Functional Requirements
 
-### 4.1 Performance
+### 4.1 Performance & Reliability
+- **NFR-P1**: Main thread must never be blocked during MQTT message parsing or database operations.
+- **NFR-P2**: Resource management: ExoPlayer instances must be precisely managed using `DisposableEffect` to prevent memory leaks in long-running TV environments.
 
-| ID | Requirement |
-|----|-------------|
-| NFR-P1 | TV config API timeout (e.g., 60s); fallback to cache. |
-| NFR-P2 | Async ad loading; crossfade transitions. |
-| NFR-P3 | Responsive UI; no main-thread blocking. |
-
-### 4.2 Usability
-
-| ID | Requirement |
-|----|-------------|
-| NFR-U1 | Responsive layout for different screen sizes. |
-| NFR-U2 | Readable token and counter text; configurable font size. |
-| NFR-U3 | D-pad/remote navigation support on TV. |
-
-### 4.3 Reliability
-
-| ID | Requirement |
-|----|-------------|
-| NFR-R1 | Handle null/missing API fields safely. |
-| NFR-R2 | Deduplicate token announcements; atomic storage. |
-
-### 4.4 Security
-
-| ID | Requirement |
-|----|-------------|
-| NFR-S1 | Sensitive data stored per app; API over HTTPS. |
-| NFR-S2 | Cleartext only where required (e.g., local MQTT). |
-
-### 4.5 Compatibility
-
-| ID | Requirement |
-|----|-------------|
-| NFR-C1 | Minimum SDK 26; target SDK 35. |
-| NFR-C2 | Optimized for Android TV. |
+### 4.2 Accessibility
+- **NFR-Ac1**: High-contrast text options via the dynamic theme picker.
+- **NFR-Ac2**: Clear, audible TTS guidance for patients/customers in waiting areas.
 
 ---
-
-## 5. Use Cases (Summary)
-
-| UC-1 | Splash & Navigate | Actor: System | Show splash → Check license → Navigate to Customer ID or registration. |
-| UC-2 | Enter Customer ID & Check License | Actor: User | Enter 4-digit ID → Check license → On success, proceed to Token Display. |
-| UC-3 | View Token Display | Actor: User | Load config → Show company, date/time, counters, tokens, ads, status. |
-| UC-4 | Receive Token via MQTT & Hear Announcement | Actor: System | Message received → Validate keypad → Parse → Store atomically → Announce (with dedup). |
-| UC-5 | Change Theme / Settings | Actor: User | Open settings → Adjust theme, sound, colors → Apply. |
-| UC-6 | Test TTS | Actor: User | Tap "Test Call" → Sample announcement. |
-| UC-7 | Remote Config Refresh (FCM) | Actor: System | Push received → Fetch TV config → Update display. |
-
----
-
-## 6. Constraints and Assumptions
-
-- Backend APIs exist; request/response formats fixed.
-- MQTT broker provisioned externally; fixed protocol and fallbacks supported.
-- Connected devices (KEYPAD) registered with keypad_sl_no_1 in config.
-- Ads from URLs; Coil-compatible images/video.
-- TTS language from config (audio_language: en, ml, hi, ta, etc.).
-
----
-
-For flow charts and wireframes, see **SRS_FLOWCHARTS_WIREFRAMES.md**.
+*Produced by CallQTV Development Team – March 2026.*

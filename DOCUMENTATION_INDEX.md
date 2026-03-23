@@ -12,8 +12,11 @@
 | [README.md](./README.md) | Project overview, setup, tech stack |
 | [SRS.md](./SRS.md) | Software Requirements Specification |
 | [FLOWCHARTS.md](./FLOWCHARTS.md) | Flow charts (Mermaid) |
-| [WIREFRAMES.md](./WIREFRAMES.md) | UI wireframes |
-| [SRS_FLOWCHARTS_WIREFRAMES.md](./SRS_FLOWCHARTS_WIREFRAMES.md) | Consolidated overview + key diagrams |
+| [WIREFRAMES.md](./WIREFRAMES.md) | UI wireframes (ASCII) |
+| [FLOWCHARTS.md](./FLOWCHARTS.md) | Flow charts (Mermaid) |
+| [MODULE_WISE_GUIDE.md](./MODULE_WISE_GUIDE.md) | Module-wise architecture guide |
+| [FUNCTION_WISE_GUIDE.md](./FUNCTION_WISE_GUIDE.md) | Function-wise logic guide |
+| [SRS_FLOWCHARTS_WIREFRAMES.md](./SRS_FLOWCHARTS_WIREFRAMES.md) | Consolidated overview |
 | [ARCHITECTURE_AND_WORKFLOW.md](./ARCHITECTURE_AND_WORKFLOW.md) | Architecture & data flows |
 | [SOURCE_CODE_DOCUMENTATION.md](./SOURCE_CODE_DOCUMENTATION.md) | Developer guide |
 | [VALIDATION_REPORT.md](./VALIDATION_REPORT.md) | Code validation results |

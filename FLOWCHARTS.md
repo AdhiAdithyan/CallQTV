@@ -239,7 +239,34 @@ flowchart TD
 
 ---
 
+## Flow Chart 9: MQTT Token Update Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant B as MQTT Broker
+    participant M as MqttClientManager
+    participant V as MqttViewModel
+    participant A as TokenAnnouncer (TTS)
+    participant U as TokenDisplay (UI)
+
+    B->>M: Publish Message (Topic: fr/data2)
+    M->>V: onMessageReceived(payload)
+    Note over V: Validate Keypad Serial
+    Note over V: Parse Counter & Token
+    V->>U: Send to tokenUpdateChannel (Pair)
+    U->>V: processTokenUpdate (Atomic)
+    V-->>U: Update internalTokenMap (SharedFlow)
+    U->>U: Render New Token Grid
+    V->>V: checkAlreadyAnnounced()
+    V->>A: announceToken(counter, token)
+    A->>A: Chime & Speak (QUEUE_ADD)
+```
+
+---
+
 ## Related Documents
 
 - **SRS.md** – Software Requirements Specification
 - **WIREFRAMES.md** – UI Wireframes
+- **MODULE_WISE_GUIDE.md** – Module Architecture
+- **FUNCTION_WISE_GUIDE.md** – Logic Flows
