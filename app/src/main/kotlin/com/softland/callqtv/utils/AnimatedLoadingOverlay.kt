@@ -47,3 +47,44 @@ fun AnimatedLoadingOverlay(message: String, isVisible: Boolean) {
         }
     }
 }
+
+@Composable
+fun VoiceInitializationDialog(isVisible: Boolean) {
+    if (isVisible) {
+        Dialog(
+            onDismissRequest = {},
+            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.62f)
+                    .wrapContentHeight()
+                    .background(Color(0xFF102027), RoundedCornerShape(16.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
+                ) {
+                    CircularProgressIndicator(color = Color(0xFF4DD0E1))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Preparing voice engine...",
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleSmall,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Configuration already loaded",
+                        color = Color(0xFFB2DFDB),
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
+}

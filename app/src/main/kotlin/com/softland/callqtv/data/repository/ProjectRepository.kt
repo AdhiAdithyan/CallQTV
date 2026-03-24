@@ -10,8 +10,10 @@ import com.softland.callqtv.data.model.ProductAuthenticationReq
 import com.softland.callqtv.data.model.ProductAuthenticationRes
 import com.softland.callqtv.data.network.RetrofitClient
 import com.softland.callqtv.data.network.ApiService
+import com.softland.callqtv.utils.NetworkUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.IOException
 
 class ProjectRepository(private val context: android.content.Context) {
 
@@ -20,6 +22,10 @@ class ProjectRepository(private val context: android.content.Context) {
 
     suspend fun authenticateProduct(url: String, request: ProductAuthenticationReq): ProductAuthenticationRes =
         withContext(Dispatchers.IO) {
+            if (!NetworkUtil.isNetworkAvailable(context)) {
+                Log.w("LicenseApi", "Skipping authenticateProduct: network unavailable")
+                throw IOException("No internet connection. Please check network and retry.")
+            }
             try {
                 Log.i("LicenseApi", "authenticateProduct REQUEST url=$url body=${gson.toJson(request)}")
             } catch (e: Exception) {e.printStackTrace()}
@@ -37,6 +43,10 @@ class ProjectRepository(private val context: android.content.Context) {
 
     suspend fun getDeviceRegistration(url: String, request: DeviceRegistrationRequest): DeviceRegistrationResponse =
         withContext(Dispatchers.IO) {
+            if (!NetworkUtil.isNetworkAvailable(context)) {
+                Log.w("LicenseApi", "Skipping getDeviceRegistration: network unavailable")
+                throw IOException("No internet connection. Please check network and retry.")
+            }
             try {
                 Log.i("LicenseApi", "getDeviceRegistration REQUEST url=$url body=${gson.toJson(request)}")
             } catch (_: Exception) { }
@@ -54,6 +64,10 @@ class ProjectRepository(private val context: android.content.Context) {
 
     suspend fun getCheckDeviceStatus(url: String, request: CheckDeviceStatusRequest): CheckDeviceStatusResponse =
         withContext(Dispatchers.IO) {
+            if (!NetworkUtil.isNetworkAvailable(context)) {
+                Log.w("LicenseApi", "Skipping getCheckDeviceStatus: network unavailable")
+                throw IOException("No internet connection. Please check network and retry.")
+            }
             try {
                 Log.i("LicenseApi", "getCheckDeviceStatus REQUEST url=$url body=${gson.toJson(request)}")
             } catch (_: Exception) { }

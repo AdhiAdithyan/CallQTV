@@ -48,7 +48,8 @@ object PreferenceHelper {
     }
 
     fun isOfflineAdsEnabled(context: Context): Boolean {
-        return getAuthPrefs(context).getBoolean(OFFLINE_ADS, false)
+        // Default ON for first launch unless user explicitly disables it.
+        return getAuthPrefs(context).getBoolean(OFFLINE_ADS, true)
     }
 
     fun setOfflineAdsEnabled(context: Context, enabled: Boolean) {

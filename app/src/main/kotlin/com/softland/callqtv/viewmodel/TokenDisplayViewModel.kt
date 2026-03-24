@@ -10,9 +10,13 @@ import com.softland.callqtv.data.local.ConnectedDeviceEntity
 import com.softland.callqtv.data.local.AppSharedPreferences
 import com.softland.callqtv.data.repository.TvConfigRepository
 import com.softland.callqtv.data.repository.TvConfigResult
+import com.softland.callqtv.utils.AdDownloader
+import com.softland.callqtv.utils.FileLogger
 import com.softland.callqtv.utils.PreferenceHelper
 import com.softland.callqtv.utils.Variables
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -64,6 +68,8 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
     // Ensures the full-screen "Loading TV configuration" overlay is shown only once
     // on the very first manual load trigger after app install/launch.
     private var hasShownInitialLoadingOverlay = false
+    private var tokenHistorySeeded = false
+    private var offlineAdSyncJob: Job? = null
 
     init {
         // Initialize macAddress on a background thread to avoid blocking main thread at startup
@@ -122,6 +128,7 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
 
     fun loadData(mqttViewModel: MqttViewModel, forceShowOverlay: Boolean = false) {
         viewModelScope.launch {
+            val loadStartMs = System.currentTimeMillis()
             if (forceShowOverlay) {
                 _isLoading.value = true
                 hasShownInitialLoadingOverlay = true
@@ -131,8 +138,11 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
             }
             _isPendingApproval.value = false
 
-            // Seed the UI immediately with the last known token state from local DB
-            mqttViewModel.loadPersistedHistory()
+            // Seed token history only once to avoid repeated disk work on every refresh/retry.
+            if (!tokenHistorySeeded) {
+                tokenHistorySeeded = true
+                mqttViewModel.loadPersistedHistory()
+            }
             
             // Ensure macAddress is fetched before making API calls
             if (_macAddress.isEmpty()) {
@@ -144,10 +154,35 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
             val customerIdInt = authPrefs.getInt(PreferenceHelper.customer_id, 0)
             val customerId = String.format(Locale.ROOT, "%04d", customerIdInt)
 
+            // Cached-first strategy: render local data immediately while API is in flight.
+            val cacheStartMs = System.currentTimeMillis()
+            _config.value = repository.getCachedConfig(_macAddress, customerId)
+            _counters.value = repository.getCounters(_macAddress, customerId)
+            val cachedAds = repository.getAdFiles(_macAddress, customerId)
+            _adFiles.value = cachedAds
+            _connectedDevices.value = repository.getConnectedDevices(_macAddress, customerId)
+            val hasRenderableCache = _config.value != null
+            android.util.Log.i(
+                "TokenDisplayVMPerf",
+                "Cache pre-load took ${System.currentTimeMillis() - cacheStartMs} ms"
+            )
+
+            // UX optimization: if we already have cache, stop blocking UI with the
+            // full-screen "Loading TV configuration" overlay and continue API sync
+            // in the background.
+            if (forceShowOverlay && hasRenderableCache) {
+                _isLoading.value = false
+            }
+
             try {
                 // Safety timeout: allow the network layer (60s x retries) to exhaust itself first
                 kotlinx.coroutines.withTimeoutOrNull(300_000L) {
+                    val apiStartMs = System.currentTimeMillis()
                     val result = repository.fetchAndCacheTvConfig(_macAddress, customerId)
+                    android.util.Log.i(
+                        "TokenDisplayVMPerf",
+                        "fetchAndCacheTvConfig completed in ${System.currentTimeMillis() - apiStartMs} ms"
+                    )
                     when (result) {
                         is TvConfigResult.Success -> {
                             _config.value = result.entity
@@ -190,12 +225,28 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                     _counters.value = repository.getCounters(_macAddress, customerId)
                     val remoteFiles = repository.getAdFiles(_macAddress, customerId)
                     _adFiles.value = remoteFiles
-                    
-                    // Offline ad synchronization
+                    // Always show online ads immediately in foreground.
+                    _localAdFiles.value = remoteFiles
+
+                    // If offline mode is enabled, download in background and switch to local
+                    // paths only after sync is complete.
                     if (PreferenceHelper.isOfflineAdsEnabled(getApplication())) {
-                        _localAdFiles.value = com.softland.callqtv.utils.AdDownloader.syncAds(getApplication(), remoteFiles)
-                    } else {
-                        _localAdFiles.value = remoteFiles
+                        offlineAdSyncJob?.cancel()
+                        offlineAdSyncJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                            try {
+                                val synced = AdDownloader.syncAds(getApplication(), remoteFiles)
+                                if (isActive) {
+                                    _localAdFiles.postValue(synced)
+                                }
+                            } catch (e: Exception) {
+                                FileLogger.logError(
+                                    getApplication(),
+                                    "OfflineAds",
+                                    "Background offline ad sync failed",
+                                    e
+                                )
+                            }
+                        }
                     }
 
                     _connectedDevices.value = repository.getConnectedDevices(_macAddress, customerId)
@@ -220,7 +271,7 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                     e.message?.contains("timed out", ignoreCase = true) == true
                 if (_config.value == null && !isTimeoutLike) {
                     _errorMessage.value = "Failed to load TV configuration: ${e.message}"
-                    com.softland.callqtv.utils.FileLogger.logError(getApplication(), "TVConfig", "Exception: ${e.message}", e)
+                    FileLogger.logError(getApplication(), "TVConfig", "Exception: ${e.message}", e)
                 } else if (_config.value == null && isTimeoutLike) {
                     // Retry internally without showing Configuration Error dialog
                     viewModelScope.launch {
@@ -233,6 +284,10 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                 // Connected devices may have changed; invalidate keypad serial cache so that
                 // subsequent keypad validation uses the latest mapping.
                 mqttViewModel.invalidateKeypadSerialCache()
+                android.util.Log.i(
+                    "TokenDisplayVMPerf",
+                    "loadData total time: ${System.currentTimeMillis() - loadStartMs} ms"
+                )
             }
         }
     }

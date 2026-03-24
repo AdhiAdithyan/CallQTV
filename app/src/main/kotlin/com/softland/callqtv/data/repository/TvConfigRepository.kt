@@ -16,10 +16,12 @@ import com.softland.callqtv.data.local.AdFileEntity
 import com.softland.callqtv.data.local.ConnectedDeviceEntity
 import com.softland.callqtv.data.network.ApiService
 import com.softland.callqtv.data.local.AppSharedPreferences
+import com.softland.callqtv.utils.NetworkUtil
 import com.softland.callqtv.utils.PreferenceHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import retrofit2.HttpException
+import kotlin.system.measureTimeMillis
 
 /**
  * Result of fetching TV config from the API.
@@ -52,6 +54,12 @@ class TvConfigRepository(private val context: Context) {
         macAddress: String,
         customerId: String
     ): TvConfigResult = withContext(Dispatchers.IO) {
+        if (!NetworkUtil.isNetworkAvailable(context)) {
+            Log.w("TvConfigRepo", "Skipping config API call: network unavailable")
+            return@withContext TvConfigResult.Error("No internet connection. Please check network and retry.")
+        }
+
+        val totalStartMs = System.currentTimeMillis()
         val fcmToken = PreferenceHelper.getFcmToken(context)
         val request = TvConfigRequest(
             macAddress = macAddress,
@@ -66,7 +74,12 @@ class TvConfigRepository(private val context: Context) {
         val url = "${baseUrl}config/api/android/config"
 
         val body: TvConfigResponse? = try {
-            api.fetchTvConfig(url, request)
+            var response: TvConfigResponse? = null
+            val apiTimeMs = measureTimeMillis {
+                response = api.fetchTvConfig(url, request)
+            }
+            Log.i("TvConfigRepoPerf", "API fetch took ${apiTimeMs} ms for customer=$customerId")
+            response
         } catch (e: HttpException) {
             val errorBody = e.response()?.errorBody()?.string() ?: ""
             val logMsg = "HTTP Error ${e.code()} at $url Response: $errorBody"
@@ -99,9 +112,21 @@ class TvConfigRepository(private val context: Context) {
             return@withContext TvConfigResult.Error("Empty response from configuration server")
         }
 
-        // Log full API response for debugging/verification
+        // Log API response for debugging/verification.
+        // For ad-heavy payloads, avoid serializing/printing massive JSON blobs on main flow.
         try {
-            Log.i("TvConfigRepo", "TV config API response for mac=$macAddress, customer=$customerId: ${gson.toJson(body)}")
+            val fullJson = gson.toJson(body)
+            val maxChars = 12000
+            val compactJson = if (fullJson.length > maxChars) {
+                "${fullJson.take(maxChars)}... [truncated ${fullJson.length - maxChars} chars]"
+            } else {
+                fullJson
+            }
+            Log.i("TvConfigRepo", "TV config API response for mac=$macAddress, customer=$customerId: $compactJson")
+            Log.i(
+                "TvConfigRepoPerf",
+                "Response summary: counters=${body.counters?.size ?: 0}, connectedDevices=${body.connectedDevices?.size ?: 0}, ads=${body.tvConfig?.adFiles?.size ?: 0}"
+            )
         } catch (_: Exception) {
             // Ignore logging errors; never break flow because of logging
         }
@@ -131,7 +156,12 @@ class TvConfigRepository(private val context: Context) {
         }
 
         val entity = try {
-            body.toEntity(macAddress = macAddress, customerId = customerId)
+            var mapped: TvConfigEntity? = null
+            val mapMs = measureTimeMillis {
+                mapped = body.toEntity(macAddress = macAddress, customerId = customerId)
+            }
+            Log.i("TvConfigRepoPerf", "Entity mapping took ${mapMs} ms")
+            mapped!!
         } catch (e: Exception) {
             com.softland.callqtv.utils.FileLogger.logError(context, "TvConfigRepo", "Failed to map response to entity", e)
             return@withContext TvConfigResult.Error("Configuration parsing error: ${e.message}")
@@ -140,7 +170,8 @@ class TvConfigRepository(private val context: Context) {
         val db = AppDatabase.getInstance(context)
 
         try {
-            db.runInTransaction {
+            val dbMs = measureTimeMillis {
+                db.runInTransaction {
                 dao.upsert(entity)
 
                 // Always replace mapped_broker rows for this mac+customer so it stays in sync
@@ -153,29 +184,48 @@ class TvConfigRepository(private val context: Context) {
 
                 // Always replace child tables with the latest API response so DB stays in sync
                 // with the configuration service, even when lists are empty.
-                val counterEntities = body.toCounterEntities(macAddress, customerId)
+                var counterEntities: List<CounterEntity> = emptyList()
+                val counterMapMs = measureTimeMillis {
+                    counterEntities = body.toCounterEntities(macAddress, customerId)
+                }
                 counterDao.deleteByDeviceAndCustomer(entity.deviceId, macAddress, customerId)
                 if (counterEntities.isNotEmpty()) {
                     counterDao.insertAll(counterEntities)
                 }
 
-                val adFileEntities = body.toAdFileEntities(macAddress, customerId)
+                var adFileEntities: List<AdFileEntity> = emptyList()
+                val adMapMs = measureTimeMillis {
+                    adFileEntities = body.toAdFileEntities(macAddress, customerId)
+                }
+                val adDbMs = measureTimeMillis {
                 adFileDao.deleteByDeviceAndCustomer(entity.deviceId, macAddress, customerId)
                 if (adFileEntities.isNotEmpty()) {
                     adFileDao.insertAll(adFileEntities)
                 }
+                }
 
-                val connectedDeviceEntities = body.toConnectedDeviceEntities(macAddress, customerId)
+                var connectedDeviceEntities: List<ConnectedDeviceEntity> = emptyList()
+                val connectedDeviceMapMs = measureTimeMillis {
+                    connectedDeviceEntities = body.toConnectedDeviceEntities(macAddress, customerId)
+                }
                 connectedDeviceDao.deleteByDeviceAndCustomer(entity.deviceId, macAddress, customerId)
                 if (connectedDeviceEntities.isNotEmpty()) {
                     connectedDeviceDao.insertAll(connectedDeviceEntities)
                 }
+
+                Log.i(
+                    "TvConfigRepoPerf",
+                    "Child mapping/DB: counterMap=${counterMapMs}ms, adMap=${adMapMs}ms, adDb=${adDbMs}ms, connectedMap=${connectedDeviceMapMs}ms, adCount=${adFileEntities.size}"
+                )
             }
+            }
+            Log.i("TvConfigRepoPerf", "DB transaction took ${dbMs} ms")
         } catch (e: Exception) {
             com.softland.callqtv.utils.FileLogger.logError(context, "TvConfigRepo", "Database transaction failed", e)
             return@withContext TvConfigResult.Error("Database error: ${e.message}")
         }
 
+        Log.i("TvConfigRepoPerf", "fetchAndCacheTvConfig total took ${System.currentTimeMillis() - totalStartMs} ms")
         TvConfigResult.Success(entity)
     }
 

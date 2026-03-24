@@ -12,7 +12,7 @@ object ThemeColorManager {
         return try {
             Color(android.graphics.Color.parseColor(hex))
         } catch (e: Exception) {
-            Color(0xFF2196F3) // Default Blue
+            Color(0xFF013E6E) // Default Blue
         }
     }
 
@@ -81,6 +81,8 @@ object ThemeColorManager {
         ThemeOption("Blue", "#2196F3"),
         ThemeOption("Light Blue", "#64B5F6"),
         ThemeOption("Dark Blue", "#1565C0"),
+        //deep_navy
+        ThemeOption("Deep Navy Blue", "#0D1B2A"),
         // Branded Metallic
         ThemeOption("CallQ Silver", "#C0C0C0"),
         ThemeOption("CallQ Platinum", "#E5E4E2"),
@@ -138,6 +140,8 @@ object ThemeColorManager {
         ThemeOption("Blue", "#2196F3"),
         ThemeOption("Pale Blue", "#BBDEFB"),
         ThemeOption("Navy", "#0D47A1"),
+        //deep_navy
+        ThemeOption("Deep Navy Blue", "#0D1B2A"),
         
         ThemeOption("Red", "#F44336"),
         ThemeOption("Pale Red", "#FFCDD2"),

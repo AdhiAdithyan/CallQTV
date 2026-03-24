@@ -109,13 +109,15 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     private var connectTime = 0
 
     private fun startConnectTimer() {
-        connectTime = 0
-        _connectTimer.postValue(0)
-        
         if (timerJob?.isActive == true) return
 
+        // Reset only when starting a fresh timer job.
+        connectTime = 0
+        _connectTimer.postValue(0)
+
         _isConnectingToMqtt.postValue(true)
-        timerJob = viewModelScope.launch(Dispatchers.Main) {
+        // Run timer off main thread so UI load does not freeze timer updates.
+        timerJob = viewModelScope.launch(Dispatchers.Default) {
             while (true) {
                 delay(1000)
                 connectTime++
@@ -125,6 +127,9 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 if (connectTime >= 30) {
                     android.util.Log.w("MqttViewModel", "MQTT Connection attempt timed out after 30s; forcing a fresh retry.")
                     retryConnect()
+                    // Reset timer window after retry trigger.
+                    connectTime = 0
+                    _connectTimer.postValue(0)
                 }
             }
         }
@@ -149,6 +154,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
 
     val tokenUpdateChannel =
         kotlinx.coroutines.channels.Channel<Pair<String, String>>(capacity = kotlinx.coroutines.channels.Channel.UNLIMITED)
+    private val queuedTokenTimestamps = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     // Queue of ALL raw MQTT payloads received (no filtering). Business logic consumes and filters
     // from this queue so we never lose received data due to early drops.
@@ -171,6 +177,22 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         val key = "${counterKey.trim()}_${token.trim()}"
         val lastTime = announcedTokenTimestamps[key] ?: 0L
         return (System.currentTimeMillis() - lastTime) < 2000L
+    }
+
+    /**
+     * Returns true when the same token is already in first position for the given key
+     * and its previous announcement was less than 10 seconds ago.
+     * Use this to skip both UI update and re-announcement.
+     */
+    suspend fun shouldSkipTopTokenWithin10s(counterKey: String, token: String): Boolean {
+        val key = counterKey.trim()
+        val trimmedToken = token.trim()
+        return stateMutex.withLock {
+            val top = internalTokenMap[key]?.firstOrNull() ?: return@withLock false
+            if (top != trimmedToken) return@withLock false
+            val lastTime = announcedTokenTimestamps["${key}_$trimmedToken"] ?: 0L
+            (System.currentTimeMillis() - lastTime) < 10000L
+        }
     }
 
     fun markAsAnnounced(counterKey: String, token: String) {
@@ -770,6 +792,18 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
             if (result != null) {
                 val (counter, token) = result
                 if (token != "0" && token.isNotBlank() && counter != "0" && counter.isNotBlank()) {
+                    val key = "${counter.trim()}_${token.trim()}"
+                    val now = System.currentTimeMillis()
+                    val lastQueued = queuedTokenTimestamps[key] ?: 0L
+                    // Pre-enqueue dedup: drop immediate-next duplicates within 10s window.
+                    if (now - lastQueued < 10000L) {
+                        return
+                    }
+                    queuedTokenTimestamps[key] = now
+                    if (queuedTokenTimestamps.size > 500) {
+                        queuedTokenTimestamps.entries.removeIf { now - it.value > 60000L }
+                    }
+
                     // Log to the new detailed token_records table
                     saveTokenRecord(message, counter, token)
 

@@ -20,9 +20,16 @@
 
 Detailed documentation is available in the following files:
 
+`docs/` is now intentionally reduced to only 3 files:
+- `docs/DOCUMENTATION_INDEX.md`
+- `docs/MASTER_PRODUCT_AND_FLOWS.md`
+- `docs/MASTER_ENGINEERING_AND_QA.md`
+
 | Document | Description |
 |----------|-------------|
-| [**DOCUMENTATION_INDEX.md**](./DOCUMENTATION_INDEX.md) | Master index of all documentation. |
+| [**DOCUMENTATION_INDEX.md**](./DOCUMENTATION_INDEX.md) | Root documentation index (consolidated). |
+| [**docs/MASTER_PRODUCT_AND_FLOWS.md**](./docs/MASTER_PRODUCT_AND_FLOWS.md) | Product requirements, UX intent, and flowcharts. |
+| [**docs/MASTER_ENGINEERING_AND_QA.md**](./docs/MASTER_ENGINEERING_AND_QA.md) | Engineering architecture, build baseline, and QA guidance. |
 | [**SRS.md**](./SRS.md) | Software Requirements Specification, detailing core functional and non-functional requirements. |
 | [**WIREFRAMES.md**](./WIREFRAMES.md) | Standalone UI wireframes for all main screens. |
 | [**SRS_FLOWCHARTS_WIREFRAMES.md**](./SRS_FLOWCHARTS_WIREFRAMES.md) | Comprehensive logic flows (Mermaid), UI wireframes, and architectural diagrams. |

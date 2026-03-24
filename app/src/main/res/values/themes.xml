@@ -3,7 +3,7 @@
     <style name="Base.Theme.CallQTV" parent="Theme.Material3.Dark.NoActionBar">
         <!-- Force a black background across the app. -->
         <item name="android:icon">@drawable/callq_tv_2</item>
-        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:windowBackground">@color/deep_navy</item>
         <!-- Android 15: opt out of edge-to-edge enforcement to avoid layout crashes -->
         <item name="android:windowOptOutEdgeToEdgeEnforcement" tools:targetApi="35">true</item>
     </style>
@@ -11,7 +11,7 @@
     <style name="Theme.CallQTV" parent="Base.Theme.CallQTV" >
         <item name="alpha">1.0</item>
         <!-- Keep a consistent black background for all windows. -->
-        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:windowBackground">@color/deep_navy</item>
     </style>
 
  <!--   <style name="ChipStyle" parent="Widget.AppCompat.Button.Borderless">

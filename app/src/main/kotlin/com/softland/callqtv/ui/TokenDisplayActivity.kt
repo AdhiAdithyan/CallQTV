@@ -107,6 +107,7 @@ import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.Abs
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView
 import androidx.lifecycle.LifecycleOwner
 import java.io.File
+import java.io.BufferedInputStream
 import android.media.MediaPlayer
 import android.media.AudioManager
 import android.media.ToneGenerator
@@ -114,6 +115,7 @@ import android.util.Log
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
+import java.net.URLConnection
 
 class TokenDisplayActivity : ComponentActivity() {
 
@@ -352,19 +354,40 @@ fun TokenDisplayScreen(
     val connectTimer by mqttViewModel.getConnectTimer().observeAsState(0)
     val mqttRetryAttempt by mqttViewModel.getMqttRetryAttempt().observeAsState(0)
     val isBrokerReachable by mqttViewModel.isBrokerReachable().observeAsState(true)
+    var showMqttRetryDialog by remember { mutableStateOf(false) }
+    var pendingCallCount by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            // Show only queued/waiting calls; exclude the currently processing call.
+            pendingCallCount = (mqttViewModel.announcementQueueSize.get() - 1).coerceAtLeast(0)
+            delay(150)
+        }
+    }
 
     // Trust MQTT when it reports connected. If MQTT is connected and publishing,
     // we are connected - do NOT let the TCP ping override that.
     // (Some broker devices accept only one connection; the ping would fail even when MQTT works.)
     val brokerConnected = mqttConnected || isBrokerReachable
+    var reconnectUiSeconds by remember { mutableIntStateOf(0) }
+    LaunchedEffect(brokerConnected, showMqttRetryDialog) {
+        if (!brokerConnected && !showMqttRetryDialog) {
+            reconnectUiSeconds = 0
+            while (!brokerConnected && !showMqttRetryDialog) {
+                delay(1000)
+                reconnectUiSeconds += 1
+            }
+        } else {
+            reconnectUiSeconds = 0
+        }
+    }
     
     val macAddress = viewModel.macAddress
     val appVersion = remember { context.getString(R.string.app_version) }
     
     val networkViewModel = viewModel<com.softland.callqtv.viewmodel.NetworkViewModel>()
                 val isNetworkAvailable by networkViewModel.getNetworkLiveData(context).observeAsState(initial = true)
-    var showMqttRetryDialog by remember { mutableStateOf(false) }
     var showTtsLoading by remember { mutableStateOf(false) }
+    var lastInitializedTtsLanguage by remember { mutableStateOf<String?>(null) }
     // Tracks when the BLUCON error dialog was shown (kept for potential timing / analytics)
     var mqttRetryShownAt by remember { mutableStateOf<Long?>(null) }
     val mqttRetryFocusRequester = remember { FocusRequester() }
@@ -393,14 +416,22 @@ fun TokenDisplayScreen(
         }
     }
 
-    // Pre-initialize announcement engine to avoid delay on first call
-    LaunchedEffect(config) {
-        config?.let { cfg ->
-            showTtsLoading = true
-            TokenAnnouncer.initialize(context, cfg.audioLanguage) { success ->
+    // Initialize TTS in a separate phase after config loading completes, so it does not
+    // appear as "API/config loading" time to users.
+    LaunchedEffect(config?.audioLanguage, isLoading) {
+        val cfg = config ?: return@LaunchedEffect
+        if (isLoading) return@LaunchedEffect
+
+        val lang = cfg.audioLanguage
+        if (lastInitializedTtsLanguage == lang) return@LaunchedEffect
+
+        showTtsLoading = true
+        TokenAnnouncer.initialize(context, lang) {
+            Handler(Looper.getMainLooper()).post {
                 showTtsLoading = false
             }
         }
+        lastInitializedTtsLanguage = lang
     }
 
     val latestConfigState = rememberUpdatedState(config)
@@ -438,14 +469,9 @@ fun TokenDisplayScreen(
                         ?: counterIdOrName.trim()
                 val btnKey = actualCounter.buttonIndex?.toString()?.trim()
 
-                // Update in-memory history & UI. processTokenUpdateForKeys is now a suspend function 
-                // and returns false if the token is already at index 0 (skip announcement).
-                val isNewOrMoved = mqttViewModel.processTokenUpdateForKeys(storageKey, tokenLabel, btnKey)
-
-                // Signal re-call by updating the timestamp, which will restart the blink in CounterBoard
-                blinkTriggers[storageKey] = System.currentTimeMillis()
-
-                if (!isNewOrMoved) {
+                // Rule: If this exact token is already at first position and the last same
+                // announcement is within 10s, skip BOTH announcement and UI update.
+                if (mqttViewModel.shouldSkipTopTokenWithin10s(storageKey, tokenLabel)) {
                     return@collect
                 }
 
@@ -458,49 +484,53 @@ fun TokenDisplayScreen(
                 mqttViewModel.markAsAnnounced(storageKey, tokenLabel)
                 if (btnKey != null) mqttViewModel.markAsAnnounced(btnKey, tokenLabel)
 
-                // Brief delay so UI updates before sound (both visible at same time)
+                // Show token in UI at announcement start (not after completion).
+                val isNewOrMoved = mqttViewModel.processTokenUpdateForKeys(storageKey, tokenLabel, btnKey)
+                if (!isNewOrMoved) return@collect
+
+                // Signal re-call by updating timestamp (blink restart) at announcement start.
+                blinkTriggers[storageKey] = System.currentTimeMillis()
+
+                // Keep sequential announcement handling and bounded timeout so idle-state
+                // TTS does not stall the pipeline for long periods.
+
+                // Brief pause to keep speech/chime pacing natural.
                 delay(50)
 
-                // 3. Always play notification chime, even if TTS announcements are disabled
+                // Always play notification chime first.
                 val soundKey = ThemeColorManager.getNotificationSoundKey(context)
                 playTokenChime(soundKey)
 
-                // 4. If token announcement is disabled, stop after chime
-                if (currentConfig?.enableTokenAnnouncement != true) {
-                    return@collect
-                }
+                if (currentConfig?.enableTokenAnnouncement == true) {
+                    val displayName =
+                        (actualCounter.name?.takeIf { it.isNotBlank() }
+                            ?: actualCounter.defaultName?.takeIf { it.isNotBlank() }
+                            ?: "Counter ${actualCounter.buttonIndex}")
 
-                // 5. TTS: include counter name only when counter announcement is also enabled
-                val displayName =
-                    (actualCounter.name?.takeIf { it.isNotBlank() }
-                        ?: actualCounter.defaultName?.takeIf { it.isNotBlank() }
-                        ?: "Counter ${actualCounter.buttonIndex}")
+                    val announcementCounterName =
+                        if (currentConfig.enableCounterAnnouncement == true) displayName else ""
 
-                val announcementCounterName =
-                    if (currentConfig.enableCounterAnnouncement == true) {
-                        displayName
-                    } else {
-                        ""  // Token ann on, counter ann off → announce token only, no counter details
+                    val counterCode = actualCounter.code.orEmpty().trim().ifBlank {
+                        actualCounter.defaultCode.orEmpty().trim()
                     }
+                    val usePrefix = currentConfig.enableCounterPrefix != false
+                    val tokenLabelWithCode =
+                        if (usePrefix && counterCode.isNotBlank()) "$counterCode-$tokenLabel" else tokenLabel
 
-                // Token label with counter code prefix when enable_counter_prifix is true (e.g. "A-36")
-                val counterCode = actualCounter.code.orEmpty().trim().ifBlank {
-                    actualCounter.defaultCode.orEmpty().trim()
-                }
-                val usePrefix = currentConfig?.enableCounterPrefix != false
-                val tokenLabelWithCode = if (usePrefix && counterCode.isNotBlank()) "$counterCode-$tokenLabel" else tokenLabel
-
-                // Announce and suspend until TTS callback completes
-                suspendCancellableCoroutine<Unit> { continuation ->
-                    TokenAnnouncer.announceToken(
-                        context = context,
-                        audioLanguage = currentConfig.audioLanguage,
-                        counterName = announcementCounterName,
-                        tokenLabel = tokenLabelWithCode,
-                        onDone = {
-                            if (continuation.isActive) continuation.resume(Unit)
+                    // Cap announcement wait to avoid long idle wake-up delays.
+                    withTimeoutOrNull(6000) {
+                        suspendCancellableCoroutine<Unit> { continuation ->
+                            TokenAnnouncer.announceToken(
+                                context = context,
+                                audioLanguage = currentConfig.audioLanguage,
+                                counterName = announcementCounterName,
+                                tokenLabel = tokenLabelWithCode,
+                                onDone = {
+                                    if (continuation.isActive) continuation.resume(Unit)
+                                }
+                            )
                         }
-                    )
+                    }
                 }
             } finally {
                 mqttViewModel.announcementQueueSize.decrementAndGet()
@@ -526,43 +556,76 @@ fun TokenDisplayScreen(
 
         if (config != null) {
             val cfg = config!!
-            
-            TokenDisplayContent(
-                config = cfg,
-                macAddress = macAddress,
-                appVersion = appVersion,
-                isMqttConnected = mqttConnected,
-                isNetworkAvailable = isNetworkAvailable,
-                counters = counters,
-                adFiles = viewModel.localAdFiles.observeAsState(emptyList()).value,
-                tokensPerCounter = tokensPerCounter,
-                daysUntilLicenseExpiry = daysUntilExpiry,
-                dateTime = currentDateTime,
-                counterBgHex = counterBgHex,
-                tokenBgHex = tokenBgHex,
-                onThemeChange = onThemeChange,
-                onCounterBgChange = onCounterBgChange,
-                onTokenBgChange = onTokenBgChange,
-                onRefresh = { viewModel.loadData(mqttViewModel, forceShowOverlay = true) },
-                blinkTriggers = blinkTriggers
-            )
+
+            Box(modifier = Modifier.fillMaxSize()) {
+                TokenDisplayContent(
+                    config = cfg,
+                    macAddress = macAddress,
+                    appVersion = appVersion,
+                    isMqttConnected = mqttConnected,
+                    isNetworkAvailable = isNetworkAvailable,
+                    counters = counters,
+                    adFiles = viewModel.localAdFiles.observeAsState(emptyList()).value,
+                    tokensPerCounter = tokensPerCounter,
+                    daysUntilLicenseExpiry = daysUntilExpiry,
+                    dateTime = currentDateTime,
+                    counterBgHex = counterBgHex,
+                    tokenBgHex = tokenBgHex,
+                    onThemeChange = onThemeChange,
+                    onCounterBgChange = onCounterBgChange,
+                    onTokenBgChange = onTokenBgChange,
+                    onRefresh = { viewModel.loadData(mqttViewModel, forceShowOverlay = true) },
+                    blinkTriggers = blinkTriggers
+                )
+
+                if (pendingCallCount > 0) {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 8.dp, end = 8.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xCC1E1E1E),
+                        border = BorderStroke(1.dp, Color(0xFF64B5F6))
+                    ) {
+                        Text(
+                            text = "Pending calls: $pendingCallCount",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+
+                if (!brokerConnected && !showMqttRetryDialog) {
+                    val retryCount = mqttRetryAttempt.coerceAtLeast(1)
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(top = 8.dp, start = 8.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xCC2E2E2E),
+                        border = BorderStroke(1.dp, Color(0xFFFFA726))
+                    ) {
+                        Text(
+                            text = "Connecting to BLUCON... Try $retryCount | ${reconnectUiSeconds}s",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 
     // Overlays and Dialogs - Placed at the end to ensure they draw on top
-    if (showTtsLoading) {
-        AnimatedLoadingOverlay(message = "Setting up voice announcement...", isVisible = true)
+    if (showTtsLoading && !isLoading) {
+        VoiceInitializationDialog(isVisible = true)
     }
 
     if (isLoading) {
         AnimatedLoadingOverlay(
             message = "Loading TV configuration.\nPlease wait...",
-            isVisible = true
-        )
-    } else if (!brokerConnected && !showMqttRetryDialog) {
-        val retryInfo = if (mqttRetryAttempt > 0) " (Retry $mqttRetryAttempt)" else ""
-        AnimatedLoadingOverlay(
-            message = "Connecting to BLUCON$retryInfo...\nTime elapsed: ${connectTimer}s",
             isVisible = true
         )
     } else if (isPendingApproval) {
@@ -1006,14 +1069,25 @@ fun HeaderArea(
     ) {
         // Left: App Name
         Box(modifier = Modifier.weight(1f)) {
-             androidx.compose.foundation.Image(
-                painter = painterResource(id = R.drawable.callq_tv_logo),
-                contentDescription = "App Logo",
+            Box(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
-                    .height((if (isPortrait) 48 else 58).dp * scale),
-                contentScale = ContentScale.Fit
-            )
+                    .height((if (isPortrait) 50 else 65).dp * scale)
+                    .width((if (isPortrait) 88 else 120).dp * scale)
+                    .clip(RoundedCornerShape(8.dp))
+                    // Slightly soften the logo background to reduce harsh contrast.
+                    .background(Color(0xFF0D1B2A))
+                    .border(1.dp, Color.White, RoundedCornerShape(8.dp))
+                    .padding(2.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                androidx.compose.foundation.Image(
+                    painter = painterResource(id = R.drawable.callq_tv_logo),
+                    contentDescription = "App Logo",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit
+                )
+            }
         }
 
         // Center: Company Name
@@ -1166,9 +1240,9 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
         preparingAd = targetAd
         isNextReady = false
 
-        val path = targetAd.filePath.lowercase()
-        val isVideo = isAdVideo(path)
-        val isYouTube = path.contains("youtube.com") || path.contains("youtu.be")
+        val mediaType = resolveAdMediaType(targetAd.filePath, context)
+        val isVideo = mediaType == AdMediaType.Video
+        val isYouTube = mediaType == AdMediaType.YouTube
 
         if (isVideo || isYouTube) {
             // Video or YouTube: wait for onReady or timeout
@@ -1198,9 +1272,9 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
             // Main Display
             Crossfade(targetState = visibleAd, animationSpec = tween(600), label = "ad_fade") { ad ->
                 if (ad != null) {
-                    val path = ad.filePath.lowercase()
-                    val adIsVideo = isAdVideo(path)
-                    val adIsYouTube = path.contains("youtube.com") || path.contains("youtu.be")
+                    val mediaType = remember(ad.filePath) { resolveAdMediaType(ad.filePath, context) }
+                    val adIsVideo = mediaType == AdMediaType.Video
+                    val adIsYouTube = mediaType == AdMediaType.YouTube
                     
                     if (adIsYouTube) {
                         val videoId = extractYoutubeVideoId(ad.filePath)
@@ -1238,9 +1312,11 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
             
             // Background Preloader (uses the OTHER player)
             if (!isNextReady && preparingAd != visibleAd && preparingAd != null) {
-                val nextPath = preparingAd!!.filePath.lowercase()
-                val nextIsVideo = isAdVideo(nextPath)
-                val nextIsYouTube = nextPath.contains("youtube.com") || nextPath.contains("youtu.be")
+                val nextMediaType = remember(preparingAd!!.filePath) {
+                    resolveAdMediaType(preparingAd!!.filePath, context)
+                }
+                val nextIsVideo = nextMediaType == AdMediaType.Video
+                val nextIsYouTube = nextMediaType == AdMediaType.YouTube
                 
                 if (nextIsYouTube) {
                     val videoId = extractYoutubeVideoId(preparingAd!!.filePath)
@@ -1277,11 +1353,63 @@ private fun extractYoutubeVideoId(url: String): String? {
 }
 
 private fun isAdVideo(path: String): Boolean {
-    val lc = path.lowercase()
+    val lc = path.lowercase().substringBefore("?").substringBefore("#")
     return lc.endsWith(".mp4") || lc.endsWith(".mkv") || lc.endsWith(".mov") || 
            lc.endsWith(".3gp") || lc.endsWith(".webm") || lc.endsWith(".avi") || 
            lc.endsWith(".flv") || lc.endsWith(".ts") || lc.endsWith(".m4v") || 
            lc.endsWith(".mpg") || lc.endsWith(".mpeg") || lc.endsWith(".m2ts")
+}
+
+private fun isAdImage(path: String): Boolean {
+    val lc = path.lowercase().substringBefore("?").substringBefore("#")
+    return lc.endsWith(".jpg") || lc.endsWith(".jpeg") || lc.endsWith(".png") ||
+        lc.endsWith(".gif") || lc.endsWith(".webp") || lc.endsWith(".bmp") ||
+        lc.endsWith(".svg")
+}
+
+private enum class AdMediaType { YouTube, Video, Image }
+
+private fun resolveAdMediaType(path: String, context: Context): AdMediaType {
+    val lc = path.lowercase()
+    if (lc.contains("youtube.com") || lc.contains("youtu.be")) return AdMediaType.YouTube
+    if (isAdVideo(path)) return AdMediaType.Video
+    if (isAdImage(path)) return AdMediaType.Image
+
+    // Fallback MIME sniffing for extension-less/signed URLs and local files.
+    val mime = detectMimeType(path, context)
+    return when {
+        mime?.startsWith("video/") == true -> AdMediaType.Video
+        else -> AdMediaType.Image
+    }
+}
+
+private fun detectMimeType(path: String, context: Context): String? {
+    return try {
+        val cleaned = path.substringBefore("?").substringBefore("#")
+
+        if (cleaned.startsWith("content://")) {
+            return context.contentResolver.getType(Uri.parse(cleaned))
+        }
+
+        val filePath = when {
+            cleaned.startsWith("file://") -> Uri.parse(cleaned).path
+            else -> cleaned
+        }
+
+        // 1) Guess from name first
+        URLConnection.guessContentTypeFromName(cleaned)?.let { return it.lowercase() }
+
+        // 2) If local file exists, sniff first bytes
+        val localFile = filePath?.let { File(it) }
+        if (localFile != null && localFile.exists() && localFile.isFile) {
+            BufferedInputStream(localFile.inputStream()).use { input ->
+                URLConnection.guessContentTypeFromStream(input)?.let { return it.lowercase() }
+            }
+        }
+        null
+    } catch (_: Exception) {
+        null
+    }
 }
 
 @Composable
@@ -1600,7 +1728,8 @@ fun CounterBoard(
             initialValue = 0f,
             targetValue = 2f,
             animationSpec = infiniteRepeatable(
-                animation = tween(1000, easing = LinearEasing),
+                // Reduce inversion phase duration by 1/3 (1000ms -> ~667ms)
+                animation = tween(667, easing = LinearEasing),
                 repeatMode = RepeatMode.Restart
             ),
             label = "invert_step"
@@ -1872,6 +2001,14 @@ fun AppearanceSettingsDialog(
     isCounterPrefixEnabled: Boolean?,
     companyName: String
 ) {
+    // Fixed Settings palette (independent from app theme)
+    val settingsPrimary = Color(0xFF4FC3F7)
+    val settingsText = Color(0xFFECEFF1)
+    val settingsMutedText = Color(0xFFB0BEC5)
+    val settingsCard = Color(0xFF263238)
+    val settingsBorder = Color(0xFF607D8B)
+    val settingsError = Color(0xFFEF5350)
+
     var showThemeColorPicker by remember { mutableStateOf(false) }
     var showSoundPicker by remember { mutableStateOf(false) }
     var showCounterColorPicker by remember { mutableStateOf(false) }
@@ -1886,7 +2023,7 @@ fun AppearanceSettingsDialog(
     var notificationSoundKey by remember { mutableStateOf("ding") }
     var is24Hour by remember { mutableStateOf(true) }
     var isAdSoundEnabled by remember { mutableStateOf(false) }
-    var isOfflineAdsEnabled by remember { mutableStateOf(false) }
+    var isOfflineAdsEnabled by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) {
         withContext(Dispatchers.Default) {
             currentCounterHex = ThemeColorManager.getCounterBackgroundColor(context)
@@ -1904,8 +2041,23 @@ fun AppearanceSettingsDialog(
     }
 
     var selectedTabIndex by remember { mutableIntStateOf(0) }
+    // Always open Settings with the first tab selected.
+    LaunchedEffect(Unit) { selectedTabIndex = 0 }
+    val appThemeFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(selectedTabIndex) {
+        if (selectedTabIndex == 0) {
+            // Defer focus request until dialog/tab content is composed.
+            delay(100)
+            try {
+                appThemeFocusRequester.requestFocus()
+            } catch (_: IllegalStateException) {
+                // Focus tree may not be ready yet.
+            }
+        }
+    }
     var showOfflineConfirmDialog by remember { mutableStateOf(false) }
-    val tabs = listOf("System", "Display", "Audios", "Other")
+    // Move "System" tab to the last position as requested.
+    val tabs = listOf("Display", "Audios", "Other", "System")
 
     if (showSoundPicker) {
         NotificationSoundDialog(
@@ -1981,17 +2133,17 @@ fun AppearanceSettingsDialog(
             properties = DialogProperties(usePlatformDefaultWidth = false),
             title = {
                 Column {
-                    Text("Settings", style = MaterialTheme.typography.titleMedium)
+                    Text("Settings", style = MaterialTheme.typography.headlineSmall)
                     TabRow(
                         selectedTabIndex = selectedTabIndex,
                         containerColor = Color.Transparent,
-                        contentColor = MaterialTheme.colorScheme.primary,
+                        contentColor = settingsPrimary,
                         divider = {},
                         indicator = { tabPositions ->
                             if (selectedTabIndex < tabPositions.size) {
                                 TabRowDefaults.SecondaryIndicator(
                                     modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
-                                    color = MaterialTheme.colorScheme.primary
+                                    color = settingsPrimary
                                 )
                             }
                         }
@@ -2000,7 +2152,9 @@ fun AppearanceSettingsDialog(
                             Tab(
                                 selected = selectedTabIndex == index,
                                 onClick = { selectedTabIndex = index },
-                                text = { Text(title, fontSize = 13.sp) }
+                                selectedContentColor = settingsPrimary,
+                                unselectedContentColor = settingsMutedText,
+                                text = { Text(title, fontSize = 16.sp) }
                             )
                         }
                     }
@@ -2009,47 +2163,7 @@ fun AppearanceSettingsDialog(
             text = {
                 Box(modifier = Modifier.fillMaxWidth().height(260.dp)) {
                     when (selectedTabIndex) {
-                        0 -> { // System Tab
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    androidx.compose.foundation.Image(
-                                        painter = painterResource(id = R.drawable.callq_tv_logo),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(60.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Column {
-                                        Text(companyName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                                        Text("System Information", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                                    }
-                                }
-                                HorizontalDivider(modifier = Modifier.padding(vertical = 1.dp))
-                                InfoRow("Company ID", String.format("%04d", customerId))
-                                InfoRow("Device ID", macAddress)
-                                InfoRow("App Version", appVersion)
-                                if (daysUntilExpiry != null) {
-                                    val expiryText = if (daysUntilExpiry <= 0) "Expired" else "Expires in $daysUntilExpiry days"
-                                    val color = if (daysUntilExpiry <= 10) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-                                    InfoRow("License", expiryText, color)
-                                }
-                                InfoRow("Tokens", if (isTokenAnnouncementEnabled == true) "Enabled" else "Disabled")
-                                InfoRow("Counters", if (isCounterAnnouncementEnabled == true) "Enabled" else "Disabled")
-                                InfoRow("Prefix", if (isCounterPrefixEnabled == true) "Enabled" else "Disabled")
-                                
-                                Spacer(modifier = Modifier.height(4.dp))
-                                HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
-                                Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("Developed by", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                                    androidx.compose.foundation.Image(
-                                        painter = painterResource(id = R.drawable.ic_softland_logo),
-                                        contentDescription = "Softland India Ltd",
-                                        modifier = Modifier.fillMaxWidth(0.5f).height(35.dp),
-                                        contentScale = androidx.compose.ui.layout.ContentScale.Fit
-                                    )
-                                }
-                            }
-                        }
-                        1 -> { // Display Tab
+                        0 -> { // Display Tab
                             LazyVerticalGrid(
                                 columns = GridCells.Fixed(2),
                                 modifier = Modifier.fillMaxWidth().height(260.dp),
@@ -2057,12 +2171,31 @@ fun AppearanceSettingsDialog(
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                                 contentPadding = PaddingValues(top = 4.dp, bottom = 4.dp)
                             ) {
-                                item { ColorPickerButton("App Theme", currentThemeHex) { showThemeColorPicker = true } }
-                                item { ColorPickerButton("Counter BG", currentCounterHex) { showCounterColorPicker = true } }
-                                item { ColorPickerButton("Token BG", currentTokenHex) { showTokenColorPicker = true } }
+                                item {
+                                    ColorPickerButton(
+                                        label = "App Theme",
+                                        hex = currentThemeHex,
+                                        onClick = { showThemeColorPicker = true },
+                                        modifier = Modifier.focusRequester(appThemeFocusRequester)
+                                    )
+                                }
+                                item {
+                                    ColorPickerButton(
+                                        label = "Counter BG",
+                                        hex = currentCounterHex,
+                                        onClick = { showCounterColorPicker = true }
+                                    )
+                                }
+                                item {
+                                    ColorPickerButton(
+                                        label = "Token BG",
+                                        hex = currentTokenHex,
+                                        onClick = { showTokenColorPicker = true }
+                                    )
+                                }
                             }
                         }
-                        2 -> { // Audios Tab
+                        1 -> { // Audios Tab
                             LazyVerticalGrid(
                                 columns = GridCells.Fixed(2),
                                 modifier = Modifier.fillMaxWidth().height(260.dp),
@@ -2076,15 +2209,21 @@ fun AppearanceSettingsDialog(
                                 item {
                                     GridSettingsItem(
                                         title = "Notification Sound",
-                                        onClick = { showSoundPicker = true }
+                                        onClick = { showSoundPicker = true },
+                                        titleColor = settingsPrimary,
+                                        cardColor = settingsCard,
+                                        borderColor = settingsBorder
                                     ) {
-                                        Text(currentSoundLabel, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                                        Text(currentSoundLabel, fontSize = 16.sp, color = settingsPrimary)
                                     }
                                 }
 
                                 item {
                                     GridSettingsItem(
                                         title = "Advertisement Sound",
+                                        titleColor = settingsPrimary,
+                                        cardColor = settingsCard,
+                                        borderColor = settingsBorder,
                                         onClick = {
                                             isAdSoundEnabled = !isAdSoundEnabled
                                             context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE).edit().putBoolean("enable_ad_sound", isAdSoundEnabled).apply()
@@ -2095,12 +2234,17 @@ fun AppearanceSettingsDialog(
                                             isAdSoundEnabled = it
                                             context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE).edit().putBoolean("enable_ad_sound", it).apply()
                                             MediaEngine.updateVolume(context)
-                                        }, modifier = Modifier.scale(0.8f).offset(x = (-12).dp))
+                                        }, modifier = Modifier.scale(0.9f).offset(x = (-8).dp),
+                                            colors = CheckboxDefaults.colors(
+                                                checkedColor = settingsPrimary,
+                                                uncheckedColor = settingsMutedText,
+                                                checkmarkColor = Color.Black
+                                            ))
                                     }
                                 }
                             }
                         }
-                        3 -> { // Other Tab
+                        2 -> { // Other Tab
                             LazyVerticalGrid(
                                 columns = GridCells.Fixed(2),
                                 modifier = Modifier.fillMaxWidth().height(260.dp),
@@ -2111,6 +2255,9 @@ fun AppearanceSettingsDialog(
                                 item {
                                     GridSettingsItem(
                                         title = "24-Hour Format",
+                                        titleColor = settingsPrimary,
+                                        cardColor = settingsCard,
+                                        borderColor = settingsBorder,
                                         onClick = {
                                             is24Hour = !is24Hour
                                             context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE).edit().putBoolean("use_24_hour_format", is24Hour).apply()
@@ -2119,13 +2266,21 @@ fun AppearanceSettingsDialog(
                                         Checkbox(checked = is24Hour, onCheckedChange = { 
                                             is24Hour = it
                                             context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE).edit().putBoolean("use_24_hour_format", it).apply()
-                                        }, modifier = Modifier.scale(0.8f).offset(x = (-12).dp))
+                                        }, modifier = Modifier.scale(0.9f).offset(x = (-8).dp),
+                                            colors = CheckboxDefaults.colors(
+                                                checkedColor = settingsPrimary,
+                                                uncheckedColor = settingsMutedText,
+                                                checkmarkColor = Color.Black
+                                            ))
                                     }
                                 }
 
                                 item {
                                     GridSettingsItem(
                                         title = "Offline Advertisements",
+                                        titleColor = settingsPrimary,
+                                        cardColor = settingsCard,
+                                        borderColor = settingsBorder,
                                         onClick = {
                                             if (isOfflineAdsEnabled) showOfflineConfirmDialog = true
                                             else { isOfflineAdsEnabled = true; com.softland.callqtv.utils.PreferenceHelper.setOfflineAdsEnabled(context, true) }
@@ -2134,25 +2289,88 @@ fun AppearanceSettingsDialog(
                                         Checkbox(checked = isOfflineAdsEnabled, onCheckedChange = { 
                                             if (!it) showOfflineConfirmDialog = true 
                                             else { isOfflineAdsEnabled = true; com.softland.callqtv.utils.PreferenceHelper.setOfflineAdsEnabled(context, true) }
-                                        }, modifier = Modifier.scale(0.8f).offset(x = (-12).dp))
+                                        }, modifier = Modifier.scale(0.9f).offset(x = (-8).dp),
+                                            colors = CheckboxDefaults.colors(
+                                                checkedColor = settingsPrimary,
+                                                uncheckedColor = settingsMutedText,
+                                                checkmarkColor = Color.Black
+                                            ))
                                     }
                                 }
 
                                 item(span = { GridItemSpan(2) }) {
                                     GridSettingsItem(
                                         title = "Clear saved token history",
+                                        titleColor = settingsError,
+                                        cardColor = settingsCard,
+                                        borderColor = settingsBorder,
                                         onClick = { showClearConfirmDialog = true }
                                     ) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text("Action to reset active token list", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f), modifier = Modifier.weight(1f))
+                                            Text("Action to reset active token list", fontSize = 15.sp, color = settingsError.copy(alpha = 0.8f), modifier = Modifier.weight(1f))
                                             Checkbox(
                                                 checked = false, 
                                                 onCheckedChange = { if (it) showClearConfirmDialog = true },
-                                                modifier = Modifier.scale(0.8f).offset(x = (-6).dp),
-                                                colors = CheckboxDefaults.colors(uncheckedColor = MaterialTheme.colorScheme.error)
+                                                modifier = Modifier.scale(0.9f).offset(x = (-6).dp),
+                                                colors = CheckboxDefaults.colors(
+                                                    checkedColor = settingsError,
+                                                    uncheckedColor = settingsError
+                                                )
                                             )
                                         }
                                     }
+                                }
+                            }
+                        }
+                        3 -> { // System Tab
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color.Black)
+                                            .padding(1.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        androidx.compose.foundation.Image(
+                                            painter = painterResource(id = R.drawable.callq_tv_logo),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(35.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(2.dp))
+                                    Column {
+                                        Text(companyName, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                        Text("System Information", fontSize = 14.sp, color = settingsPrimary)
+                                    }
+                                }
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 1.dp))
+                                InfoRow("Company ID", String.format("%04d", customerId))
+                                InfoRow("Device ID", macAddress)
+                                InfoRow("App Version", appVersion)
+                                if (daysUntilExpiry != null) {
+                                    val expiryText = if (daysUntilExpiry <= 0) "Expired" else "Expires in $daysUntilExpiry days"
+                                    val color = if (daysUntilExpiry <= 10) settingsError else settingsText
+                                    if (daysUntilExpiry <= 10) 
+                                    {
+                                        InfoRow("License", expiryText, color)
+                                    }
+                                }
+                                InfoRow("Token Announcement", if (isTokenAnnouncementEnabled == true) "Enabled" else "Disabled")
+                                InfoRow("Counter Announcement", if (isCounterAnnouncementEnabled == true) "Enabled" else "Disabled")
+                                InfoRow("Show Counter Prefix", if (isCounterPrefixEnabled == true) "Enabled" else "Disabled")
+                                
+                                Spacer(modifier = Modifier.height(1.dp))
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+                                Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("Developed by", fontSize = 16.sp, color = settingsPrimary, fontWeight = FontWeight.Bold)
+                                    androidx.compose.foundation.Image(
+                                        painter = painterResource(id = R.drawable.ic_softland_logo),
+                                        contentDescription = "Softland India Ltd",
+                                        modifier = Modifier.fillMaxWidth(0.5f).height(35.dp),
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                                    )
                                 }
                             }
                         }
@@ -2193,20 +2411,26 @@ fun InfoRow(label: String, value: String, valueColor: Color = MaterialTheme.colo
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 1.dp),
+            .padding(vertical = 2.dp),
         verticalAlignment = Alignment.Top
     ) {
         Text(
             label,
-            style = MaterialTheme.typography.bodySmall,
+            fontSize = 12.sp,
+            lineHeight = 14.sp,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.width(90.dp)
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.width(190.dp)
         )
         Text(
             value,
-            style = MaterialTheme.typography.bodySmall,
+            fontSize = 12.sp,
+            lineHeight = 14.sp,
             color = valueColor,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 8.dp)
         )
     }
 }
@@ -2257,14 +2481,19 @@ fun LicenseExpiredDialog(
 }
 
 @Composable
-fun ColorPickerButton(label: String, hex: String, onClick: () -> Unit) {
+fun ColorPickerButton(
+    label: String,
+    hex: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(2.dp, MaterialTheme.colorScheme.outline),
-        modifier = Modifier.width(140.dp)
+        border = BorderStroke(2.dp, Color(0xFF607D8B)),
+        modifier = modifier.width(180.dp)
     ) {
-        Row(modifier = Modifier.padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
                     .size(18.dp)
@@ -2272,7 +2501,7 @@ fun ColorPickerButton(label: String, hex: String, onClick: () -> Unit) {
                     .border(2.dp, Color.Gray, RoundedCornerShape(4.dp))
             )
             Spacer(modifier = Modifier.width(6.dp))
-            Text(label, fontSize = 13.sp)
+            Text(label, fontSize = 16.sp, color = Color(0xFFECEFF1))
         }
     }
 }
@@ -2281,21 +2510,24 @@ fun ColorPickerButton(label: String, hex: String, onClick: () -> Unit) {
 fun GridSettingsItem(
     title: String,
     onClick: (() -> Unit)? = null,
+    titleColor: Color = Color(0xFF4FC3F7),
+    cardColor: Color = Color(0xFF263238),
+    borderColor: Color = Color(0xFF607D8B),
     content: @Composable () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+        colors = CardDefaults.cardColors(containerColor = cardColor.copy(alpha = 0.45f)),
         shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        border = BorderStroke(1.dp, borderColor.copy(alpha = 0.8f))
     ) {
         Column(
-            modifier = Modifier.padding(8.dp).fillMaxWidth(),
+            modifier = Modifier.padding(12.dp).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Text(title, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            Text(title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = titleColor)
             content()
         }
     }
@@ -2407,7 +2639,7 @@ fun NotificationSoundDialog(
     val scope = rememberCoroutineScope()
 
     AlertDialog(
-        modifier = Modifier.fillMaxWidth(0.9f),
+        modifier = Modifier.fillMaxWidth(2f),
         onDismissRequest = onDismiss,
         title = { Text(title, style = MaterialTheme.typography.titleSmall) },
         text = {
@@ -2427,7 +2659,7 @@ fun NotificationSoundDialog(
                         },
                         modifier = Modifier.fillMaxWidth(),
                         border = if (isSelected)
-                            BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+                            BorderStroke(5.dp, MaterialTheme.colorScheme.primary)
                         else
                             BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
                     ) {
@@ -2462,8 +2694,8 @@ fun PresetThemeColorDialog(
         text = {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(7),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier.heightIn(max = 300.dp)
             ) {
                 items(ThemeColorManager.themeColorOptions) { option ->
@@ -2475,9 +2707,9 @@ fun PresetThemeColorDialog(
                             .onFocusChanged { focused = it.isFocused },
                         shape = RoundedCornerShape(8.dp),
                         border = if (focused)
-                            BorderStroke(3.dp, MaterialTheme.colorScheme.primary)
+                            BorderStroke(5.dp, MaterialTheme.colorScheme.primary)
                         else
-                            BorderStroke(2.dp, Color.Gray)
+                            BorderStroke(1.dp, Color.Gray)
                     ) {
                         Box(
                             modifier = Modifier

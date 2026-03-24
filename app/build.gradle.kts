@@ -98,7 +98,7 @@ android {
             dimension = "environment"
             applicationId = "com.softland.callqtv"
             resValue("string", "app_name", "CallQTV")
-            resValue("string", "app_icon_name", "callq_tv_logo")
+            resValue("string", "app_icon_name", "@drawable/callq_tv_logo")
             manifestPlaceholders["appIcon"] = "@drawable/callq_tv_logo"
             manifestPlaceholders["appIconRound"] = "@drawable/callq_tv_logo"
             manifestPlaceholders["appName"] = "CallQTV"

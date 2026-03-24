@@ -55,7 +55,16 @@ object RetrofitClient {
                 try {
                     val responseBody = response.peekBody(1024 * 1024) // Peek up to 1MB
                     val apiName = request.url.encodedPath
-                    com.softland.callqtv.utils.FileLogger.logResponse(ctx, apiName, responseBody.string())
+                    val bodyText = responseBody.string()
+                    // Config response may carry large ad arrays; keep logs bounded to avoid
+                    // heavy string processing during startup.
+                    val maxLogChars = if (apiName.contains("/config/api/android/config")) 12000 else 200000
+                    val boundedBody = if (bodyText.length > maxLogChars) {
+                        "${bodyText.take(maxLogChars)}... [truncated ${bodyText.length - maxLogChars} chars]"
+                    } else {
+                        bodyText
+                    }
+                    com.softland.callqtv.utils.FileLogger.logResponse(ctx, apiName, boundedBody)
                 } catch (e: Exception) {
                     android.util.Log.e("RetrofitClient", "Response logging failed", e)
                 }
