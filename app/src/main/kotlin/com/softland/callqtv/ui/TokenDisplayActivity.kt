@@ -385,6 +385,11 @@ fun TokenDisplayScreen(
             while (!brokerConnected && !showMqttRetryDialog) {
                 delay(1000)
                 reconnectUiSeconds += 1
+                if (reconnectUiSeconds >= 30) {
+                    // Hard cap retry window at 30s; trigger fresh retry immediately.
+                    mqttViewModel.retryConnect()
+                    reconnectUiSeconds = 0
+                }
             }
         } else {
             reconnectUiSeconds = 0
@@ -1303,6 +1308,8 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
 
         if (isVideo || isYouTube) {
             if (isYouTube && !NetworkUtil.isNetworkAvailable(context)) {
+                Log.w("YouTubeAdFlow", "Skipping YouTube ad: offline network state")
+                FileLogger.logError(context, "YouTubeAdFlow", "Skipping YouTube ad: offline network state")
                 triggerNext()
                 return@LaunchedEffect
             }
@@ -1311,6 +1318,10 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
                 while (!isNextReady) { delay(200) }
             }
             if (!isNextReady) {
+                if (isYouTube) {
+                    Log.w("YouTubeAdFlow", "Skipping YouTube ad: ready timeout (30s)")
+                    FileLogger.logError(context, "YouTubeAdFlow", "Skipping YouTube ad: ready timeout (30s)")
+                }
                 triggerNext() 
             } else {
                 activePlayerIdx = 1 - activePlayerIdx
@@ -1351,6 +1362,8 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
                         } else {
                             // Embedded YouTube WebView playback can cause global UI jank on TV devices.
                             // Keep disabled by default unless explicitly enabled from settings.
+                            Log.i("YouTubeAdFlow", "Skipping YouTube ad: disabled by setting allow_youtube_ads=false")
+                            FileLogger.logError(context, "YouTubeAdFlow", "Skipping YouTube ad: disabled by setting allow_youtube_ads=false")
                             LaunchedEffect(ad.filePath) {
                                 delay(300)
                                 triggerNext()
@@ -1501,6 +1514,7 @@ fun YouTubeAdPlayer(
     onReady: () -> Unit = {},
     onError: () -> Unit = {}
 ) {
+    val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     
     val latestOnVideoEnded by rememberUpdatedState(onVideoEnded)
@@ -1513,6 +1527,8 @@ fun YouTubeAdPlayer(
         // Fast host reachability pre-check to skip blocked YouTube links quickly.
         val reachable = isYouTubeHostReachable()
         if (!reachable && !terminalEventReported) {
+            Log.w("YouTubeAdFlow", "Skipping YouTube ad: host unreachable")
+            FileLogger.logError(context, "YouTubeAdFlow", "Skipping YouTube ad: host unreachable")
             terminalEventReported = true
             latestOnError()
         }
@@ -1522,6 +1538,8 @@ fun YouTubeAdPlayer(
     LaunchedEffect(videoId) {
         delay(12000)
         if (!readyReported && !terminalEventReported) {
+            Log.w("YouTubeAdFlow", "Skipping YouTube ad: SDK ready timeout (12s)")
+            FileLogger.logError(context, "YouTubeAdFlow", "Skipping YouTube ad: SDK ready timeout (12s)")
             terminalEventReported = true
             latestOnError()
         }
@@ -1553,6 +1571,8 @@ fun YouTubeAdPlayer(
 
                     override fun onError(youTubePlayer: YouTubePlayer, error: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerError) {
                         if (!terminalEventReported) {
+                            Log.e("YouTubeAdFlow", "YouTube SDK error: $error")
+                            FileLogger.logError(context, "YouTubeAdFlow", "YouTube SDK error: $error")
                             terminalEventReported = true
                             latestOnError()
                         }
