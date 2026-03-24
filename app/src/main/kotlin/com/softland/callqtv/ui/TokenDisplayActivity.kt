@@ -55,6 +55,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
@@ -63,6 +64,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -87,6 +90,7 @@ import com.softland.callqtv.utils.PreferenceHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 import android.graphics.Color as AndroidColor
@@ -116,6 +120,11 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import java.net.URLConnection
+import java.net.InetSocketAddress
+import java.net.Socket
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 class TokenDisplayActivity : ComponentActivity() {
 
@@ -359,8 +368,9 @@ fun TokenDisplayScreen(
     LaunchedEffect(Unit) {
         while (true) {
             // Show only queued/waiting calls; exclude the currently processing call.
-            pendingCallCount = (mqttViewModel.announcementQueueSize.get() - 1).coerceAtLeast(0)
-            delay(150)
+            val next = (mqttViewModel.announcementQueueSize.get() - 1).coerceAtLeast(0)
+            if (next != pendingCallCount) pendingCallCount = next
+            delay(500)
         }
     }
 
@@ -578,42 +588,17 @@ fun TokenDisplayScreen(
                     blinkTriggers = blinkTriggers
                 )
 
-                if (pendingCallCount > 0) {
-                    Surface(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(top = 8.dp, end = 8.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        color = Color(0xCC1E1E1E),
-                        border = BorderStroke(1.dp, Color(0xFF64B5F6))
-                    ) {
-                        Text(
-                            text = "Pending calls: $pendingCallCount",
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                        )
-                    }
-                }
+                PendingCallsBadge(
+                    pendingCallCount = pendingCallCount,
+                    modifier = Modifier.align(Alignment.TopEnd)
+                )
 
-                if (!brokerConnected && !showMqttRetryDialog) {
-                    val retryCount = mqttRetryAttempt.coerceAtLeast(1)
-                    Surface(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(top = 8.dp, start = 8.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        color = Color(0xCC2E2E2E),
-                        border = BorderStroke(1.dp, Color(0xFFFFA726))
-                    ) {
-                        Text(
-                            text = "Connecting to BLUCON... Try $retryCount | ${reconnectUiSeconds}s",
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                        )
-                    }
-                }
+                ReconnectStatusBadge(
+                    visible = !brokerConnected && !showMqttRetryDialog,
+                    retryAttempt = mqttRetryAttempt,
+                    reconnectUiSeconds = reconnectUiSeconds,
+                    modifier = Modifier.align(Alignment.TopStart)
+                )
             }
         }
     }
@@ -728,6 +713,61 @@ fun TokenDisplayScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun PendingCallsBadge(
+    pendingCallCount: Int,
+    modifier: Modifier = Modifier
+) {
+    AnimatedVisibility(
+        visible = pendingCallCount > 0,
+        enter = fadeIn(tween(180)),
+        exit = fadeOut(tween(180))
+    ) {
+        Surface(
+            modifier = modifier.padding(top = 8.dp, end = 8.dp),
+            shape = RoundedCornerShape(8.dp),
+            color = Color(0xCC1E1E1E),
+            border = BorderStroke(1.dp, Color(0xFF64B5F6))
+        ) {
+            Text(
+                text = "Pending calls: $pendingCallCount",
+                color = Color.White,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReconnectStatusBadge(
+    visible: Boolean,
+    retryAttempt: Int,
+    reconnectUiSeconds: Int,
+    modifier: Modifier = Modifier
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(tween(180)),
+        exit = fadeOut(tween(180))
+    ) {
+        val retryCount = retryAttempt.coerceAtLeast(1)
+        Surface(
+            modifier = modifier.padding(top = 8.dp, start = 8.dp),
+            shape = RoundedCornerShape(8.dp),
+            color = Color(0xCC2E2E2E),
+            border = BorderStroke(1.dp, Color(0xFFFFA726))
+        ) {
+            Text(
+                text = "Connecting to BLUCON... Try $retryCount | ${reconnectUiSeconds}s",
+                color = Color.White,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+            )
+        }
     }
 }
 
@@ -1037,6 +1077,21 @@ fun HeaderArea(
     onRefresh: () -> Unit,
     onClearTokenHistoryAndRefresh: () -> Unit
 ) {
+    // Fallback local clock so DateTime display stays live even if upstream updates stall.
+    val use24Hour = remember(dateTime) { !dateTime.contains("AM") && !dateTime.contains("PM") }
+    var displayDateTime by remember(dateTime) { mutableStateOf(dateTime) }
+    LaunchedEffect(dateTime) {
+        if (dateTime.isNotBlank()) displayDateTime = dateTime
+    }
+    LaunchedEffect(use24Hour) {
+        while (true) {
+            val pattern = if (use24Hour) "dd-MM-yyyy HH:mm:ss" else "dd-MM-yyyy hh:mm:ss a"
+            val formatter = DateTimeFormatter.ofPattern(pattern, Locale.getDefault())
+            displayDateTime = LocalDateTime.now().format(formatter)
+            delay(1000)
+        }
+    }
+
     var showThemeDialog by remember { mutableStateOf(false) }
 
     if (showThemeDialog) {
@@ -1110,7 +1165,7 @@ fun HeaderArea(
             Row(modifier = Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically) {
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        text = dateTime, 
+                        text = displayDateTime,
                         style = MaterialTheme.typography.bodyMedium.copy(fontSize = (if (isPortrait) 16 else 24).sp * scale),
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f)
                     )
@@ -1212,6 +1267,8 @@ fun NetworkStatusIndicator(isOnline: Boolean, isPortrait: Boolean, scale: Float)
 fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
     val orderedAds = remember(adFiles) { adFiles.sortedBy { it.position } }
     val context = LocalContext.current
+    val allowYoutubeAds = context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
+        .getBoolean("allow_youtube_ads", false)
     val intervalSeconds = (config.adInterval ?: 5).coerceAtLeast(1)
 
     // visibleAd: Ad currently on screen
@@ -1245,6 +1302,10 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
         val isYouTube = mediaType == AdMediaType.YouTube
 
         if (isVideo || isYouTube) {
+            if (isYouTube && !NetworkUtil.isNetworkAvailable(context)) {
+                triggerNext()
+                return@LaunchedEffect
+            }
             // Video or YouTube: wait for onReady or timeout
             withTimeoutOrNull(30000) { // 30s timeout for high-res/remote buffering
                 while (!isNextReady) { delay(200) }
@@ -1270,22 +1331,40 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
             Text("No Ads", color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
             // Main Display
-            Crossfade(targetState = visibleAd, animationSpec = tween(600), label = "ad_fade") { ad ->
+            Crossfade(targetState = visibleAd, animationSpec = tween(0), label = "ad_fade") { ad ->
                 if (ad != null) {
                     val mediaType = remember(ad.filePath) { resolveAdMediaType(ad.filePath, context) }
                     val adIsVideo = mediaType == AdMediaType.Video
                     val adIsYouTube = mediaType == AdMediaType.YouTube
                     
                     if (adIsYouTube) {
-                        val videoId = extractYoutubeVideoId(ad.filePath)
-                        if (videoId != null) {
-                            YouTubeAdPlayer(
-                                videoId = videoId,
-                                onVideoEnded = { triggerNext() },
-                                onReady = { if (ad == preparingAd) isNextReady = true },
-                                onError = { triggerNext() }
-                            )
-                        } else triggerNext()
+                        if (allowYoutubeAds) {
+                            val videoId = extractYoutubeVideoId(ad.filePath)
+                            if (videoId != null) {
+                                YouTubeAdPlayer(
+                                    videoId = videoId,
+                                    onVideoEnded = { triggerNext() },
+                                    onReady = { if (ad == preparingAd) isNextReady = true },
+                                    onError = { triggerNext() }
+                                )
+                            } else triggerNext()
+                        } else {
+                            // Embedded YouTube WebView playback can cause global UI jank on TV devices.
+                            // Keep disabled by default unless explicitly enabled from settings.
+                            LaunchedEffect(ad.filePath) {
+                                delay(300)
+                                triggerNext()
+                            }
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "Skipping YouTube ad (disabled in settings)",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     } else if (adIsVideo) {
                         AdVideoPlayer(
                             videoUrl = ad.filePath,
@@ -1319,17 +1398,9 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
                 val nextIsYouTube = nextMediaType == AdMediaType.YouTube
                 
                 if (nextIsYouTube) {
-                    val videoId = extractYoutubeVideoId(preparingAd!!.filePath)
-                    if (videoId != null) {
-                        Box(modifier = Modifier.size(1.dp).alpha(0.01f)) {
-                            YouTubeAdPlayer(
-                                videoId = videoId,
-                                onVideoEnded = { },
-                                onReady = { isNextReady = true },
-                                onError = { triggerNext() }
-                            )
-                        }
-                    } else isNextReady = true
+                    // Avoid hidden YouTube player preloading.
+                    // Creating offscreen WebView-backed players can stall low-power TV devices.
+                    isNextReady = true
                 } else if (nextIsVideo) {
                     Box(modifier = Modifier.size(1.dp).alpha(0.01f)) {
                         AdVideoPlayer(
@@ -1412,6 +1483,17 @@ private fun detectMimeType(path: String, context: Context): String? {
     }
 }
 
+private suspend fun isYouTubeHostReachable(): Boolean = withContext(Dispatchers.IO) {
+    runCatching {
+        withTimeout(1500L) {
+            Socket().use { socket ->
+                socket.connect(InetSocketAddress("www.youtube.com", 443), 1200)
+            }
+            true
+        }
+    }.getOrDefault(false)
+}
+
 @Composable
 fun YouTubeAdPlayer(
     videoId: String,
@@ -1419,12 +1501,31 @@ fun YouTubeAdPlayer(
     onReady: () -> Unit = {},
     onError: () -> Unit = {}
 ) {
-    val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     
     val latestOnVideoEnded by rememberUpdatedState(onVideoEnded)
     val latestOnReady by rememberUpdatedState(onReady)
     val latestOnError by rememberUpdatedState(onError)
+    var readyReported by remember(videoId) { mutableStateOf(false) }
+    var terminalEventReported by remember(videoId) { mutableStateOf(false) }
+
+    LaunchedEffect(videoId) {
+        // Fast host reachability pre-check to skip blocked YouTube links quickly.
+        val reachable = isYouTubeHostReachable()
+        if (!reachable && !terminalEventReported) {
+            terminalEventReported = true
+            latestOnError()
+        }
+    }
+
+    // Safety timeout: if YouTube SDK never reaches ready/error, fail fast instead of stalling ad flow.
+    LaunchedEffect(videoId) {
+        delay(12000)
+        if (!readyReported && !terminalEventReported) {
+            terminalEventReported = true
+            latestOnError()
+        }
+    }
 
     AndroidView(
         factory = { ctx ->
@@ -1432,18 +1533,29 @@ fun YouTubeAdPlayer(
                 lifecycleOwner.lifecycle.addObserver(this)
                 addYouTubePlayerListener(object : AbstractYouTubePlayerListener() {
                     override fun onReady(youTubePlayer: YouTubePlayer) {
-                        youTubePlayer.loadVideo(videoId, 0f)
-                        latestOnReady()
+                        if (!readyReported) {
+                            readyReported = true
+                            latestOnReady()
+                        }
+                        // cueVideo is lighter; avoids aggressive startup spikes on some TVs.
+                        youTubePlayer.cueVideo(videoId, 0f)
+                        youTubePlayer.play()
                     }
 
                     override fun onStateChange(youTubePlayer: YouTubePlayer, state: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerState) {
                         if (state == com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerState.ENDED) {
-                            latestOnVideoEnded()
+                            if (!terminalEventReported) {
+                                terminalEventReported = true
+                                latestOnVideoEnded()
+                            }
                         }
                     }
 
                     override fun onError(youTubePlayer: YouTubePlayer, error: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerError) {
-                        latestOnError()
+                        if (!terminalEventReported) {
+                            terminalEventReported = true
+                            latestOnError()
+                        }
                     }
                 })
             }
@@ -2023,6 +2135,7 @@ fun AppearanceSettingsDialog(
     var notificationSoundKey by remember { mutableStateOf("ding") }
     var is24Hour by remember { mutableStateOf(true) }
     var isAdSoundEnabled by remember { mutableStateOf(false) }
+    var isYouTubeAdsEnabled by remember { mutableStateOf(false) }
     var isOfflineAdsEnabled by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) {
         withContext(Dispatchers.Default) {
@@ -2036,6 +2149,8 @@ fun AppearanceSettingsDialog(
                     .getBoolean("use_24_hour_format", true)
             isAdSoundEnabled = context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
                 .getBoolean("enable_ad_sound", false)
+            isYouTubeAdsEnabled = context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
+                .getBoolean("allow_youtube_ads", false)
             isOfflineAdsEnabled = PreferenceHelper.isOfflineAdsEnabled(context)
         }
     }
@@ -2295,6 +2410,39 @@ fun AppearanceSettingsDialog(
                                                 uncheckedColor = settingsMutedText,
                                                 checkmarkColor = Color.Black
                                             ))
+                                    }
+                                }
+
+                                item {
+                                    GridSettingsItem(
+                                        title = "Allow YouTube Ads",
+                                        titleColor = settingsPrimary,
+                                        cardColor = settingsCard,
+                                        borderColor = settingsBorder,
+                                        onClick = {
+                                            isYouTubeAdsEnabled = !isYouTubeAdsEnabled
+                                            context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
+                                                .edit()
+                                                .putBoolean("allow_youtube_ads", isYouTubeAdsEnabled)
+                                                .apply()
+                                        }
+                                    ) {
+                                        Checkbox(
+                                            checked = isYouTubeAdsEnabled,
+                                            onCheckedChange = {
+                                                isYouTubeAdsEnabled = it
+                                                context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
+                                                    .edit()
+                                                    .putBoolean("allow_youtube_ads", it)
+                                                    .apply()
+                                            },
+                                            modifier = Modifier.scale(0.9f).offset(x = (-8).dp),
+                                            colors = CheckboxDefaults.colors(
+                                                checkedColor = settingsPrimary,
+                                                uncheckedColor = settingsMutedText,
+                                                checkmarkColor = Color.Black
+                                            )
+                                        )
                                     }
                                 }
 
@@ -2729,7 +2877,7 @@ fun PresetThemeColorDialog(
     )
 }
 
-private const val MARQUEE_VELOCITY_DP_PER_SEC = 50f
+private const val MARQUEE_VELOCITY_DP_PER_SEC = 42f
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ScrollingFooter(
@@ -2742,30 +2890,72 @@ fun ScrollingFooter(
     }
     if (scrollText.isEmpty()) return
 
+    val density = LocalDensity.current
+    var travelPx by remember { mutableFloatStateOf(0f) }
+    val textMeasurer = rememberTextMeasurer()
+    // Keep footer typography stable to reduce per-frame glyph/raster churn on TVs.
+    val textStyle = MaterialTheme.typography.titleMedium.copy(
+        fontSize = if (isPortrait) 12.sp else 14.sp,
+        fontWeight = FontWeight.Bold,
+        color = Color.White
+    )
+    val textLayoutResult = remember(scrollText, textStyle, textMeasurer) {
+        textMeasurer.measure(
+            text = scrollText,
+            style = textStyle,
+            maxLines = 1
+        )
+    }
+    val footerHeight = with(density) {
+        // Match container to measured text height with light breathing room.
+        textLayoutResult.size.height.toDp() + 8.dp
+    }
+    val gapPx = with(density) { 24.dp.toPx() }
+    val totalDistance = (textLayoutResult.size.width + gapPx).coerceAtLeast(1f)
+    val pxPerSec = with(density) { MARQUEE_VELOCITY_DP_PER_SEC.dp.toPx() }
+    LaunchedEffect(totalDistance, pxPerSec) {
+        var lastFrameNanos = 0L
+        while (true) {
+            withFrameNanos { frameNanos ->
+                if (lastFrameNanos != 0L) {
+                    val deltaSec = (frameNanos - lastFrameNanos) / 1_000_000_000f
+                    // Continuous modulo-based motion avoids the restart "jerk".
+                    travelPx = (travelPx + (pxPerSec * deltaSec)) % totalDistance
+                }
+                lastFrameNanos = frameNanos
+            }
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.primaryContainer)
-            .padding(vertical = (8 * scale).dp),
+            // Keep footer readable even when app theme is very dark.
+            .background(Color(0xFF1E4E79))
+            .height(footerHeight),
         contentAlignment = Alignment.CenterStart
     ) {
-        Text(
-            text = scrollText,
-            style = MaterialTheme.typography.titleMedium.copy(
-                fontSize = (if (isPortrait) 16 else 24).sp * scale,
-                fontWeight = FontWeight.Bold
-            ),
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
+        Canvas(
             modifier = Modifier
                 .fillMaxWidth()
-                .basicMarquee(
-                    iterations = Int.MAX_VALUE,
-                    velocity = MARQUEE_VELOCITY_DP_PER_SEC.dp
+                .padding(horizontal = 16.dp)
+        ) {
+            val baselineY = (size.height - textLayoutResult.size.height) / 2f
+            var x = -travelPx
+            while (x < size.width + totalDistance) {
+                drawText(
+                    textLayoutResult = textLayoutResult,
+                    topLeft = Offset(x, baselineY)
                 )
-                .padding(horizontal = 16.dp),
-            textAlign = TextAlign.Start,
-            maxLines = 1
-        )
+                x += totalDistance
+            }
+            if (x < size.width) {
+                drawText(
+                    textLayoutResult = textLayoutResult,
+                    topLeft = Offset(x, baselineY)
+                )
+            }
+        }
     }
 }
 

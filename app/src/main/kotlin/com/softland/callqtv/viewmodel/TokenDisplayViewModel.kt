@@ -92,8 +92,8 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
     }
 
     private fun startDateTimeUpdates() {
-        viewModelScope.launch {
-            while (true) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+            while (isActive) {
                 val now = LocalDateTime.now()
                 val pattern = if (is24HourFormat) "dd-MM-yyyy HH:mm:ss" else "dd-MM-yyyy hh:mm:ss a"
                 val formatter = DateTimeFormatter.ofPattern(pattern)
