@@ -19,6 +19,8 @@ class MqttClientManager(
 ) {
 
     interface MqttListener {
+        /** Fires for every packet on a subscribed topic before retained filtering (use for liveness). */
+        fun onAnyIncomingMqttTraffic() {}
         fun onMessageReceived(topic: String, message: String)
         fun onConnectionStatus(isConnected: Boolean)
         fun onError(error: String, code: Int? = null)
@@ -57,6 +59,8 @@ class MqttClientManager(
                     }
 
                     override fun messageArrived(topic: String?, message: MqttMessage?) {
+                        mqttListener?.onAnyIncomingMqttTraffic()
+
                         if (message?.isRetained == true) {
                             Log.d(TAG, "Skipping retained message (stale payload on reconnect)")
                             return

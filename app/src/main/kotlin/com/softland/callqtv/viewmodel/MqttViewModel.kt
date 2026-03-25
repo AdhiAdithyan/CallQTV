@@ -18,7 +18,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.util.Collections
 import java.util.Random
+import java.util.concurrent.ConcurrentHashMap
 
 class MqttViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -40,9 +42,13 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     private val everConnected = mutableMapOf<String, Boolean>()
     private val reachabilityJobs = mutableMapOf<String, kotlinx.coroutines.Job>()
     private var continuousPublishJob: kotlinx.coroutines.Job? = null
+    private var messageLivenessWatchdogJob: kotlinx.coroutines.Job? = null
 
-    // Tracks the time of the last received MQTT message to avoid clashing with incoming traffic.
-    private var lastIncomingMessageTime: Long = 0L
+    /** Last time *any* payload arrived on the subscribed topic (incl. broker "PING"), per broker URI. */
+    private val lastMessageAtByServerUri = ConcurrentHashMap<String, Long>()
+
+    private val staleReconnectInFlight =
+        Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
 
     // Tracks the number of verified tokens pending processing/announcement in UI.
     val announcementQueueSize = java.util.concurrent.atomic.AtomicInteger(0)
@@ -293,10 +299,12 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
 
         val manager = MqttClientManager(context.applicationContext, serverUri, clientId).apply {
             setMqttListener(object : MqttClientManager.MqttListener {
+                override fun onAnyIncomingMqttTraffic() {
+                    lastMessageAtByServerUri[serverUri] = System.currentTimeMillis()
+                }
+
                 override fun onMessageReceived(topic: String, message: String) {
                     if (isLicenseExpired) return
-
-                    lastIncomingMessageTime = System.currentTimeMillis()
                     // Enqueue ALL raw payloads first, without any filtering.
                     val trimmed = message.trim()
                     rawMessageQueue.add(trimmed)
@@ -346,14 +354,18 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 override fun onConnectionStatus(isConnected: Boolean) {
                     updateStatus(serverUri, isConnected)
                     if (isConnected) {
+                        // Grace period until first PING/token: treat connect time as last activity.
+                        lastMessageAtByServerUri[serverUri] = System.currentTimeMillis()
+                        staleReconnectInFlight.remove(serverUri)
+                        startMessageLivenessWatchdog()
                         everConnected[serverUri] = true
                         stopConnectTimer()
                         _isAutoRetryExhausted.postValue(false)
                         _errorMessage.postValue("")
-                        // Connection success: reset backoff
+                        // Connection success: reset backoff for this broker; UI shows max of others still failing.
                         retryAttempts[serverUri] = 0
                         retryJobs[serverUri]?.cancel()
-                        _mqttRetryAttempt.postValue(0)
+                        _mqttRetryAttempt.postValue(retryAttempts.values.maxOrNull() ?: 0)
 
                         startContinuousPublishLoop()
                     } else {
@@ -372,10 +384,14 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                     // We keep the LiveData for state if needed, but we clear it or just don't update it.
                     _errorMessage.postValue("")
 
-                    // For initial connection failures, use our backoff-based retry.
-                    // After first success, scheduleInitialRetry() is a no-op and Paho's
-                    // isAutomaticReconnect handles reconnects.
-                    scheduleInitialRetry(serverUri)
+                    // Initial connection failures: backoff + increment inside scheduleInitialRetry.
+                    // After first successful connect, scheduleInitialRetry is skipped — still bump the
+                    // BLUCON retry counter so the UI shows each disconnect / connection-lost event.
+                    if (everConnected[serverUri] == true) {
+                        incrementMqttRetryAttemptCounter(serverUri)
+                    } else {
+                        scheduleInitialRetry(serverUri)
+                    }
                 }
 
                 override fun onAutoRetryExhausted() {
@@ -507,10 +523,13 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun retryConnect() {
+    fun retryConnect(resetAttempts: Boolean = false) {
         _errorMessage.postValue("")
         _isAutoRetryExhausted.postValue(false)
-        _mqttRetryAttempt.postValue(0)
+        if (resetAttempts) {
+            connectionDetailsMap.keys.forEach { retryAttempts[it] = 0 }
+            _mqttRetryAttempt.postValue(0)
+        }
         // Only show "connecting" if at least one broker is actually disconnected
         val anyDisconnected = connectionDetailsMap.keys.any { managers[it]?.isConnected() != true }
         if (anyDisconnected) {
@@ -538,6 +557,14 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 _connectionStatus.postValue(current.values.all { it })
             }
         }
+    }
+
+    /** Increments per-broker retry count and updates the single UI LiveData (max across brokers). */
+    private fun incrementMqttRetryAttemptCounter(serverUri: String) {
+        val next = (retryAttempts[serverUri] ?: 0) + 1
+        retryAttempts[serverUri] = next
+        val display = retryAttempts.values.maxOrNull() ?: next
+        _mqttRetryAttempt.postValue(display)
     }
 
     private fun scheduleInitialRetry(serverUri: String) {
@@ -571,7 +598,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
             )
             delay(delayMs)
             retryAttempts[serverUri] = attempt + 1
-            _mqttRetryAttempt.postValue(attempt + 1)
+            _mqttRetryAttempt.postValue(retryAttempts.values.maxOrNull() ?: (attempt + 1))
             initAndConnect(
                 details.serverUri,
                 details.clientId,
@@ -867,8 +894,81 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * If the subscribed topic receives no message (including broker "PING") for longer than
+     * [MQTT_MESSAGE_LIVENESS_TIMEOUT_MS], assume BLUCON is dead and force a reconnect.
+     */
+    private fun startMessageLivenessWatchdog() {
+        if (messageLivenessWatchdogJob?.isActive == true) return
+        messageLivenessWatchdogJob = viewModelScope.launch(Dispatchers.Default) {
+            while (isActive) {
+                delay(1000L)
+                val now = System.currentTimeMillis()
+                for ((serverUri, manager) in managers.toMap()) {
+                    if (!manager.isConnected()) continue
+                    val last = lastMessageAtByServerUri[serverUri] ?: 0L
+                    if (last == 0L) continue
+                    if (now - last > MQTT_MESSAGE_LIVENESS_TIMEOUT_MS) {
+                        forceReconnectDueToStaleTraffic(serverUri)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun forceReconnectDueToStaleTraffic(serverUri: String) {
+        val details = connectionDetailsMap[serverUri] ?: return
+        if (!staleReconnectInFlight.add(serverUri)) return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                android.util.Log.w(
+                    "MqttViewModel",
+                    "No MQTT traffic for $serverUri for >${MQTT_MESSAGE_LIVENESS_TIMEOUT_MS / 1000}s; forcing reconnect"
+                )
+                FileLogger.logError(
+                    getApplication(),
+                    "MqttLiveness",
+                    "No MQTT traffic for $serverUri for >${MQTT_MESSAGE_LIVENESS_TIMEOUT_MS / 1000}s; forcing reconnect"
+                )
+                incrementMqttRetryAttemptCounter(serverUri)
+                lastMessageAtByServerUri.remove(serverUri)
+                stateMutex.withLock {
+                    managers[serverUri]?.close()
+                    managers.remove(serverUri)
+                    reachabilityJobs[serverUri]?.cancel()
+                    reachabilityJobs.remove(serverUri)
+                    val current = _connectionStatusMap.value?.toMutableMap() ?: mutableMapOf()
+                    current[serverUri] = false
+                    _connectionStatusMap.postValue(current)
+                    _connectionStatus.postValue(current.values.all { it })
+                }
+                startConnectTimer()
+                initAndConnect(
+                    details.serverUri,
+                    details.clientId,
+                    details.username,
+                    details.password,
+                    details.topic,
+                    details.qos,
+                    getApplication()
+                )
+            } finally {
+                // initAndConnect returns before async connect finishes; debounce so we do not
+                // stack multiple stale reconnects while the new socket is still handshaking.
+                delay(5_000L)
+                staleReconnectInFlight.remove(serverUri)
+            }
+        }
+    }
+
+    companion object {
+        private const val MQTT_MESSAGE_LIVENESS_TIMEOUT_MS = 30_000L
+    }
+
     override fun onCleared() {
         super.onCleared()
+        messageLivenessWatchdogJob?.cancel()
+        messageLivenessWatchdogJob = null
         val toClose = managers.values.toList()
         managers.clear()
         reachabilityJobs.values.forEach { it.cancel() }

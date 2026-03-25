@@ -1,5 +1,8 @@
+@file:androidx.annotation.OptIn(markerClass = [androidx.media3.common.util.UnstableApi::class])
+
 package com.softland.callqtv.ui
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -50,6 +53,7 @@ import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -90,7 +94,6 @@ import com.softland.callqtv.utils.PreferenceHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 import android.graphics.Color as AndroidColor
@@ -106,10 +109,14 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DataSource
 import androidx.media3.exoplayer.DefaultLoadControl
-import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer
-import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener
-import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.views.YouTubePlayerView
-import androidx.lifecycle.LifecycleOwner
+import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import java.io.File
 import java.io.BufferedInputStream
 import android.media.MediaPlayer
@@ -120,8 +127,6 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import java.net.URLConnection
-import java.net.InetSocketAddress
-import java.net.Socket
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -577,7 +582,7 @@ fun TokenDisplayScreen(
                     config = cfg,
                     macAddress = macAddress,
                     appVersion = appVersion,
-                    isMqttConnected = mqttConnected,
+                    isMqttConnected = brokerConnected,
                     isNetworkAvailable = isNetworkAvailable,
                     counters = counters,
                     adFiles = viewModel.localAdFiles.observeAsState(emptyList()).value,
@@ -703,7 +708,7 @@ fun TokenDisplayScreen(
                         // User-initiated retry: close dialog and trigger reconnect
                         showMqttRetryDialog = false
                         mqttRetryShownAt = null
-                        mqttViewModel.retryConnect()
+                        mqttViewModel.retryConnect(resetAttempts = true)
                     }
                 ) {
                     Text("Retry Connection")
@@ -1273,7 +1278,7 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
     val orderedAds = remember(adFiles) { adFiles.sortedBy { it.position } }
     val context = LocalContext.current
     val allowYoutubeAds = context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
-        .getBoolean("allow_youtube_ads", false)
+        .getBoolean("allow_youtube_ads", true)
     val intervalSeconds = (config.adInterval ?: 5).coerceAtLeast(1)
 
     // visibleAd: Ad currently on screen
@@ -1308,10 +1313,10 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
 
         if (isVideo || isYouTube) {
             if (isYouTube && !NetworkUtil.isNetworkAvailable(context)) {
-                Log.w("YouTubeAdFlow", "Skipping YouTube ad: offline network state")
-                FileLogger.logError(context, "YouTubeAdFlow", "Skipping YouTube ad: offline network state")
-                triggerNext()
-                return@LaunchedEffect
+                // Some TV networks are not marked "validated" by Android despite working internet.
+                // Do not hard-skip YouTube ads here; allow WebView load and handle real failures via callbacks/timeouts.
+                Log.w("YouTubeAdFlow", "Network appears unvalidated; still attempting YouTube ad load")
+                FileLogger.logError(context, "YouTubeAdFlow", "Network appears unvalidated; still attempting YouTube ad load")
             }
             // Video or YouTube: wait for onReady or timeout
             withTimeoutOrNull(30000) { // 30s timeout for high-res/remote buffering
@@ -1431,8 +1436,13 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
 }
 
 private fun extractYoutubeVideoId(url: String): String? {
+    val u = url.trim()
+    Regex("youtube\\.com/shorts/([a-zA-Z0-9_-]{11})").find(u)?.groupValues?.get(1)?.let { return it }
+    Regex("youtu\\.be/([a-zA-Z0-9_-]{11})").find(u)?.groupValues?.get(1)?.let { return it }
+    Regex("[?&]v=([a-zA-Z0-9_-]{11})").find(u)?.groupValues?.get(1)?.let { return it }
+    Regex("youtube\\.com/embed/([a-zA-Z0-9_-]{11})").find(u)?.groupValues?.get(1)?.let { return it }
     val regex = "^.*((youtu.be\\/)|(v\\/)|(\\/u\\/\\w\\/)|(embed\\/)|(watch\\?))\\??v?=?([^#&?]*).*".toRegex()
-    val matchResult = regex.find(url)
+    val matchResult = regex.find(u)
     return matchResult?.groupValues?.get(7)?.takeIf { it.length == 11 }
 }
 
@@ -1455,7 +1465,9 @@ private enum class AdMediaType { YouTube, Video, Image }
 
 private fun resolveAdMediaType(path: String, context: Context): AdMediaType {
     val lc = path.lowercase()
-    if (lc.contains("youtube.com") || lc.contains("youtu.be")) return AdMediaType.YouTube
+    if (lc.contains("youtube.com") || lc.contains("youtu.be") || lc.contains("youtube-nocookie.com")) {
+        return AdMediaType.YouTube
+    }
     if (isAdVideo(path)) return AdMediaType.Video
     if (isAdImage(path)) return AdMediaType.Image
 
@@ -1496,15 +1508,163 @@ private fun detectMimeType(path: String, context: Context): String? {
     }
 }
 
-private suspend fun isYouTubeHostReachable(): Boolean = withContext(Dispatchers.IO) {
-    runCatching {
-        withTimeout(1500L) {
-            Socket().use { socket ->
-                socket.connect(InetSocketAddress("www.youtube.com", 443), 1200)
+private fun isValidYoutubeVideoIdForEmbed(id: String): Boolean =
+    id.length == 11 && id.all { it.isLetterOrDigit() || it == '_' || it == '-' }
+
+private fun buildYoutubeIframeEmbedHtml(videoId: String): String {
+    require(isValidYoutubeVideoIdForEmbed(videoId))
+    return """
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <style>html,body{margin:0;padding:0;height:100%;background:#000;overflow:hidden}#player{width:100%;height:100vh}</style>
+</head>
+<body>
+  <div id="player"></div>
+  <script>
+    function onYouTubeIframeAPIReady() {
+      new YT.Player('player', {
+        height: '100%',
+        width: '100%',
+        videoId: '$videoId',
+        playerVars: {
+          autoplay: 1,
+          mute: 1,
+          playsinline: 1,
+          rel: 0,
+          modestbranding: 1,
+          origin: 'https://www.youtube.com'
+        },
+        events: {
+          onReady: function(event) {
+            Android.onPlayerReady();
+            setTimeout(function() {
+              try { event.target.unMute(); } catch (e) {}
+            }, 400);
+          },
+          onStateChange: function(event) {
+            if (event.data === YT.PlayerState.ENDED) {
+              Android.onPlayerEnded();
             }
-            true
+          },
+          onError: function(event) { Android.onPlayerError(String(event.data)); }
         }
-    }.getOrDefault(false)
+      });
+    }
+    (function() {
+      var tag = document.createElement('script');
+      tag.src = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(tag);
+    })();
+  </script>
+</body>
+</html>
+""".trimIndent()
+}
+
+private class YoutubeWebJsBridge(
+    private val mainHandler: Handler,
+    private val onReady: () -> Unit,
+    private val onEnded: () -> Unit,
+    private val onError: (String) -> Unit
+) {
+    @JavascriptInterface
+    fun onPlayerReady() {
+        mainHandler.post { onReady() }
+    }
+
+    @JavascriptInterface
+    fun onPlayerEnded() {
+        mainHandler.post { onEnded() }
+    }
+
+    @JavascriptInterface
+    fun onPlayerError(code: String) {
+        mainHandler.post { onError(code) }
+    }
+}
+
+@SuppressLint("SetJavaScriptEnabled", "AddJavascriptInterface")
+private fun createYoutubeAdWebView(
+    context: Context,
+    videoId: String,
+    onReady: () -> Unit,
+    onEnded: () -> Unit,
+    onLoadOrPlayerError: (String?) -> Unit
+): WebView {
+    val handler = Handler(Looper.getMainLooper())
+    val bridge = YoutubeWebJsBridge(
+        mainHandler = handler,
+        onReady = onReady,
+        onEnded = onEnded,
+        onError = { code -> onLoadOrPlayerError(code) }
+    )
+    val readyFallbackPosted = java.util.concurrent.atomic.AtomicBoolean(false)
+    fun postReadyFallback() {
+        if (readyFallbackPosted.compareAndSet(false, true)) {
+            handler.post { onReady() }
+        }
+    }
+    return WebView(context).apply {
+        setBackgroundColor(AndroidColor.BLACK)
+        settings.javaScriptEnabled = true
+        settings.domStorageEnabled = true
+        @Suppress("DEPRECATION")
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+            settings.databaseEnabled = true
+        }
+        settings.mediaPlaybackRequiresUserGesture = false
+        settings.loadsImagesAutomatically = true
+        settings.useWideViewPort = true
+        settings.loadWithOverviewMode = true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+        }
+        // Chrome-like UA improves YouTube embed compatibility on Android TV WebView.
+        settings.userAgentString =
+            "Mozilla/5.0 (Linux; Android 10; SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+
+        webChromeClient = WebChromeClient()
+        webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView?, url: String?) {
+                // If IFrame API is slow or blocked, still allow ad pipeline to proceed after load.
+                handler.postDelayed({ postReadyFallback() }, 3500L)
+            }
+
+            @Deprecated("Deprecated in Java")
+            override fun onReceivedError(
+                view: WebView?,
+                errorCode: Int,
+                description: String?,
+                failingUrl: String?
+            ) {
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+                    handler.post { onLoadOrPlayerError(description) }
+                }
+            }
+
+            override fun onReceivedError(
+                view: WebView,
+                request: WebResourceRequest,
+                error: WebResourceError
+            ) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && request.isForMainFrame) {
+                    handler.post { onLoadOrPlayerError(error.description?.toString()) }
+                }
+            }
+        }
+        addJavascriptInterface(bridge, "Android")
+        loadDataWithBaseURL(
+            "https://www.youtube.com",
+            buildYoutubeIframeEmbedHtml(videoId),
+            "text/html",
+            "UTF-8",
+            "https://www.youtube.com"
+        )
+    }
 }
 
 @Composable
@@ -1515,8 +1675,7 @@ fun YouTubeAdPlayer(
     onError: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    
+
     val latestOnVideoEnded by rememberUpdatedState(onVideoEnded)
     val latestOnReady by rememberUpdatedState(onReady)
     val latestOnError by rememberUpdatedState(onError)
@@ -1524,67 +1683,61 @@ fun YouTubeAdPlayer(
     var terminalEventReported by remember(videoId) { mutableStateOf(false) }
 
     LaunchedEffect(videoId) {
-        // Fast host reachability pre-check to skip blocked YouTube links quickly.
-        val reachable = isYouTubeHostReachable()
-        if (!reachable && !terminalEventReported) {
-            Log.w("YouTubeAdFlow", "Skipping YouTube ad: host unreachable")
-            FileLogger.logError(context, "YouTubeAdFlow", "Skipping YouTube ad: host unreachable")
-            terminalEventReported = true
+        if (!isValidYoutubeVideoIdForEmbed(videoId)) {
+            Log.e("YouTubeAdFlow", "Invalid YouTube video id for WebView embed")
+            FileLogger.logError(context, "YouTubeAdFlow", "Invalid YouTube video id for WebView embed")
             latestOnError()
+            return@LaunchedEffect
         }
     }
 
-    // Safety timeout: if YouTube SDK never reaches ready/error, fail fast instead of stalling ad flow.
     LaunchedEffect(videoId) {
-        delay(12000)
+        delay(25000)
         if (!readyReported && !terminalEventReported) {
-            Log.w("YouTubeAdFlow", "Skipping YouTube ad: SDK ready timeout (12s)")
-            FileLogger.logError(context, "YouTubeAdFlow", "Skipping YouTube ad: SDK ready timeout (12s)")
+            Log.w("YouTubeAdFlow", "Skipping YouTube ad: WebView ready timeout (25s)")
+            FileLogger.logError(context, "YouTubeAdFlow", "Skipping YouTube ad: WebView ready timeout (25s)")
             terminalEventReported = true
             latestOnError()
         }
     }
 
-    AndroidView(
-        factory = { ctx ->
-            YouTubePlayerView(ctx).apply {
-                lifecycleOwner.lifecycle.addObserver(this)
-                addYouTubePlayerListener(object : AbstractYouTubePlayerListener() {
-                    override fun onReady(youTubePlayer: YouTubePlayer) {
-                        if (!readyReported) {
-                            readyReported = true
-                            latestOnReady()
-                        }
-                        // cueVideo is lighter; avoids aggressive startup spikes on some TVs.
-                        youTubePlayer.cueVideo(videoId, 0f)
-                        youTubePlayer.play()
-                    }
-
-                    override fun onStateChange(youTubePlayer: YouTubePlayer, state: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerState) {
-                        if (state == com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerState.ENDED) {
+    key(videoId) {
+        Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
+            AndroidView(
+                factory = { ctx ->
+                    createYoutubeAdWebView(
+                        context = ctx,
+                        videoId = videoId,
+                        onReady = {
+                            if (!readyReported) {
+                                readyReported = true
+                                latestOnReady()
+                            }
+                        },
+                        onEnded = {
                             if (!terminalEventReported) {
                                 terminalEventReported = true
                                 latestOnVideoEnded()
                             }
+                        },
+                        onLoadOrPlayerError = { detail ->
+                            if (!terminalEventReported) {
+                                val msg = detail ?: "web_error"
+                                Log.e("YouTubeAdFlow", "YouTube WebView load/player error: $msg")
+                                FileLogger.logError(context, "YouTubeAdFlow", "YouTube WebView load/player error: $msg")
+                                terminalEventReported = true
+                                latestOnError()
+                            }
                         }
-                    }
-
-                    override fun onError(youTubePlayer: YouTubePlayer, error: com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants.PlayerError) {
-                        if (!terminalEventReported) {
-                            Log.e("YouTubeAdFlow", "YouTube SDK error: $error")
-                            FileLogger.logError(context, "YouTubeAdFlow", "YouTube SDK error: $error")
-                            terminalEventReported = true
-                            latestOnError()
-                        }
-                    }
-                })
-            }
-        },
-        modifier = Modifier.fillMaxSize()
-    )
+                    )
+                },
+                modifier = Modifier.fillMaxSize().clipToBounds(),
+                onRelease = { it.destroy() }
+            )
+        }
+    }
 }
 
-@androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 fun AdVideoPlayer(videoUrl: String, player: ExoPlayer, onVideoEnded: () -> Unit, onReady: () -> Unit = {}, onError: () -> Unit = {}) {
     val context = LocalContext.current
@@ -1642,7 +1795,6 @@ object MediaEngine {
     private var simpleCache: androidx.media3.datasource.cache.Cache? = null
     private var cacheFactory: DataSource.Factory? = null
 
-    @androidx.annotation.OptIn(UnstableApi::class)
     private fun createPlayer(context: Context): ExoPlayer {
         val httpClient = UnsafeOkHttpClient.getUnsafeOkHttpClient()
         val okHttpFactory = OkHttpDataSource.Factory(httpClient)
@@ -2155,7 +2307,7 @@ fun AppearanceSettingsDialog(
     var notificationSoundKey by remember { mutableStateOf("ding") }
     var is24Hour by remember { mutableStateOf(true) }
     var isAdSoundEnabled by remember { mutableStateOf(false) }
-    var isYouTubeAdsEnabled by remember { mutableStateOf(false) }
+    var isYouTubeAdsEnabled by remember { mutableStateOf(true) }
     var isOfflineAdsEnabled by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) {
         withContext(Dispatchers.Default) {
@@ -2170,7 +2322,7 @@ fun AppearanceSettingsDialog(
             isAdSoundEnabled = context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
                 .getBoolean("enable_ad_sound", false)
             isYouTubeAdsEnabled = context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
-                .getBoolean("allow_youtube_ads", false)
+                .getBoolean("allow_youtube_ads", true)
             isOfflineAdsEnabled = PreferenceHelper.isOfflineAdsEnabled(context)
         }
     }
@@ -2807,7 +2959,7 @@ fun NotificationSoundDialog(
     val scope = rememberCoroutineScope()
 
     AlertDialog(
-        modifier = Modifier.fillMaxWidth(2f),
+        modifier = Modifier.fillMaxWidth(),
         onDismissRequest = onDismiss,
         title = { Text(title, style = MaterialTheme.typography.titleSmall) },
         text = {
