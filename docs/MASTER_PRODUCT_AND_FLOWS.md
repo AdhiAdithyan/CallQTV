@@ -23,10 +23,19 @@ CallQTV is an Android TV queue display app with:
 - Media type is resolved via:
   - URL extension checks
   - MIME detection fallback for extension-less/signed/local files
-- Rendering path:
-  - YouTube -> YouTube player
-  - Video -> ExoPlayer
+- Media Rendering path:
+  - YouTube -> YouTube WebView-based player with Kiosk CSS (Clean UI)
+  - Video -> ExoPlayer (Standard local/remote video)
   - Image/GIF/WebP -> Coil image renderer
+- Ad area is visual-only: it does not accept focus, clicks, or user interaction.
+- **YouTube Automated Looping**:
+  - Auto-plays via injected JS (`video.play()`), with periodic re-check for DOM/video replacement.
+  - Detects completion via JS `ended` event + JS bridge callback (`CallQTVBridge.onAdEnded`).
+  - Title fallback (`AD_ENDED`) is retained as a secondary path.
+  - Safety auto-advance timeout prevents ad-loop stalls if YouTube callbacks do not fire.
+- **Ad Sound Control**:
+  - A single setting (`enable_ad_sound`) controls ad audio for both ExoPlayer video ads and YouTube ads.
+  - When disabled, YouTube playback is forced muted and volume is kept at zero through JS re-application.
 - In offline mode, ad files are synced to local storage (`Downloads/CALLQ_ADV`) and switched after sync.
 - If offline/no network, downloads are skipped safely and current list is retained.
 
@@ -72,9 +81,9 @@ flowchart TD
     D -->|No| F{Video?}
     F -->|Yes| G[ExoPlayer]
     F -->|No| H[Coil image renderer]
-    E --> I[Next ad]
+    E --> I[JS ended/safety timeout -> Next ad]
     G --> I
-    H --> I
+    H --> I[Interval-based Next ad]
 ```
 
 ## 5) Acceptance Criteria

@@ -85,7 +85,7 @@ object RetrofitClient {
             .newBuilder()
             .addInterceptor(loggingInterceptor)
             .addInterceptor(responseLoggingInterceptor)
-            .addInterceptor(RetryInterceptor(maxRetries = 2))
+            .addInterceptor(RetryInterceptor(maxRetries = 3))
             .addInterceptor { chain ->
                 val original = chain.request()
                 val request = original.newBuilder()
@@ -98,9 +98,9 @@ object RetrofitClient {
                     .build()
                 chain.proceed(request)
             }
-            .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
+            .connectTimeout(60, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
             .build()
     }
 

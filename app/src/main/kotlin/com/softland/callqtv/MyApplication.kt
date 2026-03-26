@@ -65,15 +65,15 @@ class MyApplication : Application() {
             }
         }
         
-        // Check stack trace for MIUI/Xiaomi SDK classes
-        val isXiaomiSdk = stackTrace.contains("miuix.device.DeviceUtils", ignoreCase = true) ||
-                stackTrace.contains("com.xiaomi.mipicks", ignoreCase = true) ||
+        // Check stack trace for MIUI/Xiaomi SDK or Google Play Integrity errors
+        val isVendorOrSystemError = stackTrace.contains("miuix.device.DeviceUtils", ignoreCase = true) ||
                 stackTrace.contains("com.xiaomi.market", ignoreCase = true) ||
-                stackTrace.contains("com.xiaomi.task", ignoreCase = true) ||
-                stackTrace.contains("FG_LOG", ignoreCase = true)
+                stackTrace.contains("ExpressIntegrityException", ignoreCase = true) ||
+                stackTrace.contains("com.google.android.finsky", ignoreCase = true) ||
+                stackTrace.contains("ExpressIntegrityService", ignoreCase = true)
         
-        // Only suppress if it's from Xiaomi SDK AND not from our application package
-        if (isXiaomiSdk && !stackTrace.contains("com.softland.callqtv", ignoreCase = true)) {
+        // Only suppress if it's from vendor/system SDK AND not from our application package
+        if (isVendorOrSystemError && !stackTrace.contains("com.softland.callqtv", ignoreCase = true)) {
             return true
         }
         

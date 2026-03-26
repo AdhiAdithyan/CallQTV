@@ -34,7 +34,6 @@ object DatabaseBackup {
 
             // Reuse FileLogger's date-based directory for consistency
             val backupDir = FileLogger.getLogDirectory(context)
-            if (!backupDir.exists()) backupDir.mkdirs()
 
             val dateStr = todayDateStr()
             val backupFile = File(backupDir, "backup_$dateStr.db")

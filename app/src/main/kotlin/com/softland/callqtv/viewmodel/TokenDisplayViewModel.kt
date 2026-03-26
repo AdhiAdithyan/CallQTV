@@ -15,6 +15,7 @@ import com.softland.callqtv.utils.FileLogger
 import com.softland.callqtv.utils.PreferenceHelper
 import com.softland.callqtv.utils.Variables
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -70,6 +71,10 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
     private var hasShownInitialLoadingOverlay = false
     private var tokenHistorySeeded = false
     private var offlineAdSyncJob: Job? = null
+    private var mqttConfigRefreshListenerStarted = false
+    private var currentConfigLoadJob: Job? = null
+    private var lastMqttRefreshHandledAtMs: Long = 0L
+    private var lastOfflineSyncedAds: List<AdFileEntity> = emptyList()
 
     init {
         // Initialize macAddress on a background thread to avoid blocking main thread at startup
@@ -127,7 +132,28 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
     }
 
     fun loadData(mqttViewModel: MqttViewModel, forceShowOverlay: Boolean = false) {
-        viewModelScope.launch {
+        // Prevent overlapping config reloads unless the caller explicitly wants overlay UX.
+        if (!forceShowOverlay && currentConfigLoadJob?.isActive == true) return
+
+        // Start a single collector that triggers config refresh based on MQTT responses.
+        if (!mqttConfigRefreshListenerStarted) {
+            mqttConfigRefreshListenerStarted = true
+            viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+                mqttViewModel.configRefreshRequests
+                    .receiveAsFlow()
+                    .collect {
+                        val now = System.currentTimeMillis()
+                        if (now - lastMqttRefreshHandledAtMs < MQTT_REFRESH_MIN_INTERVAL_MS) {
+                            return@collect
+                        }
+                        lastMqttRefreshHandledAtMs = now
+                        // Non-UI (no overlay) reload triggered by MQTT.
+                        loadData(mqttViewModel, forceShowOverlay = false)
+                    }
+            }
+        }
+
+        currentConfigLoadJob = viewModelScope.launch {
             val loadStartMs = System.currentTimeMillis()
             if (forceShowOverlay) {
                 _isLoading.value = true
@@ -153,6 +179,7 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
 
             val customerIdInt = authPrefs.getInt(PreferenceHelper.customer_id, 0)
             val customerId = String.format(Locale.ROOT, "%04d", customerIdInt)
+            val offlineEnabled = PreferenceHelper.isOfflineAdsEnabled(getApplication())
 
             // Cached-first strategy: render local data immediately while API is in flight.
             val cacheStartMs = System.currentTimeMillis()
@@ -160,6 +187,11 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
             _counters.value = repository.getCounters(_macAddress, customerId)
             val cachedAds = repository.getAdFiles(_macAddress, customerId)
             _adFiles.value = cachedAds
+            _localAdFiles.value = buildEffectiveAdList(
+                remoteAds = cachedAds,
+                offlineEnabled = offlineEnabled,
+                syncedAds = lastOfflineSyncedAds
+            )
             _connectedDevices.value = repository.getConnectedDevices(_macAddress, customerId)
             val hasRenderableCache = _config.value != null
             android.util.Log.i(
@@ -204,39 +236,41 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                             } else {
                                 result.message
                             }
-                            
+
                             if (msg.contains("license expired", ignoreCase = true) || result.licenceStatus?.contains("expire", ignoreCase = true) == true) {
                                 _isLicenseExpired.value = true
                             }
-                            val isTimeoutLike = msg.contains("timeout", ignoreCase = true) ||
-                                msg.contains("timed out", ignoreCase = true)
-                            if (isTimeoutLike) {
-                                // Retry internally without showing Configuration Error dialog
-                                viewModelScope.launch {
-                                    delay(5000L)
-                                    loadData(mqttViewModel)
-                                }
-                            } else {
-                                _errorMessage.value = msg
-                                com.softland.callqtv.utils.FileLogger.logError(getApplication(), "TVConfig", "Error: $msg")
-                            }
+                            // Log error and show dialog; user can manually retry with the Refresh button.
+                            _errorMessage.value = msg
+                            FileLogger.logError(getApplication(), "TVConfig", "Error: $msg")
                         }
                     }
                     _counters.value = repository.getCounters(_macAddress, customerId)
                     val remoteFiles = repository.getAdFiles(_macAddress, customerId)
                     _adFiles.value = remoteFiles
-                    // Always show online ads immediately in foreground.
-                    _localAdFiles.value = remoteFiles
+                    // Resolve what the ad area should play right now based on offline mode.
+                    _localAdFiles.value = buildEffectiveAdList(
+                        remoteAds = remoteFiles,
+                        offlineEnabled = offlineEnabled,
+                        syncedAds = lastOfflineSyncedAds
+                    )
 
                     // If offline mode is enabled, download in background and switch to local
                     // paths only after sync is complete.
-                    if (PreferenceHelper.isOfflineAdsEnabled(getApplication())) {
+                    if (offlineEnabled) {
                         offlineAdSyncJob?.cancel()
                         offlineAdSyncJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                             try {
                                 val synced = AdDownloader.syncAds(getApplication(), remoteFiles)
                                 if (isActive) {
-                                    _localAdFiles.postValue(synced)
+                                    lastOfflineSyncedAds = synced
+                                    _localAdFiles.postValue(
+                                        buildEffectiveAdList(
+                                            remoteAds = remoteFiles,
+                                            offlineEnabled = true,
+                                            syncedAds = synced
+                                        )
+                                    )
                                 }
                             } catch (e: Exception) {
                                 FileLogger.logError(
@@ -247,6 +281,9 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                                 )
                             }
                         }
+                    } else {
+                        offlineAdSyncJob?.cancel()
+                        lastOfflineSyncedAds = emptyList()
                     }
 
                     _connectedDevices.value = repository.getConnectedDevices(_macAddress, customerId)
@@ -256,28 +293,28 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                         launch { initMqttIfNeeded(cfg, mqttViewModel) }
                     }
                 } ?: run {
-                    // Timeout occurred: retry internally without showing the Configuration Error dialog
-                    viewModelScope.launch {
-                        delay(5000L)
-                        loadData(mqttViewModel)
-                    }
+                    // Timeout: log and fall back to cache. User can retry via Refresh button or MQTT.
+                    FileLogger.logError(getApplication(), "TVConfig", "Config API timed out; using cached data")
                 }
             } catch (e: Exception) {
                 _config.value = repository.getCachedConfig(_macAddress, customerId)
                 _counters.value = repository.getCounters(_macAddress, customerId)
-                _adFiles.value = repository.getAdFiles(_macAddress, customerId)
+                val cachedAds = repository.getAdFiles(_macAddress, customerId)
+                _adFiles.value = cachedAds
+                _localAdFiles.value = buildEffectiveAdList(
+                    remoteAds = cachedAds,
+                    offlineEnabled = offlineEnabled,
+                    syncedAds = lastOfflineSyncedAds
+                )
                 _connectedDevices.value = repository.getConnectedDevices(_macAddress, customerId)
                 val isTimeoutLike = e.message?.contains("timeout", ignoreCase = true) == true ||
                     e.message?.contains("timed out", ignoreCase = true) == true
-                if (_config.value == null && !isTimeoutLike) {
+                if (_config.value == null) {
                     _errorMessage.value = "Failed to load TV configuration: ${e.message}"
                     FileLogger.logError(getApplication(), "TVConfig", "Exception: ${e.message}", e)
-                } else if (_config.value == null && isTimeoutLike) {
-                    // Retry internally without showing Configuration Error dialog
-                    viewModelScope.launch {
-                        delay(5000L)
-                        loadData(mqttViewModel)
-                    }
+                } else if (isTimeoutLike) {
+                    // Cache available; silently log and wait for MQTT or manual refresh.
+                    FileLogger.logError(getApplication(), "TVConfig", "Config API exception (timeout, cached data in use): ${e.message}", e)
                 }
             } finally {
                 _isLoading.value = false
@@ -336,5 +373,34 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                 context = getApplication()
             )
         }
+    }
+
+    companion object {
+        // Prevent UI churn/jank from too-frequent refresh-trigger bursts.
+        private const val MQTT_REFRESH_MIN_INTERVAL_MS = 30_000L
+    }
+
+    private fun buildEffectiveAdList(
+        remoteAds: List<AdFileEntity>,
+        offlineEnabled: Boolean,
+        syncedAds: List<AdFileEntity>
+    ): List<AdFileEntity> {
+        if (!offlineEnabled) return remoteAds
+        if (syncedAds.isEmpty()) return remoteAds
+
+        val byStableKey = syncedAds.associateBy { "${it.id}|${it.position}" }
+        return remoteAds.map { remote ->
+            // YouTube should stream even when offline mode is enabled.
+            if (isYouTubePath(remote.filePath)) return@map remote
+            val key = "${remote.id}|${remote.position}"
+            val synced = byStableKey[key] ?: return@map remote
+            // If sync failed for this item, downloader keeps original URL; preserve remote entity.
+            if (synced.filePath == remote.filePath) remote else remote.copy(filePath = synced.filePath)
+        }
+    }
+
+    private fun isYouTubePath(path: String): Boolean {
+        val lc = path.lowercase()
+        return lc.contains("youtube.com") || lc.contains("youtu.be") || lc.contains("youtube-nocookie.com")
     }
 }

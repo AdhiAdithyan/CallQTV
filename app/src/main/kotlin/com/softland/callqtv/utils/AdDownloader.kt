@@ -13,10 +13,25 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.TimeUnit
 
 object AdDownloader {
     private const val TAG = "AdDownloader"
     private const val AD_FOLDER = "CALLQ_ADV"
+    private const val CONVERT_TIMEOUT_MS: Long = 10 * 60 * 1000L // 10 minutes best-effort
+    @Volatile
+    private var ffmpegAvailableCache: Boolean? = null
+
+    /**
+     * Returns true if a `ffmpeg` executable can be found.
+     * Cached after the first check to avoid repeated process invocations.
+     */
+    fun isFfmpegAvailable(): Boolean {
+        ffmpegAvailableCache?.let { return it }
+        val available = findFfmpegExecutable() != null
+        ffmpegAvailableCache = available
+        return available
+    }
 
     /**
      * Synchronizes local ad files with provided entities.
@@ -52,12 +67,21 @@ object AdDownloader {
             it.delete() 
         }
 
+        // Downloads can be large (e.g. 4K MP4) and on TV networks can be slow to establish headers.
+        // Use longer timeouts specifically for ad downloads to avoid SocketTimeoutException.
         val client = UnsafeOkHttpClient.getUnsafeOkHttpClient()
+            .newBuilder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(180, TimeUnit.SECONDS)
+            .writeTimeout(180, TimeUnit.SECONDS)
+            .callTimeout(240, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
 
         // 2. Download and map to local paths
         ads.map { ad ->
             // Skip YouTube ads for local download
-            val isYouTube = ad.filePath.contains("youtube.com") || ad.filePath.contains("youtu.be")
+            val isYouTube = isYouTubePath(ad.filePath)
             if (isYouTube) return@map ad
 
             try {
@@ -76,7 +100,18 @@ object AdDownloader {
                     FileOutputStream(localFile).use { output ->
                         body.byteStream().copyTo(output)
                     }
-                    localPath = localFile.absolutePath
+                    localPath =
+                        when {
+                            isWmvPath(ad.filePath) && localFile.exists() && localFile.length() > 0L ->
+                                // Backend served a WMV: best-effort convert to MP4 for ExoPlayer.
+                                tryConvertWmvToMp4(localFile)?.absolutePath ?: localFile.absolutePath
+
+                            isHighResUhdPortraitMp4(ad.filePath) && localFile.exists() && localFile.length() > 0L ->
+                                // Backend served a UHD portrait MP4: best-effort downscale to reduce decoder issues.
+                                tryConvertUhdMp4ToSupported(localFile)?.absolutePath ?: localFile.absolutePath
+
+                            else -> localFile.absolutePath
+                        }
                 }
                 // Return entity with local absolute path
                 ad.copy(filePath = localPath ?: ad.filePath)
@@ -87,6 +122,178 @@ object AdDownloader {
                 ad
             }
         }
+    }
+
+    private fun isYouTubePath(path: String): Boolean {
+        val lc = path.lowercase()
+        val trimmed = path.trim()
+        return lc.contains("youtube.com") ||
+            lc.contains("youtu.be") ||
+            lc.contains("youtube-nocookie.com") ||
+            // Raw 11-char YouTube IDs can come directly from API.
+            (trimmed.length == 11 && trimmed.all { it.isLetterOrDigit() || it == '_' || it == '-' })
+    }
+
+    private fun isWmvPath(path: String): Boolean {
+        val lc = path.lowercase()
+        return lc.contains("x-ms-wmv") || lc.endsWith(".wmv") || lc.contains(".wmv?")
+    }
+
+    /**
+     * Heuristic: your problematic stream is named like:
+     * - `...uhd_2160_3840_25fps.mp4`
+     * We only downscale when we recognize this naming pattern to avoid unnecessary re-encoding.
+     */
+    private fun isHighResUhdPortraitMp4(path: String): Boolean {
+        val lc = path.lowercase()
+        return lc.contains("uhd_2160_3840") ||
+            lc.contains("uhd_2160x3840") ||
+            (lc.contains("2160x3840") || lc.contains("2160_3840")) && lc.endsWith(".mp4")
+    }
+
+    /**
+     * Converts WMV into MP4 using a system `ffmpeg` binary (if present).
+     * Returns converted output file on success, or null on failure.
+     */
+    private fun tryConvertWmvToMp4(input: File): File? {
+        val ffmpeg = findFfmpegExecutable() ?: run {
+            Log.w(TAG, "ffmpeg not found; skipping WMV->MP4 conversion for ${input.name}")
+            return null
+        }
+
+        val baseName = input.nameWithoutExtension
+        val output = File(input.parentFile, "${baseName}_converted.mp4")
+        if (output.exists()) output.delete()
+
+        // Basic, fast-ish conversion preset.
+        val cmd = listOf(
+            ffmpeg,
+            "-y",
+            "-i",
+            input.absolutePath,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-c:a",
+            "aac",
+            "-movflags",
+            "+faststart",
+            output.absolutePath
+        )
+
+        return try {
+            Log.i(TAG, "Converting WMV->MP4: ${input.name} -> ${output.name}")
+            val pb = ProcessBuilder(cmd)
+            pb.redirectErrorStream(true)
+            val proc = pb.start()
+
+            // Drain some output to prevent the process from blocking due to full buffers.
+            try {
+                proc.inputStream.bufferedReader().use { reader ->
+                    val buf = CharArray(1024)
+                    var total = 0
+                    while (total < 16 * 1024) {
+                        val n = reader.read(buf)
+                        if (n <= 0) break
+                        total += n
+                    }
+                }
+            } catch (_: Exception) {
+            }
+
+            val ok = proc.waitFor(CONVERT_TIMEOUT_MS, TimeUnit.MILLISECONDS) && proc.exitValue() == 0
+            if (ok && output.exists() && output.length() > 0L) output else null
+        } catch (e: Exception) {
+            Log.e(TAG, "WMV->MP4 conversion failed for ${input.absolutePath}", e)
+            null
+        }
+    }
+
+    /**
+     * Converts a UHD portrait MP4 to a decoder-friendly MP4 by downscaling to 1080p.
+     * Output is encoded with H.264 (libx264), AAC audio, and faststart for better streaming.
+     */
+    private fun tryConvertUhdMp4ToSupported(input: File): File? {
+        val ffmpeg = findFfmpegExecutable() ?: run {
+            Log.w(TAG, "ffmpeg not found; skipping UHD MP4 downscale for ${input.name}")
+            return null
+        }
+
+        val baseName = input.nameWithoutExtension
+        val output = File(input.parentFile, "${baseName}_1080p_supported.mp4")
+        if (output.exists()) output.delete()
+
+        // Cap height to 1080 while preserving aspect ratio and cap fps to 30.
+        val cmd = listOf(
+            ffmpeg,
+            "-y",
+            "-i",
+            input.absolutePath,
+            "-vf",
+            "scale=-2:1080,fps=30",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-c:a",
+            "aac",
+            "-movflags",
+            "+faststart",
+            output.absolutePath
+        )
+
+        return try {
+            Log.i(TAG, "Converting UHD->Supported: ${input.name} -> ${output.name}")
+            val pb = ProcessBuilder(cmd)
+            pb.redirectErrorStream(true)
+            val proc = pb.start()
+
+            // Drain some output to avoid full buffer deadlock.
+            try {
+                proc.inputStream.bufferedReader().use { reader ->
+                    val buf = CharArray(1024)
+                    var total = 0
+                    while (total < 32 * 1024) {
+                        val n = reader.read(buf)
+                        if (n <= 0) break
+                        total += n
+                    }
+                }
+            } catch (_: Exception) {
+            }
+
+            val ok = proc.waitFor(CONVERT_TIMEOUT_MS, TimeUnit.MILLISECONDS) && proc.exitValue() == 0
+            if (ok && output.exists() && output.length() > 0L) output else null
+        } catch (e: Exception) {
+            Log.e(TAG, "UHD MP4 downscale failed for ${input.absolutePath}", e)
+            null
+        }
+    }
+
+    private fun findFfmpegExecutable(): String? {
+        val candidates = listOf(
+            "ffmpeg",
+            "/system/bin/ffmpeg",
+            "/vendor/bin/ffmpeg",
+            "/data/local/tmp/ffmpeg"
+        )
+
+        for (c in candidates) {
+            try {
+                val pb = ProcessBuilder(listOf(c, "-version"))
+                pb.redirectErrorStream(true)
+                val proc = pb.start()
+                val finished = proc.waitFor(5, TimeUnit.SECONDS)
+                if (finished && proc.exitValue() == 0) return c
+            } catch (_: Exception) {
+            }
+        }
+        return null
     }
 
     private fun getFileName(url: String, response: Response): String {

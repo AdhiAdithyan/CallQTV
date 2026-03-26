@@ -4,7 +4,6 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.kapt")
     id("org.jetbrains.kotlin.plugin.compose")
-    id("com.google.gms.google-services")
 }
 
 android {
@@ -182,11 +181,4 @@ dependencies {
 
     // Coil
     implementation("io.coil-kt:coil-compose:2.7.0")
-
-    // AI ML Kit
-    implementation("com.google.mlkit:entity-extraction:16.0.0-beta5")
-
-    // Firebase
-    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
-    implementation("com.google.firebase:firebase-messaging-ktx")
 }

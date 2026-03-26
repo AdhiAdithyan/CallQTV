@@ -41,11 +41,14 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     // own retry loop until the first success; after that, rely on Paho's auto-reconnect.
     private val everConnected = mutableMapOf<String, Boolean>()
     private val reachabilityJobs = mutableMapOf<String, kotlinx.coroutines.Job>()
+    private val reachabilityStatusMap = mutableMapOf<String, Boolean>()
     private var continuousPublishJob: kotlinx.coroutines.Job? = null
     private var messageLivenessWatchdogJob: kotlinx.coroutines.Job? = null
+    private var lastConfigRefreshAtMs: Long = 0L
 
     /** Last time *any* payload arrived on the subscribed topic (incl. broker "PING"), per broker URI. */
     private val lastMessageAtByServerUri = ConcurrentHashMap<String, Long>()
+    private val staleTrafficStrikeByServerUri = ConcurrentHashMap<String, Int>()
 
     private val staleReconnectInFlight =
         Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
@@ -129,11 +132,18 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 connectTime++
                 _connectTimer.postValue(connectTime)
                 
-                // If attempt reaches 30s without success, force a fresh retry loop.
+                // If attempt reaches 30s without success, force a fresh retry loop
+                // ONLY if there isn't already a manual retry scheduled for all brokers.
                 if (connectTime >= 30) {
-                    android.util.Log.w("MqttViewModel", "MQTT Connection attempt timed out after 30s; forcing a fresh retry.")
-                    retryConnect()
-                    // Reset timer window after retry trigger.
+                    val anyRetryScheduled = retryJobs.values.any { it.isActive }
+                    if (!anyRetryScheduled) {
+                        android.util.Log.w("MqttViewModel", "MQTT Connection attempt timed out after 30s; forcing a fresh retry.")
+                        FileLogger.logError(getApplication(), "MQTT_RETRY", "Global 30s timeout triggered; no active per-broker retries found. Restarting.")
+                        retryConnect()
+                    } else {
+                        android.util.Log.d("MqttViewModel", "Global 30s timeout reached, but per-broker retries are already scheduled. Skipping.")
+                    }
+                    // Reset timer window after check.
                     connectTime = 0
                     _connectTimer.postValue(0)
                 }
@@ -142,9 +152,13 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun stopConnectTimer() {
-        _isConnectingToMqtt.postValue(false)
-        timerJob?.cancel()
-        timerJob = null
+        // Only stop if ALL brokers are considered connected.
+        val allConnected = connectionDetailsMap.keys.all { managers[it]?.isConnected() == true }
+        if (allConnected) {
+            _isConnectingToMqtt.postValue(false)
+            timerJob?.cancel()
+            timerJob = null
+        }
     }
 
     private val _isAutoRetryExhausted = MutableLiveData<Boolean>(false)
@@ -160,6 +174,12 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
 
     val tokenUpdateChannel =
         kotlinx.coroutines.channels.Channel<Pair<String, String>>(capacity = kotlinx.coroutines.channels.Channel.UNLIMITED)
+    /**
+     * Requests to refresh TV configuration based on a *specific* MQTT response.
+     * (Used to remove FCM dependency and keep refresh driven by MQTT.)
+     */
+    val configRefreshRequests =
+        kotlinx.coroutines.channels.Channel<Unit>(capacity = kotlinx.coroutines.channels.Channel.UNLIMITED)
     private val queuedTokenTimestamps = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     // Queue of ALL raw MQTT payloads received (no filtering). Business logic consumes and filters
@@ -301,6 +321,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
             setMqttListener(object : MqttClientManager.MqttListener {
                 override fun onAnyIncomingMqttTraffic() {
                     lastMessageAtByServerUri[serverUri] = System.currentTimeMillis()
+                    staleTrafficStrikeByServerUri[serverUri] = 0
                 }
 
                 override fun onMessageReceived(topic: String, message: String) {
@@ -320,12 +341,26 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                         if (!trimmed.contains("CAL0K")) return@launch
                         if (!trimmed.startsWith("$")) return@launch
                         if (trimmed.length < 24) return@launch
+                        val containsClr = trimmed.contains("CLR", ignoreCase = true)
+
+                        // CLR-triggered config refresh path:
+                        // e.g. "$02026bCAL0K0007001CLR0*"
+                        // Only trigger when keypad serial is valid for this device/customer.
+                        if (containsClr) {
+                            if (!isValidKeypadMessage(trimmed)) {
+                                android.util.Log.d(
+                                    "MqttViewModel",
+                                    "Ignored CLR refresh trigger: Keypad serial mismatch or device not found $trimmed"
+                                )
+                                return@launch
+                            }
+                            requestConfigRefresh("MQTT refresh trigger detected (payload contains CLR)")
+                            return@launch
+                        }
+
                         // Business rule: ignore responses where the 17th character is '0'
                         if (trimmed[16] == '0') {
-                            android.util.Log.d(
-                                "MqttViewModel",
-                                "Ignoring CAL0K payload with 17th char '0': $trimmed"
-                            )
+                            requestConfigRefresh("MQTT refresh trigger detected (17th char '0')")
                             return@launch
                         }
 
@@ -359,7 +394,10 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                         staleReconnectInFlight.remove(serverUri)
                         startMessageLivenessWatchdog()
                         everConnected[serverUri] = true
+                        
+                        // Check if we can stop the global timer
                         stopConnectTimer()
+
                         _isAutoRetryExhausted.postValue(false)
                         _errorMessage.postValue("")
                         // Connection success: reset backoff for this broker; UI shows max of others still failing.
@@ -369,6 +407,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
 
                         startContinuousPublishLoop()
                     } else {
+                        // Keep timer running as long as at least one broker is out.
                         startConnectTimer()
                         stopContinuousPublishLoop()
                     }
@@ -529,7 +568,29 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         if (resetAttempts) {
             connectionDetailsMap.keys.forEach { retryAttempts[it] = 0 }
             _mqttRetryAttempt.postValue(0)
+        } else {
+            // Manual/Timeout retry: bump attempt counter for any disconnected broker
+            // so the UI "Try X" count increments even if Paho is stuck in an internal loop.
+            var incremented = false
+            connectionDetailsMap.keys.forEach { serverUri ->
+                if (managers[serverUri]?.isConnected() != true) {
+                    val next = (retryAttempts[serverUri] ?: 0) + 1
+                    retryAttempts[serverUri] = next
+                    android.util.Log.d("MqttViewModel", "Manual retry trigger: incrementing attempt for $serverUri to $next")
+                    incremented = true
+                }
+            }
+            
+            // If for some reason we missed the increment (e.g. state race), 
+            // force a global increment so the user sees progress.
+            if (!incremented) {
+                val currentMax = _mqttRetryAttempt.value ?: 0
+                _mqttRetryAttempt.postValue(currentMax + 1)
+            } else {
+                _mqttRetryAttempt.postValue(retryAttempts.values.maxOrNull() ?: 0)
+            }
         }
+        
         // Only show "connecting" if at least one broker is actually disconnected
         val anyDisconnected = connectionDetailsMap.keys.any { managers[it]?.isConnected() != true }
         if (anyDisconnected) {
@@ -554,7 +615,13 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 val current = _connectionStatusMap.value?.toMutableMap() ?: mutableMapOf()
                 current[serverUri] = isConnected
                 _connectionStatusMap.postValue(current)
-                _connectionStatus.postValue(current.values.all { it })
+                val now = System.currentTimeMillis()
+                val hasRecentTraffic = lastMessageAtByServerUri.values.any { ts ->
+                    now - ts <= MQTT_MESSAGE_LIVENESS_TIMEOUT_MS
+                }
+                // BLUCON should be considered connected if ANY configured broker is connected
+                // or if we are still receiving recent MQTT traffic.
+                _connectionStatus.postValue(current.values.any { it } || hasRecentTraffic)
             }
         }
     }
@@ -582,32 +649,43 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         if (retryJobs[serverUri]?.isActive == true) return
 
         val attempt = retryAttempts[serverUri] ?: 0
-        // Faster backoff so broker can reconnect quickly: 2s, 4s, 6s, 8s, then 10s
-        val delayMs = when (attempt) {
-            0 -> 1000L
-            1 -> 2000L
-            2 -> 4000L
-            3 -> 8000L
-            else -> 10000L
+        // Tiered backoff: 5s, 10s, 20s, 40s, max 60s
+        val delayMs = when {
+            attempt == 0 -> 5000L
+            attempt == 1 -> 10000L
+            attempt == 2 -> 20000L
+            attempt == 3 -> 40000L
+            else -> 60000L
         }
 
         retryJobs[serverUri] = viewModelScope.launch {
-            android.util.Log.d(
-                "MqttViewModel",
-                "Retrying initial connection for $serverUri in ${delayMs / 1000}s (Attempt ${attempt + 1})"
-            )
+            val logMsg = "Retrying initial connection for $serverUri in ${delayMs / 1000}s (Attempt ${attempt + 1})"
+            android.util.Log.d("MqttViewModel", logMsg)
+            FileLogger.logError(getApplication(), "MQTT_RETRY", "[$serverUri] $logMsg")
+            
             delay(delayMs)
+            
+            // Check if still disconnected before firing
+            if (managers[serverUri]?.isConnected() == true) {
+                android.util.Log.d("MqttViewModel", "Skipping scheduled retry for $serverUri: already connected.")
+                return@launch
+            }
+
             retryAttempts[serverUri] = attempt + 1
             _mqttRetryAttempt.postValue(retryAttempts.values.maxOrNull() ?: (attempt + 1))
-            initAndConnect(
-                details.serverUri,
-                details.clientId,
-                details.username,
-                details.password,
-                details.topic,
-                details.qos,
-                getApplication()
-            )
+            
+            val details = connectionDetailsMap[serverUri]
+            if (details != null) {
+                initAndConnect(
+                    details.serverUri,
+                    details.clientId,
+                    details.username,
+                    details.password,
+                    details.topic,
+                    details.qos,
+                    getApplication()
+                )
+            }
         }
     }
 
@@ -624,7 +702,14 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 // Use MQTT connection status only. Never open a new socket - it would
                 // compete with the MQTT session and cause connection limit issues.
                 val connected = managers[serverUri]?.isConnected() == true
-                _isBrokerReachable.postValue(connected)
+                
+                stateMutex.withLock {
+                    reachabilityStatusMap[serverUri] = connected
+                    // BLUCON/broker is effectively reachable when ANY configured broker is reachable.
+                    val anyReachable = reachabilityStatusMap.values.any { it }
+                    _isBrokerReachable.postValue(anyReachable)
+                }
+                
                 delay(5000L)
             }
         }
@@ -909,7 +994,19 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                     val last = lastMessageAtByServerUri[serverUri] ?: 0L
                     if (last == 0L) continue
                     if (now - last > MQTT_MESSAGE_LIVENESS_TIMEOUT_MS) {
-                        forceReconnectDueToStaleTraffic(serverUri)
+                        val strikes = (staleTrafficStrikeByServerUri[serverUri] ?: 0) + 1
+                        staleTrafficStrikeByServerUri[serverUri] = strikes
+                        if (strikes >= MQTT_LIVENESS_STALE_STRIKES_BEFORE_RECONNECT) {
+                            forceReconnectDueToStaleTraffic(serverUri)
+                        } else {
+                            android.util.Log.d(
+                                "MqttViewModel",
+                                "Stale MQTT traffic for $serverUri (${now - last}ms). " +
+                                    "Strike $strikes/$MQTT_LIVENESS_STALE_STRIKES_BEFORE_RECONNECT; skipping reconnect."
+                            )
+                        }
+                    } else {
+                        staleTrafficStrikeByServerUri[serverUri] = 0
                     }
                 }
             }
@@ -932,6 +1029,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 incrementMqttRetryAttemptCounter(serverUri)
                 lastMessageAtByServerUri.remove(serverUri)
+                staleTrafficStrikeByServerUri.remove(serverUri)
                 stateMutex.withLock {
                     managers[serverUri]?.close()
                     managers.remove(serverUri)
@@ -940,7 +1038,11 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                     val current = _connectionStatusMap.value?.toMutableMap() ?: mutableMapOf()
                     current[serverUri] = false
                     _connectionStatusMap.postValue(current)
-                    _connectionStatus.postValue(current.values.all { it })
+                    val now = System.currentTimeMillis()
+                    val hasRecentTraffic = lastMessageAtByServerUri.values.any { ts ->
+                        now - ts <= MQTT_MESSAGE_LIVENESS_TIMEOUT_MS
+                    }
+                    _connectionStatus.postValue(current.values.any { it } || hasRecentTraffic)
                 }
                 startConnectTimer()
                 initAndConnect(
@@ -963,6 +1065,17 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
         private const val MQTT_MESSAGE_LIVENESS_TIMEOUT_MS = 30_000L
+        private const val MQTT_LIVENESS_STALE_STRIKES_BEFORE_RECONNECT = 4
+        private const val CONFIG_REFRESH_DEBOUNCE_MS = 15_000L
+    }
+
+    private fun requestConfigRefresh(reason: String) {
+        val now = System.currentTimeMillis()
+        if (now - lastConfigRefreshAtMs >= CONFIG_REFRESH_DEBOUNCE_MS) {
+            lastConfigRefreshAtMs = now
+            android.util.Log.i("MqttViewModel", "$reason; requesting TV config refresh")
+            configRefreshRequests.trySend(Unit)
+        }
     }
 
     override fun onCleared() {

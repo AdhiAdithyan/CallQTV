@@ -60,12 +60,11 @@ class TvConfigRepository(private val context: Context) {
         }
 
         val totalStartMs = System.currentTimeMillis()
-        val fcmToken = PreferenceHelper.getFcmToken(context)
         val request = TvConfigRequest(
             macAddress = macAddress,
             customerId = customerId,
             flag = "TV",
-            fcmToken = fcmToken.ifEmpty { null }
+            fcmToken = null
         )
 
         // Dynamically construct URL from saved base URL

@@ -9,7 +9,7 @@ This document reflects the current codebase implementation and validation approa
   - Shared client for general APIs
   - Dedicated license client with longer timeouts
 - Messaging: Eclipse Paho MQTT
-- Media: Media3 ExoPlayer + Coil + YouTube player library
+- Media: Media3 ExoPlayer + Coil + WebView-based YouTube playback
 
 ## 2) Key Components and Responsibilities
 - `TokenDisplayActivity`
@@ -19,7 +19,11 @@ This document reflects the current codebase implementation and validation approa
 - `TvConfigRepository`
   - Config API call, mapping, transactional Room updates, perf logs
 - `MqttViewModel` / `MqttClientManager`
-  - Broker connection lifecycle, token stream handling, reconnection behavior
+  - Broker connection lifecycle, token stream handling, multi-broker reachability mapping
+  - Manual retry attempt synchronization via global 30s timeout
+  - Config refresh trigger when valid MQTT payload contains `CLR`
+- `MyApplication`
+  - Global uncaught exception handling and system service (Integrity) suppression
 - `ProjectRepository` / `RegistrationViewModel`
   - License authentication, registration, and status checks
 - `AdDownloader`
@@ -34,6 +38,12 @@ This document reflects the current codebase implementation and validation approa
 - Separate TTS initialization dialog (not mixed with config loading overlay).
 - Bounded/truncated response logging for large config payloads.
 - Split performance logs for API, mapping, and DB transaction sections.
+- Strict layout clipping (`clipToBounds`) and centered rendering for AdArea.
+- Ad area is display-only (non-focusable and non-clickable); no remote/touch interaction is required.
+- JavaScript bridge + kiosk-mode YouTube playback with autoplay and automatic next-ad transition.
+- Ad loop sequencing uses visible-ad index alignment to avoid post-loop stalls.
+- Ad sound setting (`enable_ad_sound`) controls both ExoPlayer video ads and YouTube WebView ads.
+- MQTT connected status aggregates `any broker connected OR recent MQTT traffic`.
 
 ## 4) Build and Environment (Current)
 From current Gradle files:

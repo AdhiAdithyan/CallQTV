@@ -126,7 +126,9 @@ class MqttClientManager(
         val options = MqttConnectOptions().apply {
             isCleanSession = false // Enable persistent session to receive missed messages on reconnect
             isAutomaticReconnect = true
-            connectionTimeout = 10
+            // LAN/Wi-Fi handshakes on some Android TV/embedded routers can exceed 10s.
+            // Keep timeout more tolerant to avoid false initial-connect failures.
+            connectionTimeout = 20
             maxReconnectDelay = 20
             // Very short keep-alive so PINGREQ is sent about every 120 seconds.
             // Note: this increases network chatter and sensitivity to brief hiccups.
@@ -156,24 +158,26 @@ class MqttClientManager(
                     isConnecting = false
                     val rawMsg = exception?.message ?: "Unknown error"
                     val causeMsg = exception?.cause?.message.orEmpty()
+                    val code = (exception as? MqttException)?.reasonCode
 
-                    // Paho reasonCode 32103 = "Unable to connect to server"
-                    val isMqttUnableToConnect = (exception as? MqttException)?.reasonCode == 32103
-                    val isHostUnreachable = rawMsg.contains("EHOSTUNREACH", ignoreCase = true) ||
-                            rawMsg.contains("No route to host", ignoreCase = true) ||
-                            causeMsg.contains("EHOSTUNREACH", ignoreCase = true) ||
-                            causeMsg.contains("No route to host", ignoreCase = true)
+                    // Retryable connect failures should be treated as soft errors so the retry loop
+                    // can continue (instead of marking auto-retry exhausted).
+                    val isRetryableConnectFailure = isRetryableConnectFailure(
+                        exception = exception,
+                        rawMsg = rawMsg,
+                        causeMsg = causeMsg,
+                        reasonCode = code
+                    )
 
                     val errorText = "Initial connection failed: $rawMsg"
+                    Log.w(TAG, "[$serverUri] onFailure: $errorText (Code: $code, Cause: $causeMsg)")
 
                     mqttListener?.let {
                         it.onConnectionStatus(false)
-                        val code = (exception as? MqttException)?.reasonCode
                         it.onError(errorText, code)
 
-                        if (isMqttUnableToConnect || isHostUnreachable) {
+                        if (isRetryableConnectFailure) {
                             // Network / broker unreachable: rely on automatic reconnect + our own retry logic.
-                            // Do NOT mark auto-retry as exhausted; avoid popping blocking UI dialogs.
                             Log.w(TAG, "MQTT broker unreachable (soft failure, will retry). Details: $rawMsg", exception)
                         } else {
                             Log.e(TAG, errorText, exception)
@@ -198,15 +202,50 @@ class MqttClientManager(
             Log.e(TAG, errorText, e)
             mqttListener?.onConnectionStatus(false)
             mqttListener?.onError(errorText, e.reasonCode)
-            mqttListener?.onAutoRetryExhausted()
+            if (!isRetryableConnectFailure(
+                    exception = e,
+                    rawMsg = e.message.orEmpty(),
+                    causeMsg = e.cause?.message.orEmpty(),
+                    reasonCode = e.reasonCode
+                )
+            ) {
+                mqttListener?.onAutoRetryExhausted()
+            }
         } catch (e: Exception) {
             isConnecting = false
             val errorText = "Connection exception: ${e.message}"
             Log.e(TAG, errorText, e)
             mqttListener?.onConnectionStatus(false)
             mqttListener?.onError(errorText)
-            mqttListener?.onAutoRetryExhausted()
+            if (!isRetryableConnectFailure(
+                    exception = e,
+                    rawMsg = e.message.orEmpty(),
+                    causeMsg = e.cause?.message.orEmpty(),
+                    reasonCode = null
+                )
+            ) {
+                mqttListener?.onAutoRetryExhausted()
+            }
         }
+    }
+
+    private fun isRetryableConnectFailure(
+        exception: Throwable?,
+        rawMsg: String,
+        causeMsg: String,
+        reasonCode: Int?
+    ): Boolean {
+        val msg = "$rawMsg $causeMsg".lowercase()
+        return reasonCode == 32103 || // Paho: unable to connect
+                exception is java.net.SocketTimeoutException ||
+                exception?.cause is java.net.SocketTimeoutException ||
+                msg.contains("sockettimeoutexception") ||
+                msg.contains("timed out") ||
+                msg.contains("ehostunreach") ||
+                msg.contains("no route to host") ||
+                msg.contains("connection refused") ||
+                msg.contains("connectexception") ||
+                msg.contains("network is unreachable")
     }
 
     fun subscribe(topic: String, qos: Int) {

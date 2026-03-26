@@ -4,8 +4,6 @@ import android.content.Context
 import android.os.Environment
 import android.util.Log
 import java.io.File
-import java.io.FileOutputStream
-import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -68,23 +66,7 @@ object FileLogger {
     fun getLogFilePath(context: Context): String =
         File(getLogDirectory(context), "errors_${todayDateStr()}.txt").absolutePath
 
-    /**
-     * Opens an append output stream to today's error log file.
-     */
-    private fun getLogOutputStream(context: Context): OutputStream? {
-        return try {
-            val dir = getLogDirectory(context)
-            FileOutputStream(File(dir, "errors_${todayDateStr()}.txt"), true)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to open log stream", e)
-            try {
-                FileOutputStream(File(context.filesDir, "errors_${todayDateStr()}.txt"), true)
-            } catch (e2: Exception) {
-                Log.e(TAG, "Fallback log stream also failed", e2)
-                null
-            }
-        }
-    }
+
 
     /** Logs a crash/exception. */
     fun logCrash(context: Context, exception: Throwable) {

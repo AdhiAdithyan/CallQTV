@@ -55,6 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
@@ -104,6 +105,8 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector.ParametersBuilder
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.datasource.DefaultDataSource
@@ -117,12 +120,14 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.PermissionRequest
 import java.io.File
 import java.io.BufferedInputStream
 import android.media.MediaPlayer
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.util.Log
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
@@ -130,6 +135,7 @@ import java.net.URLConnection
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 
 class TokenDisplayActivity : ComponentActivity() {
 
@@ -246,87 +252,127 @@ class TokenDisplayActivity : ComponentActivity() {
     }
 }
 
-// Play a short built-in chime before announcing a token.
-// Uses ToneGenerator so it does not depend on network or external URLs.
-suspend fun playTokenChime(soundKey: String) {
+// Play a short built-in chime or a custom audio URL before announcing a token.
+suspend fun playTokenChime(
+    context: Context,
+    soundKey: String,
+    tokenAudioUrl: String? = null,
+    counterAudioUrl: String? = null
+) {
     withContext(Dispatchers.Default) {
-        val (tone, durationMs) = when (soundKey) {
-            // Dings
-            "ding"   -> ToneGenerator.TONE_PROP_BEEP2 to 120
-            "ding2"  -> ToneGenerator.TONE_PROP_BEEP2 to 280
-            "ding3"  -> ToneGenerator.TONE_PROP_BEEP2 to 350
-            "ding4"  -> ToneGenerator.TONE_PROP_BEEP2 to 420
-            "ding5"  -> ToneGenerator.TONE_PROP_BEEP2 to 500
-            // Doubles
-            "double"  -> ToneGenerator.TONE_PROP_ACK to 240
-            "double2" -> ToneGenerator.TONE_PROP_ACK to 320
-            "double3" -> ToneGenerator.TONE_PROP_ACK to 400
-            "double4" -> ToneGenerator.TONE_PROP_ACK to 480
-            // Soft beeps
-            "soft"  -> ToneGenerator.TONE_PROP_BEEP to 150
-            "soft2" -> ToneGenerator.TONE_PROP_BEEP to 240
-            "soft3" -> ToneGenerator.TONE_PROP_BEEP to 320
-            "soft4" -> ToneGenerator.TONE_PROP_BEEP to 400
-            // Alerts
-            "alert"  -> ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD to 260
-            "alert2" -> ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD to 360
-            "alert3" -> ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD to 450
-            "alert4" -> ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD to 520
-            // Bells
-            "bell"  -> ToneGenerator.TONE_SUP_PIP to 240
-            "bell2" -> ToneGenerator.TONE_SUP_PIP to 320
-            "bell3" -> ToneGenerator.TONE_SUP_PIP to 400
-            "bell4" -> ToneGenerator.TONE_SUP_PIP to 480
-            // Church bells
-            "church1" -> ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_NORMAL to 360
-            "church2" -> ToneGenerator.TONE_CDMA_HIGH_L to 390
-            "church3" -> ToneGenerator.TONE_CDMA_HIGH_PBX_L to 450
-            // Pings
-            "ping"  -> ToneGenerator.TONE_PROP_PROMPT to 180
-            "ping2" -> ToneGenerator.TONE_PROP_PROMPT to 260
-            "ping3" -> ToneGenerator.TONE_PROP_PROMPT to 340
-            "ping4" -> ToneGenerator.TONE_PROP_PROMPT to 420
-            // Long tones
-            "long"  -> ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_PING_RING to 420
-            "long2" -> ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_PING_RING to 540
-            "long3" -> ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_PING_RING to 660
-            "long4" -> ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_PING_RING to 780
-            // Chimes
-            "chime1" -> ToneGenerator.TONE_SUP_RINGTONE to 360
-            "chime2" -> ToneGenerator.TONE_SUP_RINGTONE to 480
-            "chime3" -> ToneGenerator.TONE_SUP_RINGTONE to 600
-            "chime4" -> ToneGenerator.TONE_SUP_RINGTONE to 720
-            // High beeps
-            "hi1" -> ToneGenerator.TONE_SUP_RADIO_ACK to 180
-            "hi2" -> ToneGenerator.TONE_SUP_RADIO_ACK to 260
-            "hi3" -> ToneGenerator.TONE_SUP_RADIO_ACK to 340
-            "hi4" -> ToneGenerator.TONE_SUP_RADIO_ACK to 420
-            // Low beeps
-            "low1" -> ToneGenerator.TONE_SUP_CONGESTION to 180
-            "low2" -> ToneGenerator.TONE_SUP_CONGESTION to 260
-            "low3" -> ToneGenerator.TONE_SUP_CONGESTION to 340
-            "low4" -> ToneGenerator.TONE_SUP_CONGESTION to 420
-            // Misc tones
-            "tone1" -> ToneGenerator.TONE_SUP_DIAL to 210
-            "tone2" -> ToneGenerator.TONE_SUP_BUSY to 210
-            "tone3" -> ToneGenerator.TONE_SUP_CALL_WAITING to 300
-            "tone4" -> ToneGenerator.TONE_SUP_CONFIRM to 300
-            "tone5" -> ToneGenerator.TONE_SUP_ERROR to 300
-            "tone6" -> ToneGenerator.TONE_SUP_INTERCEPT to 300
-            // use another valid system tone for tone7 (reorder is not available on all devices)
-            "tone7" -> ToneGenerator.TONE_SUP_CALL_WAITING to 390
-            else    -> ToneGenerator.TONE_PROP_BEEP2 to 240 // default ding
+        // 1. Play counter-specific audio if provided (highest priority)
+        if (!counterAudioUrl.isNullOrBlank()) {
+            playMediaUrl(context, counterAudioUrl)
         }
 
-        val toneGen = ToneGenerator(AudioManager.STREAM_MUSIC, 80)
-        try {
-            toneGen.startTone(tone, durationMs)
-            // Keep total chime time very short
-            delay(durationMs + 5L)
-        } catch (_: Exception) {
-        } finally {
-            toneGen.release()
+        // 2. Play token-specific chime if provided, otherwise system tone
+        if (!tokenAudioUrl.isNullOrBlank()) {
+            playMediaUrl(context, tokenAudioUrl)
+        } else {
+            playSystemTone(soundKey)
         }
+    }
+}
+
+private suspend fun playMediaUrl(context: Context, url: String) {
+    withContext(Dispatchers.IO) {
+        val mediaPlayer = android.media.MediaPlayer()
+        try {
+            mediaPlayer.setDataSource(context, Uri.parse(url))
+            mediaPlayer.setAudioAttributes(
+                android.media.AudioAttributes.Builder()
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setUsage(android.media.AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .build()
+            )
+            mediaPlayer.prepare()
+            mediaPlayer.start()
+            val duration = mediaPlayer.duration.toLong()
+            delay(duration.coerceAtMost(3000L)) 
+        } catch (e: Exception) {
+            Log.e("TokenChime", "Error playing chime URL: $url", e)
+        } finally {
+            mediaPlayer.release()
+        }
+    }
+}
+
+private suspend fun playSystemTone(soundKey: String) {
+    val (tone, durationMs) = when (soundKey) {
+        // Dings
+        "ding"   -> ToneGenerator.TONE_PROP_BEEP2 to 120
+        "ding2"  -> ToneGenerator.TONE_PROP_BEEP2 to 280
+        "ding3"  -> ToneGenerator.TONE_PROP_BEEP2 to 350
+        "ding4"  -> ToneGenerator.TONE_PROP_BEEP2 to 420
+        "ding5"  -> ToneGenerator.TONE_PROP_BEEP2 to 500
+        // Doubles
+        "double"  -> ToneGenerator.TONE_PROP_ACK to 240
+        "double2" -> ToneGenerator.TONE_PROP_ACK to 320
+        "double3" -> ToneGenerator.TONE_PROP_ACK to 400
+        "double4" -> ToneGenerator.TONE_PROP_ACK to 480
+        // Soft beeps
+        "soft"  -> ToneGenerator.TONE_PROP_BEEP to 150
+        "soft2" -> ToneGenerator.TONE_PROP_BEEP to 240
+        "soft3" -> ToneGenerator.TONE_PROP_BEEP to 320
+        "soft4" -> ToneGenerator.TONE_PROP_BEEP to 400
+        // Alerts
+        "alert"  -> ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD to 260
+        "alert2" -> ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD to 360
+        "alert3" -> ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD to 450
+        "alert4" -> ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD to 520
+        // Bells
+        "bell"  -> ToneGenerator.TONE_SUP_PIP to 240
+        "bell2" -> ToneGenerator.TONE_SUP_PIP to 320
+        "bell3" -> ToneGenerator.TONE_SUP_PIP to 400
+        "bell4" -> ToneGenerator.TONE_SUP_PIP to 480
+        // Church bells
+        "church1" -> ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_NORMAL to 360
+        "church2" -> ToneGenerator.TONE_CDMA_HIGH_L to 390
+        "church3" -> ToneGenerator.TONE_CDMA_HIGH_PBX_L to 450
+        // Pings
+        "ping"  -> ToneGenerator.TONE_PROP_PROMPT to 180
+        "ping2" -> ToneGenerator.TONE_PROP_PROMPT to 260
+        "ping3" -> ToneGenerator.TONE_PROP_PROMPT to 340
+        "ping4" -> ToneGenerator.TONE_PROP_PROMPT to 420
+        // Long tones
+        "long"  -> ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_PING_RING to 420
+        "long2" -> ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_PING_RING to 540
+        "long3" -> ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_PING_RING to 660
+        "long4" -> ToneGenerator.TONE_CDMA_CALL_SIGNAL_ISDN_PING_RING to 780
+        // Chimes
+        "chime1" -> ToneGenerator.TONE_SUP_RINGTONE to 360
+        "chime2" -> ToneGenerator.TONE_SUP_RINGTONE to 480
+        "chime3" -> ToneGenerator.TONE_SUP_RINGTONE to 600
+        "chime4" -> ToneGenerator.TONE_SUP_RINGTONE to 720
+        // High beeps
+        "hi1" -> ToneGenerator.TONE_SUP_RADIO_ACK to 180
+        "hi2" -> ToneGenerator.TONE_SUP_RADIO_ACK to 260
+        "hi3" -> ToneGenerator.TONE_SUP_RADIO_ACK to 340
+        "hi4" -> ToneGenerator.TONE_SUP_RADIO_ACK to 420
+        // Low beeps
+        "low1" -> ToneGenerator.TONE_SUP_CONGESTION to 180
+        "low2" -> ToneGenerator.TONE_SUP_CONGESTION to 260
+        "low3" -> ToneGenerator.TONE_SUP_CONGESTION to 340
+        "low4" -> ToneGenerator.TONE_SUP_CONGESTION to 420
+        // Misc tones
+        "tone1" -> ToneGenerator.TONE_SUP_DIAL to 210
+        "tone2" -> ToneGenerator.TONE_SUP_BUSY to 210
+        "tone3" -> ToneGenerator.TONE_SUP_CALL_WAITING to 300
+        "tone4" -> ToneGenerator.TONE_SUP_CONFIRM to 300
+        "tone5" -> ToneGenerator.TONE_SUP_ERROR to 300
+        "tone6" -> ToneGenerator.TONE_SUP_INTERCEPT to 300
+        // use another valid system tone for tone7 (reorder is not available on all devices)
+        "tone7" -> ToneGenerator.TONE_SUP_CALL_WAITING to 390
+        else    -> ToneGenerator.TONE_PROP_BEEP2 to 240 // default ding
+    }
+
+    val toneGen = ToneGenerator(AudioManager.STREAM_MUSIC, 80)
+    try {
+        toneGen.startTone(tone, durationMs)
+        delay(durationMs + 5L)
+    } catch (_: Exception) {
+    } finally {
+        toneGen.release()
     }
 }
 
@@ -342,6 +388,23 @@ fun TokenDisplayScreen(
 ) {
     val context = LocalContext.current
 
+    // Warm up ExoPlayer instances/cache on a background dispatcher.
+    // This reduces first-ad stutter/ANR during initial player/cache initialization.
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                MediaEngine.warmUp(context)
+            } catch (_: Exception) {
+                // Never block UI for warm-up failures.
+            }
+        }
+    }
+
+    // Pre-warm WebView provider once, so first YouTube ad doesn't pay full Chromium init cost.
+    LaunchedEffect(Unit) {
+        WebViewWarmup.warmUp(context)
+    }
+
     // State map to track the last call timestamp per counter, used to restart blinking on re-call.
     val blinkTriggers = remember { mutableStateMapOf<String, Long>() }
     
@@ -355,7 +418,6 @@ fun TokenDisplayScreen(
     }
     val config by viewModel.config.observeAsState(null)
     val counters by viewModel.counters.observeAsState(emptyList())
-    val adFiles by viewModel.adFiles.observeAsState(emptyList())
     val daysUntilExpiry by viewModel.daysUntilExpiry.observeAsState(null)
     val currentDateTime by viewModel.currentDateTime.observeAsState("")
 
@@ -368,6 +430,36 @@ fun TokenDisplayScreen(
     val connectTimer by mqttViewModel.getConnectTimer().observeAsState(0)
     val mqttRetryAttempt by mqttViewModel.getMqttRetryAttempt().observeAsState(0)
     val isBrokerReachable by mqttViewModel.isBrokerReachable().observeAsState(true)
+
+    // Background Music Player (Loops tokenMusicUrl if provided)
+    val musicUrl = config?.tokenMusicUrl
+    DisposableEffect(musicUrl) {
+        if (musicUrl.isNullOrBlank()) return@DisposableEffect onDispose {}
+
+        val mediaPlayer = MediaPlayer()
+        try {
+            mediaPlayer.setDataSource(context, Uri.parse(musicUrl))
+            mediaPlayer.setAudioAttributes(
+                android.media.AudioAttributes.Builder()
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                    .build()
+            )
+            mediaPlayer.isLooping = true
+            mediaPlayer.setVolume(0.3f, 0.3f) // Lower volume for background
+            mediaPlayer.prepareAsync()
+            mediaPlayer.setOnPreparedListener { it.start() }
+        } catch (e: Exception) {
+            Log.e("TokenDisplay", "Error initializing background music: $musicUrl", e)
+        }
+
+        onDispose {
+            try {
+                mediaPlayer.stop()
+                mediaPlayer.release()
+            } catch (_: Exception) {}
+        }
+    }
     var showMqttRetryDialog by remember { mutableStateOf(false) }
     var pendingCallCount by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) {
@@ -519,7 +611,12 @@ fun TokenDisplayScreen(
 
                 // Always play notification chime first.
                 val soundKey = ThemeColorManager.getNotificationSoundKey(context)
-                playTokenChime(soundKey)
+                playTokenChime(
+                    context = context,
+                    soundKey = soundKey,
+                    tokenAudioUrl = currentConfig?.tokenAudioUrl,
+                    counterAudioUrl = actualCounter.audioUrl
+                )
 
                 if (currentConfig?.enableTokenAnnouncement == true) {
                     val displayName =
@@ -947,122 +1044,168 @@ private fun TokenDisplayContent(
 
         Spacer(modifier = Modifier.height(responsivePadding))
 
-        val hasAds = showAds && adFiles.isNotEmpty()
-        val baseLayoutType = config.layoutType ?: "1"
-        // In portrait mode: treat each counter as a row, tokens as columns (type 2 behavior).
-        // When counters increase, CountersArea(type 2) already arranges them into a grid of rows/columns.
-        val layoutType = if (usePortraitLayout) "2" else baseLayoutType
+        TokenDisplayBody(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            config = config,
+            adFiles = adFiles,
+            countersToDisplay = countersToDisplay,
+            tokensPerCounter = tokensPerCounter,
+            rows = rows,
+            columns = columns,
+            scale = scale,
+            counterBgHex = counterBgHex,
+            tokenBgHex = tokenBgHex,
+            usePortraitLayout = usePortraitLayout,
+            adPlacement = adPlacement,
+            blinkTriggers = blinkTriggers
+        )
 
-        // Decide how much horizontal space ads vs counters should take when ads are visible.
-        // Use configuration (no_of_counters) to choose between 40% and 50% for ads:
-        // - If ads are enabled AND there are 2 or fewer counters, ads take 50% (bigger ad area).
-        // - Otherwise, ads take 40%. Counters take the remaining width.
-        val counterCount = countersToDisplay.size
-        val configuredCounterLimit = config.noOfCounters ?: counterCount
-        val adWeight = remember(showAds, configuredCounterLimit) {
-            if (!showAds) 0f
-            else if (configuredCounterLimit <= 2) 0.5f
-            else 0.4f
-        }
-        val countersWeight = remember(adWeight) { if (adWeight > 0f) 1f - adWeight else 1f }
+        TokenDisplayFooter(
+            config = config,
+            responsivePadding = responsivePadding,
+            scale = scale,
+            deviceIsPortrait = deviceIsPortrait
+        )
+    }
+}
 
-        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            if (usePortraitLayout) {
-                if (hasAds) {
-                    // Portrait + ads: Ad area on the left, vertical counters on the right
-                    Row(modifier = Modifier.fillMaxSize()) {
-                        Box(modifier = Modifier.weight(adWeight).fillMaxHeight()) {
-                            AdArea(adFiles, config)
-                        }
-                        Box(modifier = Modifier.weight(countersWeight).fillMaxHeight()) {
-                            CountersArea(
-                                countersToDisplay,
-                                tokensPerCounter,
-                                config,
-                                rows,
-                                columns,
-                                layoutType,
-                                scale,
-                                counterBgHex,
-                                tokenBgHex,
-                                isPortrait = usePortraitLayout,
-                                hasAds = hasAds,
-                                blinkTriggers = blinkTriggers
-                            )
-                        }
-                    }
-                } else {
-                    // Portrait + no ads: full-width vertical counters
-                    CountersArea(
-                        countersToDisplay,
-                        tokensPerCounter,
-                        config,
-                        rows,
-                        columns,
-                        layoutType,
-                        scale,
-                        counterBgHex,
-                        tokenBgHex,
-                        isPortrait = usePortraitLayout,
-                        hasAds = hasAds,
-                        blinkTriggers = blinkTriggers
-                    )
-                }
-            } else {
-                // Landscape: preserve existing behavior with layout_type and ad_placement
-                if (hasAds) {
-                    Row(modifier = Modifier.fillMaxSize()) {
-                        if (adPlacement.equals("left", ignoreCase = true)) {
-                            Box(modifier = Modifier.weight(adWeight).fillMaxHeight()) { AdArea(adFiles, config) }
-                            Box(modifier = Modifier.weight(countersWeight).fillMaxHeight()) {
+@Composable
+private fun TokenDisplayBody(
+    modifier: Modifier,
+    config: TvConfigEntity,
+    adFiles: List<AdFileEntity>,
+    countersToDisplay: List<CounterEntity>,
+    tokensPerCounter: Map<String, List<String>>,
+    rows: Int,
+    columns: Int,
+    scale: Float,
+    counterBgHex: String,
+    tokenBgHex: String,
+    usePortraitLayout: Boolean,
+    adPlacement: String,
+    blinkTriggers: Map<String, Long>
+) {
+    val showAds = config.showAds?.equals("on", ignoreCase = true) == true
+    val hasAds = showAds && adFiles.isNotEmpty()
+    val baseLayoutType = config.layoutType ?: "1"
+    val layoutType = if (usePortraitLayout) "2" else baseLayoutType
+    val counterCount = countersToDisplay.size
+    val configuredCounterLimit = config.noOfCounters ?: counterCount
+    val adWeight = remember(showAds, configuredCounterLimit) {
+        if (!showAds) 0f else if (configuredCounterLimit <= 2) 0.5f else 0.4f
+    }
+    val countersWeight = remember(adWeight) { if (adWeight > 0f) 1f - adWeight else 1f }
+
+    Box(modifier = modifier) {
+        if (usePortraitLayout) {
+            if (hasAds) {
+                val isTop = adPlacement.equals("top", ignoreCase = true)
+                val isBottom = adPlacement.equals("bottom", ignoreCase = true)
+                val isRight = adPlacement.equals("right", ignoreCase = true)
+                
+                if (isTop || isBottom) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        if (isTop) {
+                            Box(modifier = Modifier.weight(adWeight).fillMaxWidth().clipToBounds()) { AdArea(adFiles, config) }
+                            Box(modifier = Modifier.weight(countersWeight).fillMaxWidth()) {
                                 CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers)
                             }
                         } else {
-                            Box(modifier = Modifier.weight(countersWeight).fillMaxHeight()) {
+                            Box(modifier = Modifier.weight(countersWeight).fillMaxWidth()) {
                                 CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers)
                             }
-                            Box(modifier = Modifier.weight(adWeight).fillMaxHeight()) { AdArea(adFiles, config) }
+                            Box(modifier = Modifier.weight(adWeight).fillMaxWidth().clipToBounds()) { AdArea(adFiles, config) }
                         }
                     }
                 } else {
-                    CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers)
-                }
-            }
-        }
-
-        // Footer: restore configured scrolling section based on TV config
-        val scrollEnabled = config.scrollEnabled?.equals("on", ignoreCase = true) == true
-        val noOfTextFields = config.noOfTextFields ?: 0
-        val scrollTextLinesJson = config.scrollTextLinesJson
-
-        // Parse JSON on background to avoid blocking main thread during composition
-        val gson = remember { Gson() }
-        val scrollLines by produceState<List<String>>(
-            initialValue = emptyList(),
-            scrollTextLinesJson
-        ) {
-            value = if (!scrollTextLinesJson.isNullOrBlank()) {
-                withContext(Dispatchers.Default) {
-                    try {
-                        val type = object : TypeToken<List<String>>() {}.type
-                        gson.fromJson<List<String>>(scrollTextLinesJson, type) ?: emptyList()
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                        emptyList()
+                    // Default Left/Right (Row) for Portrait if not specified as Top/Bottom
+                    Row(modifier = Modifier.fillMaxSize()) {
+                        if (isRight) {
+                            Box(modifier = Modifier.weight(countersWeight).fillMaxHeight()) {
+                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers)
+                            }
+                            Box(modifier = Modifier.weight(adWeight).fillMaxHeight().clipToBounds()) { AdArea(adFiles, config) }
+                        } else {
+                            Box(modifier = Modifier.weight(adWeight).fillMaxHeight().clipToBounds()) { AdArea(adFiles, config) }
+                            Box(modifier = Modifier.weight(countersWeight).fillMaxHeight()) {
+                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers)
+                            }
+                        }
                     }
                 }
-            } else emptyList()
+            } else {
+                CountersArea(
+                    countersToDisplay,
+                    tokensPerCounter,
+                    config,
+                    rows,
+                    columns,
+                    layoutType,
+                    scale,
+                    counterBgHex,
+                    tokenBgHex,
+                    isPortrait = usePortraitLayout,
+                    hasAds = hasAds,
+                    blinkTriggers = blinkTriggers
+                )
+            }
+        } else {
+            if (hasAds) {
+                Row(modifier = Modifier.fillMaxSize()) {
+                    if (adPlacement.equals("left", ignoreCase = true)) {
+                        Box(modifier = Modifier.weight(adWeight).fillMaxHeight().clipToBounds()) { AdArea(adFiles, config) }
+                        Box(modifier = Modifier.weight(countersWeight).fillMaxHeight()) {
+                            CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers)
+                        }
+                    } else {
+                        Box(modifier = Modifier.weight(countersWeight).fillMaxHeight()) {
+                            CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers)
+                        }
+                        Box(modifier = Modifier.weight(adWeight).fillMaxHeight().clipToBounds()) { AdArea(adFiles, config) }
+                    }
+                }
+            } else {
+                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers)
+            }
         }
+    }
+}
 
-        if (scrollEnabled && noOfTextFields > 0 && scrollLines.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(responsivePadding))
-            ScrollingFooter(
-                textLines = scrollLines,
-                scale = scale,
-                // Footer should also follow physical screen shape only
-                isPortrait = deviceIsPortrait
-            )
-        }
+@Composable
+private fun TokenDisplayFooter(
+    config: TvConfigEntity,
+    responsivePadding: androidx.compose.ui.unit.Dp,
+    scale: Float,
+    deviceIsPortrait: Boolean
+) {
+    val scrollEnabled = config.scrollEnabled?.equals("on", ignoreCase = true) == true
+    val noOfTextFields = config.noOfTextFields ?: 0
+    val scrollTextLinesJson = config.scrollTextLinesJson
+
+    val gson = remember { Gson() }
+    val scrollLines by produceState<List<String>>(
+        initialValue = emptyList(),
+        scrollTextLinesJson
+    ) {
+        value = if (!scrollTextLinesJson.isNullOrBlank()) {
+            withContext(Dispatchers.Default) {
+                try {
+                    val type = object : TypeToken<List<String>>() {}.type
+                    gson.fromJson<List<String>>(scrollTextLinesJson, type) ?: emptyList()
+                } catch (_: Exception) {
+                    emptyList()
+                }
+            }
+        } else emptyList()
+    }
+
+    if (scrollEnabled && noOfTextFields > 0 && scrollLines.isNotEmpty()) {
+        Spacer(modifier = Modifier.height(responsivePadding))
+        ScrollingFooter(
+            textLines = scrollLines,
+            scale = scale,
+            isPortrait = deviceIsPortrait
+        )
     }
 }
 
@@ -1282,20 +1425,125 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
     val intervalSeconds = (config.adInterval ?: 5).coerceAtLeast(1)
 
     // visibleAd: Ad currently on screen
-    var visibleAd by remember { mutableStateOf(orderedAds.getOrNull(0)) }
+    var visibleAd by remember(orderedAds) { mutableStateOf(orderedAds.getOrNull(0)) }
     // preparingAd: Ad currently being loaded in background
-    var preparingAd by remember { mutableStateOf<AdFileEntity?>(null) }
+    var preparingAd by remember(orderedAds) { mutableStateOf<AdFileEntity?>(null) }
     // nextAdIndex: Sequence counter
-    var nextAdIndex by remember { mutableStateOf(0) }
+    var nextAdIndex by remember(orderedAds) { mutableStateOf(0) }
     
     // Player indexing for dual-player setup
-    var activePlayerIdx by remember { mutableStateOf(0) }
-    var isNextReady by remember { mutableStateOf(false) }
+    var activePlayerIdx by remember(orderedAds) { mutableStateOf(0) }
+    var isNextReady by remember(orderedAds) { mutableStateOf(false) }
+    val mediaTypeCache = remember { mutableStateMapOf<String, AdMediaType>() }
+    val sharedYoutubeWebView = remember(context) {
+        buildBaseYoutubeWebView(context)
+    }
+
+    DisposableEffect(sharedYoutubeWebView) {
+        onDispose {
+            try {
+                sharedYoutubeWebView.stopLoading()
+                sharedYoutubeWebView.loadUrl("about:blank")
+                sharedYoutubeWebView.destroy()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    // Resolve media types off-main and cache them so composition remains lightweight.
+    LaunchedEffect(orderedAds) {
+        orderedAds.forEach { ad ->
+            val key = ad.filePath
+            if (mediaTypeCache[key] == null) {
+                val resolved = withContext(Dispatchers.Default) {
+                    resolveAdMediaType(key, context)
+                }
+                mediaTypeCache[key] = resolved
+            }
+        }
+    }
+
+    fun isWmvUnsupportedVideo(path: String): Boolean {
+        val lc = path.lowercase()
+        // ExoPlayer may not have a decoder/extractor for WMV on all TV SoCs.
+        // Your log shows: "Unsupported mime video/x-ms-wmv".
+        return lc.contains(".wmv") || lc.contains("x-ms-wmv") || lc.endsWith("/wmv")
+    }
+
+    fun fastInferMediaType(path: String): AdMediaType {
+        val lc = path.lowercase()
+        return when {
+            isValidYoutubeVideoIdForEmbed(path.trim()) ||
+                lc.contains("youtube.com") ||
+                lc.contains("youtu.be") ||
+                lc.contains("youtube-nocookie.com") -> AdMediaType.YouTube
+            isAdVideo(path) -> AdMediaType.Video
+            else -> AdMediaType.Image
+        }
+    }
+
+    fun isUhdPortraitU25UnsupportedVideo(path: String): Boolean {
+        val lc = path.lowercase()
+        return lc.contains("uhd_2160_3840") ||
+            lc.contains("uhd_2160x3840") ||
+            (lc.contains("2160x3840") || lc.contains("2160_3840")) && lc.endsWith(".mp4")
+    }
+
+    fun skipToNextAdFromCurrent() {
+        if (orderedAds.isEmpty() || visibleAd == null) return
+        val currentIdx = orderedAds.indexOfFirst { it.id == visibleAd!!.id && it.position == visibleAd!!.position }
+            .takeIf { it >= 0 } ?: orderedAds.indexOfFirst { it.filePath == visibleAd!!.filePath }.coerceAtLeast(0)
+        val nextIdx = (currentIdx + 1) % orderedAds.size
+        val current = orderedAds.getOrNull(currentIdx)
+        val next = orderedAds.getOrNull(nextIdx)
+        if (current != null && next != null) {
+            Log.i(
+                "AdLoop",
+                "skipToNext current[$currentIdx]=${current.filePath.take(90)} -> next[$nextIdx]=${next.filePath.take(90)}"
+            )
+        }
+        nextAdIndex = nextIdx
+        activePlayerIdx = 1 - activePlayerIdx
+        visibleAd = orderedAds[nextIdx]
+        preparingAd = visibleAd
+        isNextReady = true
+    }
 
     val triggerNext = {
         if (orderedAds.isNotEmpty()) {
-            nextAdIndex = (nextAdIndex + 1) % orderedAds.size
+            val current = visibleAd
+            val currIdx = if (current != null) {
+                orderedAds.indexOfFirst { it.id == current.id && it.position == current.position }
+                    .takeIf { it >= 0 } ?: orderedAds.indexOfFirst { it.filePath == current.filePath }
+            } else -1
+            val baseIdx = if (currIdx >= 0) currIdx else nextAdIndex
+            val nextIdx = (baseIdx + 1) % orderedAds.size
+            val next = orderedAds.getOrNull(nextIdx)
+            if (current != null && next != null) {
+                Log.i(
+                    "AdLoop",
+                    "triggerNext current[${currIdx.coerceAtLeast(0)}]=${current.filePath.take(90)} -> next[$nextIdx]=${next.filePath.take(90)}"
+                )
+            }
+            // Advance based on the currently visible ad index to keep loop order stable.
+            // Using the stale counter can desync after a full cycle and stall playback.
+            nextAdIndex = nextIdx
             isNextReady = false
+        }
+    }
+
+    // Ensure image ads always advance by configured interval so the full ad list
+    // loops continuously (videos/YouTube already advance via ended/error callbacks).
+    LaunchedEffect(visibleAd?.filePath, orderedAds.size, intervalSeconds) {
+        val current = visibleAd ?: return@LaunchedEffect
+        if (orderedAds.isEmpty()) return@LaunchedEffect
+        val currentType = mediaTypeCache[current.filePath] ?: fastInferMediaType(current.filePath)
+        if (currentType != AdMediaType.Image) return@LaunchedEffect
+
+        delay(intervalSeconds * 1000L)
+        // Guard against races: only advance if the same image is still visible.
+        if (visibleAd?.filePath == current.filePath) {
+            triggerNext()
         }
     }
 
@@ -1307,11 +1555,34 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
         preparingAd = targetAd
         isNextReady = false
 
-        val mediaType = resolveAdMediaType(targetAd.filePath, context)
+        val mediaType = mediaTypeCache[targetAd.filePath]
+            ?: withContext(Dispatchers.Default) { resolveAdMediaType(targetAd.filePath, context) }
         val isVideo = mediaType == AdMediaType.Video
         val isYouTube = mediaType == AdMediaType.YouTube
+        Log.i(
+            "AdLoop",
+            "prepare idx=$nextAdIndex type=${if (isYouTube) "youtube" else if (isVideo) "video" else "image"} src=${targetAd.filePath.take(100)}"
+        )
 
         if (isVideo || isYouTube) {
+            if (isYouTube) {
+                // Show YouTube ad container immediately and let YouTubeAdPlayer handle
+                // its own ready/timeout logic. This avoids black gaps after video end
+                // while waiting on WebView readiness callbacks.
+                activePlayerIdx = 1 - activePlayerIdx
+                visibleAd = targetAd
+                isNextReady = true
+                return@LaunchedEffect
+            }
+
+            if (isVideo && isWmvUnsupportedVideo(targetAd.filePath)) {
+                Log.w("AdPlayer", "Skipping unsupported WMV ad: ${targetAd.filePath}")
+                FileLogger.logError(context, "AdPlayer", "Skipping unsupported WMV ad: ${targetAd.filePath}")
+                // Move to the next ad immediately.
+                triggerNext()
+                return@LaunchedEffect
+            }
+
             if (isYouTube && !NetworkUtil.isNetworkAvailable(context)) {
                 // Some TV networks are not marked "validated" by Android despite working internet.
                 // Do not hard-skip YouTube ads here; allow WebView load and handle real failures via callbacks/timeouts.
@@ -1319,7 +1590,7 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
                 FileLogger.logError(context, "YouTubeAdFlow", "Network appears unvalidated; still attempting YouTube ad load")
             }
             // Video or YouTube: wait for onReady or timeout
-            withTimeoutOrNull(30000) { // 30s timeout for high-res/remote buffering
+            withTimeoutOrNull(45000) { // 45s timeout for slow/TV WebView buffering
                 while (!isNextReady) { delay(200) }
             }
             if (!isNextReady) {
@@ -1333,37 +1604,57 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
                 visibleAd = targetAd
             }
         } else {
-            // Image logic: delay then switch
-            if (visibleAd != null) {
-                delay(intervalSeconds * 1000L)
-            }
+            // Image is shown immediately; interval-based advance is handled by the
+            // dedicated visible-image timer effect above.
             visibleAd = targetAd
             isNextReady = true
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant).padding(4.dp), contentAlignment = Alignment.Center) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clipToBounds()
+            .focusProperties { canFocus = false }
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(4.dp),
+        contentAlignment = Alignment.Center
+    ) {
         if (orderedAds.isEmpty()) {
             Text("No Ads", color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
             // Main Display
-            Crossfade(targetState = visibleAd, animationSpec = tween(0), label = "ad_fade") { ad ->
+            Crossfade(
+                targetState = visibleAd,
+                animationSpec = tween(0),
+                modifier = Modifier.fillMaxSize().clipToBounds(),
+                label = "ad_fade"
+            ) { ad ->
                 if (ad != null) {
-                    val mediaType = remember(ad.filePath) { resolveAdMediaType(ad.filePath, context) }
+                    val mediaType = mediaTypeCache[ad.filePath] ?: fastInferMediaType(ad.filePath)
                     val adIsVideo = mediaType == AdMediaType.Video
                     val adIsYouTube = mediaType == AdMediaType.YouTube
                     
                     if (adIsYouTube) {
                         if (allowYoutubeAds) {
-                            val videoId = extractYoutubeVideoId(ad.filePath)
-                            if (videoId != null) {
-                                YouTubeAdPlayer(
-                                    videoId = videoId,
-                                    onVideoEnded = { triggerNext() },
-                                    onReady = { if (ad == preparingAd) isNextReady = true },
-                                    onError = { triggerNext() }
-                                )
-                            } else triggerNext()
+                            LaunchedEffect(ad.filePath) {
+                                Log.i("YouTubeAdFlow", "Loading YouTube ad as-is: ${ad.filePath}")
+                                // Avoid synchronous disk I/O on the main thread (reduces frame skips).
+                                withContext(Dispatchers.IO) {
+                                    FileLogger.logError(
+                                        context,
+                                        "YouTubeAdFlow",
+                                        "Loading YouTube ad as-is: ${ad.filePath}"
+                                    )
+                                }
+                            }
+                            YouTubeAdPlayer(
+                                url = ad.filePath,
+                                sharedWebView = sharedYoutubeWebView,
+                                onVideoEnded = { triggerNext() },
+                                onReady = { if (ad == preparingAd) isNextReady = true },
+                                onError = { triggerNext() }
+                            )
                         } else {
                             // Embedded YouTube WebView playback can cause global UI jank on TV devices.
                             // Keep disabled by default unless explicitly enabled from settings.
@@ -1384,13 +1675,22 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
                             }
                         }
                     } else if (adIsVideo) {
-                        AdVideoPlayer(
-                            videoUrl = ad.filePath,
-                            player = MediaEngine.get(context, activePlayerIdx),
-                            onVideoEnded = { triggerNext() },
-                            onReady = { if (ad == preparingAd) isNextReady = true },
-                            onError = { triggerNext() }
-                        )
+                        if (isWmvUnsupportedVideo(ad.filePath)) {
+                            LaunchedEffect(ad.filePath) {
+                                Log.w("AdPlayer", "Skipping unsupported WMV ad: ${ad.filePath}")
+                                FileLogger.logError(context, "AdPlayer", "Skipping unsupported WMV ad: ${ad.filePath}")
+                                skipToNextAdFromCurrent()
+                            }
+                            Box(modifier = Modifier.fillMaxSize())
+                        } else {
+                            AdVideoPlayer(
+                                videoUrl = ad.filePath,
+                                player = MediaEngine.get(context, activePlayerIdx),
+                                onVideoEnded = { triggerNext() },
+                                onReady = { if (ad == preparingAd) isNextReady = true },
+                                onError = { triggerNext() }
+                            )
+                        }
                     } else {
                         AsyncImage(
                             model = ImageRequest.Builder(context)
@@ -1407,44 +1707,14 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
                 }
             }
             
-            // Background Preloader (uses the OTHER player)
-            if (!isNextReady && preparingAd != visibleAd && preparingAd != null) {
-                val nextMediaType = remember(preparingAd!!.filePath) {
-                    resolveAdMediaType(preparingAd!!.filePath, context)
-                }
-                val nextIsVideo = nextMediaType == AdMediaType.Video
-                val nextIsYouTube = nextMediaType == AdMediaType.YouTube
-                
-                if (nextIsYouTube) {
-                    // Avoid hidden YouTube player preloading.
-                    // Creating offscreen WebView-backed players can stall low-power TV devices.
-                    isNextReady = true
-                } else if (nextIsVideo) {
-                    Box(modifier = Modifier.size(1.dp).alpha(0.01f)) {
-                        AdVideoPlayer(
-                            videoUrl = preparingAd!!.filePath,
-                            player = MediaEngine.get(context, 1 - activePlayerIdx),
-                            onVideoEnded = { },
-                            onReady = { isNextReady = true },
-                            onError = { triggerNext() }
-                        )
-                    }
-                }
-            }
+            // Hidden offscreen preloader disabled for stability:
+            // on some devices this causes excessive surface churn (IMGSRV RTS-ID saturation)
+            // and frame pacing issues. Single visible-player path is more stable.
         }
     }
 }
 
-private fun extractYoutubeVideoId(url: String): String? {
-    val u = url.trim()
-    Regex("youtube\\.com/shorts/([a-zA-Z0-9_-]{11})").find(u)?.groupValues?.get(1)?.let { return it }
-    Regex("youtu\\.be/([a-zA-Z0-9_-]{11})").find(u)?.groupValues?.get(1)?.let { return it }
-    Regex("[?&]v=([a-zA-Z0-9_-]{11})").find(u)?.groupValues?.get(1)?.let { return it }
-    Regex("youtube\\.com/embed/([a-zA-Z0-9_-]{11})").find(u)?.groupValues?.get(1)?.let { return it }
-    val regex = "^.*((youtu.be\\/)|(v\\/)|(\\/u\\/\\w\\/)|(embed\\/)|(watch\\?))\\??v?=?([^#&?]*).*".toRegex()
-    val matchResult = regex.find(u)
-    return matchResult?.groupValues?.get(7)?.takeIf { it.length == 11 }
-}
+// YouTube components replaced by direct WebView implementation per user request to use exact links.
 
 private fun isAdVideo(path: String): Boolean {
     val lc = path.lowercase().substringBefore("?").substringBefore("#")
@@ -1465,18 +1735,19 @@ private enum class AdMediaType { YouTube, Video, Image }
 
 private fun resolveAdMediaType(path: String, context: Context): AdMediaType {
     val lc = path.lowercase()
-    if (lc.contains("youtube.com") || lc.contains("youtu.be") || lc.contains("youtube-nocookie.com")) {
-        return AdMediaType.YouTube
+    val res = when {
+        isValidYoutubeVideoIdForEmbed(path.trim()) -> AdMediaType.YouTube
+        lc.contains("youtube.com") || lc.contains("youtu.be") || lc.contains("youtube-nocookie.com") -> AdMediaType.YouTube
+        isAdVideo(path) -> AdMediaType.Video
+        isAdImage(path) -> AdMediaType.Image
+        else -> {
+            val mime = detectMimeType(path, context)
+            if (mime?.startsWith("video/") == true) AdMediaType.Video else AdMediaType.Image
+        }
     }
-    if (isAdVideo(path)) return AdMediaType.Video
-    if (isAdImage(path)) return AdMediaType.Image
-
-    // Fallback MIME sniffing for extension-less/signed URLs and local files.
-    val mime = detectMimeType(path, context)
-    return when {
-        mime?.startsWith("video/") == true -> AdMediaType.Video
-        else -> AdMediaType.Image
-    }
+    // Log for debugging (only to logcat, not FileLogger yet to avoid spam)
+    Log.d("AdMediaType", "Resolved '$path' to $res")
+    return res
 }
 
 private fun detectMimeType(path: String, context: Context): String? {
@@ -1511,232 +1782,460 @@ private fun detectMimeType(path: String, context: Context): String? {
 private fun isValidYoutubeVideoIdForEmbed(id: String): Boolean =
     id.length == 11 && id.all { it.isLetterOrDigit() || it == '_' || it == '-' }
 
-private fun buildYoutubeIframeEmbedHtml(videoId: String): String {
-    require(isValidYoutubeVideoIdForEmbed(videoId))
-    return """
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-  <style>html,body{margin:0;padding:0;height:100%;background:#000;overflow:hidden}#player{width:100%;height:100vh}</style>
-</head>
-<body>
-  <div id="player"></div>
-  <script>
-    function onYouTubeIframeAPIReady() {
-      new YT.Player('player', {
-        height: '100%',
-        width: '100%',
-        videoId: '$videoId',
-        playerVars: {
-          autoplay: 1,
-          mute: 1,
-          playsinline: 1,
-          rel: 0,
-          modestbranding: 1,
-          origin: 'https://www.youtube.com'
-        },
-        events: {
-          onReady: function(event) {
-            Android.onPlayerReady();
-            setTimeout(function() {
-              try { event.target.unMute(); } catch (e) {}
-            }, 400);
-          },
-          onStateChange: function(event) {
-            if (event.data === YT.PlayerState.ENDED) {
-              Android.onPlayerEnded();
-            }
-          },
-          onError: function(event) { Android.onPlayerError(String(event.data)); }
-        }
-      });
-    }
-    (function() {
-      var tag = document.createElement('script');
-      tag.src = 'https://www.youtube.com/iframe_api';
-      document.head.appendChild(tag);
-    })();
-  </script>
-</body>
-</html>
-""".trimIndent()
-}
 
-private class YoutubeWebJsBridge(
-    private val mainHandler: Handler,
-    private val onReady: () -> Unit,
-    private val onEnded: () -> Unit,
-    private val onError: (String) -> Unit
-) {
-    @JavascriptInterface
-    fun onPlayerReady() {
-        mainHandler.post { onReady() }
-    }
 
-    @JavascriptInterface
-    fun onPlayerEnded() {
-        mainHandler.post { onEnded() }
-    }
 
-    @JavascriptInterface
-    fun onPlayerError(code: String) {
-        mainHandler.post { onError(code) }
-    }
-}
-
-@SuppressLint("SetJavaScriptEnabled", "AddJavascriptInterface")
-private fun createYoutubeAdWebView(
-    context: Context,
-    videoId: String,
-    onReady: () -> Unit,
-    onEnded: () -> Unit,
-    onLoadOrPlayerError: (String?) -> Unit
-): WebView {
-    val handler = Handler(Looper.getMainLooper())
-    val bridge = YoutubeWebJsBridge(
-        mainHandler = handler,
-        onReady = onReady,
-        onEnded = onEnded,
-        onError = { code -> onLoadOrPlayerError(code) }
-    )
-    val readyFallbackPosted = java.util.concurrent.atomic.AtomicBoolean(false)
-    fun postReadyFallback() {
-        if (readyFallbackPosted.compareAndSet(false, true)) {
-            handler.post { onReady() }
-        }
-    }
-    return WebView(context).apply {
-        setBackgroundColor(AndroidColor.BLACK)
-        settings.javaScriptEnabled = true
-        settings.domStorageEnabled = true
-        @Suppress("DEPRECATION")
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-            settings.databaseEnabled = true
-        }
-        settings.mediaPlaybackRequiresUserGesture = false
-        settings.loadsImagesAutomatically = true
-        settings.useWideViewPort = true
-        settings.loadWithOverviewMode = true
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-            CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-        }
-        // Chrome-like UA improves YouTube embed compatibility on Android TV WebView.
-        settings.userAgentString =
-            "Mozilla/5.0 (Linux; Android 10; SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
-
-        webChromeClient = WebChromeClient()
-        webViewClient = object : WebViewClient() {
-            override fun onPageFinished(view: WebView?, url: String?) {
-                // If IFrame API is slow or blocked, still allow ad pipeline to proceed after load.
-                handler.postDelayed({ postReadyFallback() }, 3500L)
-            }
-
-            @Deprecated("Deprecated in Java")
-            override fun onReceivedError(
-                view: WebView?,
-                errorCode: Int,
-                description: String?,
-                failingUrl: String?
-            ) {
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-                    handler.post { onLoadOrPlayerError(description) }
-                }
-            }
-
-            override fun onReceivedError(
-                view: WebView,
-                request: WebResourceRequest,
-                error: WebResourceError
-            ) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && request.isForMainFrame) {
-                    handler.post { onLoadOrPlayerError(error.description?.toString()) }
-                }
-            }
-        }
-        addJavascriptInterface(bridge, "Android")
-        loadDataWithBaseURL(
-            "https://www.youtube.com",
-            buildYoutubeIframeEmbedHtml(videoId),
-            "text/html",
-            "UTF-8",
-            "https://www.youtube.com"
-        )
-    }
-}
 
 @Composable
 fun YouTubeAdPlayer(
-    videoId: String,
+    url: String,
+    sharedWebView: WebView? = null,
     onVideoEnded: () -> Unit,
     onReady: () -> Unit = {},
     onError: () -> Unit = {}
 ) {
     val context = LocalContext.current
-
     val latestOnVideoEnded by rememberUpdatedState(onVideoEnded)
     val latestOnReady by rememberUpdatedState(onReady)
     val latestOnError by rememberUpdatedState(onError)
-    var readyReported by remember(videoId) { mutableStateOf(false) }
-    var terminalEventReported by remember(videoId) { mutableStateOf(false) }
 
-    LaunchedEffect(videoId) {
-        if (!isValidYoutubeVideoIdForEmbed(videoId)) {
-            Log.e("YouTubeAdFlow", "Invalid YouTube video id for WebView embed")
-            FileLogger.logError(context, "YouTubeAdFlow", "Invalid YouTube video id for WebView embed")
-            latestOnError()
-            return@LaunchedEffect
-        }
+    // Use the provided YouTube ad URL exactly as-is (just trimmed) per user request.
+    val transformedUrl = remember(url) { url.trim() }
+    var activeUrl by remember(transformedUrl) { mutableStateOf(transformedUrl) }
+    var currentLoadToken by remember { mutableIntStateOf(0) }
+
+    var readyReported by remember(activeUrl) { mutableStateOf(false) }
+    var terminalEventReported by remember(activeUrl) { mutableStateOf(false) }
+    var loadStartedAtMs by remember(activeUrl) { mutableStateOf(0L) }
+
+    // Safety timeout: if ad doesn't report ready/ended within 45s, skip it.
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
+
+    LaunchedEffect(activeUrl) {
+        loadStartedAtMs = System.currentTimeMillis()
+        Log.i("YouTubeAdPerf", "Start load for url=${activeUrl.take(120)}")
     }
 
-    LaunchedEffect(videoId) {
-        delay(25000)
+    // If YouTube page never becomes visible, skip. 
+    // Increased timeout to 30s for slower TV devices and full page loads.
+    LaunchedEffect(activeUrl, readyReported, terminalEventReported) {
+        if (readyReported || terminalEventReported) return@LaunchedEffect
+        delay(30000)
         if (!readyReported && !terminalEventReported) {
-            Log.w("YouTubeAdFlow", "Skipping YouTube ad: WebView ready timeout (25s)")
-            FileLogger.logError(context, "YouTubeAdFlow", "Skipping YouTube ad: WebView ready timeout (25s)")
+            Log.w("YouTubeAdPlayer", "Ready timeout (30s) for YouTube ad: $activeUrl")
+            withContext(Dispatchers.IO) {
+                FileLogger.logError(context, "YouTubeAdPlayer", "Ready timeout (30s) for: $activeUrl")
+            }
+            Log.w(
+                "YouTubeAdPerf",
+                "Ready timeout after ${System.currentTimeMillis() - loadStartedAtMs} ms for url=${activeUrl.take(120)}"
+            )
             terminalEventReported = true
             latestOnError()
         }
     }
 
-    key(videoId) {
-        Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
-            AndroidView(
-                factory = { ctx ->
-                    createYoutubeAdWebView(
-                        context = ctx,
-                        videoId = videoId,
-                        onReady = {
-                            if (!readyReported) {
-                                readyReported = true
-                                latestOnReady()
-                            }
-                        },
-                        onEnded = {
-                            if (!terminalEventReported) {
-                                terminalEventReported = true
-                                latestOnVideoEnded()
-                            }
-                        },
-                        onLoadOrPlayerError = { detail ->
-                            if (!terminalEventReported) {
-                                val msg = detail ?: "web_error"
-                                Log.e("YouTubeAdFlow", "YouTube WebView load/player error: $msg")
-                                FileLogger.logError(context, "YouTubeAdFlow", "YouTube WebView load/player error: $msg")
-                                terminalEventReported = true
-                                latestOnError()
-                            }
+    // YouTube page mode has no reliable "ended" callback in this setup.
+    // Auto-advance after a bounded play window so ad loop never stalls.
+    LaunchedEffect(activeUrl, readyReported, terminalEventReported) {
+        if (!readyReported || terminalEventReported) return@LaunchedEffect
+        // Safety fallback only; normal advance should happen via JS ended callback.
+        delay(120000)
+        if (!terminalEventReported) {
+            terminalEventReported = true
+            Log.i("YouTubeAdPerf", "Auto-advance after 120s safety play window for url=${activeUrl.take(120)}")
+            latestOnVideoEnded()
+        }
+    }
+
+    val webView = sharedWebView ?: remember(context) { buildBaseYoutubeWebView(context) }
+
+    DisposableEffect(webView, sharedWebView) {
+        onDispose {
+            if (sharedWebView == null) {
+                webView.stopLoading()
+                webView.loadUrl("about:blank")
+                webView.destroy()
+            } else {
+                // Keep shared WebView alive between ad transitions to avoid recreate churn
+                // and prevent transient black frames from forcing about:blank.
+                webView.stopLoading()
+            }
+        }
+    }
+
+    AndroidView(
+        factory = { webView },
+        update = { view ->
+            try {
+                view.removeJavascriptInterface("CallQTVBridge")
+            } catch (_: Exception) {
+            }
+            val jsBridge = object {
+                @JavascriptInterface
+                fun onAdEnded() {
+                    mainHandler.post {
+                        if (!terminalEventReported) {
+                            terminalEventReported = true
+                            latestOnVideoEnded()
                         }
+                    }
+                }
+
+                @JavascriptInterface
+                fun onAdReady() {
+                    mainHandler.post {
+                        if (!readyReported) {
+                            readyReported = true
+                            latestOnReady()
+                        }
+                    }
+                }
+            }
+            view.addJavascriptInterface(jsBridge, "CallQTVBridge")
+
+            view.webViewClient = object : WebViewClient() {
+                private val readyPosted = AtomicBoolean(false)
+                private var mainFrameFailed = false
+
+                private fun reportReadyOnce(urlHint: String?) {
+                    if (!readyPosted.compareAndSet(false, true)) return
+                    if (mainFrameFailed) return
+                    val u = (urlHint ?: activeUrl).lowercase()
+                    if (u.startsWith("chrome-error://")) return
+                    if (!readyReported) {
+                        readyReported = true
+                        Log.i(
+                            "YouTubeAdPerf",
+                            "Ready in ${System.currentTimeMillis() - loadStartedAtMs} ms, url=${(urlHint ?: activeUrl).take(120)}"
+                        )
+                        latestOnReady()
+                    }
+                }
+
+                override fun onPageStarted(view: WebView?, urlStr: String?, favicon: android.graphics.Bitmap?) {
+                    mainFrameFailed = false
+                }
+
+                override fun onPageCommitVisible(view: WebView?, url: String?) {
+                    val isAdSoundEnabled = context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
+                        .getBoolean("enable_ad_sound", false)
+                    view?.let { applyYouTubeKioskMode(it, isAdSoundEnabled) }
+                    reportReadyOnce(url)
+                }
+
+                override fun onPageFinished(view: WebView?, urlStr: String?) {
+                    val isAdSoundEnabled = context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
+                        .getBoolean("enable_ad_sound", false)
+                    view?.let { applyYouTubeKioskMode(it, isAdSoundEnabled) }
+                    reportReadyOnce(urlStr)
+                    Log.i(
+                        "YouTubeAdPerf",
+                        "Page finished in ${System.currentTimeMillis() - loadStartedAtMs} ms, url=${(urlStr ?: activeUrl).take(120)}"
                     )
-                },
-                modifier = Modifier.fillMaxSize().clipToBounds(),
-                onRelease = { it.destroy() }
-            )
+                }
+
+                override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+                    val description = error?.description?.toString() ?: "Unknown error"
+                    val errorCode = error?.errorCode ?: 0
+                    val requestUrl = request?.url?.toString().orEmpty()
+                    val requestLooksLikePrimary =
+                        requestUrl.contains("youtube.com/shorts/", ignoreCase = true) ||
+                        requestUrl.contains("youtube.com/watch", ignoreCase = true) ||
+                        requestUrl.contains("youtu.be/", ignoreCase = true) ||
+                        requestUrl.contains("youtube-nocookie.com", ignoreCase = true)
+                    val shouldHandleAsPrimary = request == null || request.isForMainFrame || requestLooksLikePrimary
+                    if (!shouldHandleAsPrimary) return
+                    mainFrameFailed = true
+                    Log.e("YouTubeAdPlayer", "WebView error ($errorCode) for ${activeUrl.take(60)}...: $description")
+                    Log.e(
+                        "YouTubeAdPerf",
+                        "WebView error ($errorCode) after ${System.currentTimeMillis() - loadStartedAtMs} ms: $description"
+                    )
+                    
+                    val isSslError = errorCode == ERROR_FAILED_SSL_HANDSHAKE || 
+                                    errorCode == ERROR_PROXY_AUTHENTICATION ||
+                                    description.contains("SSL", ignoreCase = true) ||
+                                    description.contains("handshake", ignoreCase = true)
+                                    
+                    val isConnectionError = errorCode == ERROR_CONNECT ||
+                                           errorCode == ERROR_TIMEOUT ||
+                                           errorCode == ERROR_HOST_LOOKUP ||
+                                           description.contains("ERR_NAME_NOT_RESOLV", ignoreCase = true) ||
+                                           description.contains("ERR_FAILED", ignoreCase = true) ||
+                                           description.contains("ERR_CONNECTION", ignoreCase = true) ||
+                                           description.contains("ERR_SOCKET", ignoreCase = true) ||
+                                           description.contains("ERR_TIMED_OUT", ignoreCase = true)
+
+                    if (isSslError || isConnectionError) {
+                        val fallbackUrl = nextYouTubeDnsFallbackUrl(activeUrl)
+                        if (fallbackUrl != null && fallbackUrl != activeUrl) {
+                            Log.w("YouTubeAdPerf", "Host/SSL/load fail ($errorCode); retrying with fallback host: $fallbackUrl")
+                            activeUrl = fallbackUrl
+                            return
+                        }
+                    }
+                    if (!terminalEventReported) {
+                        terminalEventReported = true
+                        latestOnError()
+                    }
+                }
+
+                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                    // Allow normal YouTube navigations; returning true can cause black screen
+                    // when loading shorts/watch URLs directly.
+                    return false
+                }
+            }
+            
+            view.webChromeClient = object : WebChromeClient() {
+                override fun onPermissionRequest(request: PermissionRequest?) {
+                    request?.deny()
+                }
+                override fun onReceivedTitle(view: WebView?, title: String?) {
+                    if (title == "AD_ENDED") {
+                        Log.i("YouTubeAdPlayer", "Detected JS signal: AD_ENDED; triggering next ad.")
+                        if (!terminalEventReported) {
+                            terminalEventReported = true
+                            latestOnVideoEnded()
+                        }
+                    }
+                }
+            }
+
+            val urlKey = activeUrl
+            val isYouTubeUrl = run {
+                val lc = urlKey.lowercase()
+                // Directly load ANY YouTube URL (including embeds) to avoid iframe-in-iframe 
+                // and origin restrictions that cause "Video Unavailable" errors.
+                lc.contains("youtube.com") || 
+                lc.contains("youtu.be") || 
+                lc.contains("youtube-nocookie.com")
+            }
+            val html = """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <style>
+                        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: black; }
+                        iframe { border: none; width: 100%; height: 100%; }
+                    </style>
+                </head>
+                <body>
+                    <iframe 
+                        src="$urlKey" 
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                        allowfullscreen>
+                    </iframe>
+                </body>
+                </html>
+            """.trimIndent()
+
+            // Avoid reloading same page on recomposition.
+            if (view.tag as? String != urlKey) {
+                view.tag = urlKey
+                currentLoadToken += 1
+                val tokenForLoad = currentLoadToken
+                // Defer load slightly so ad transition/layout and WebView navigation
+                // don't contend for the same frame budget on low-power TV devices.
+                mainHandler.postDelayed({
+                    if (view.tag != urlKey) return@postDelayed
+                    if (tokenForLoad != currentLoadToken) return@postDelayed
+                    if (isYouTubeUrl) {
+                        // Load YouTube URLs directly as the top-level page for best stability.
+                        view.loadUrl(urlKey)
+                    } else {
+                        view.loadDataWithBaseURL("https://www.youtube.com", html, "text/html", "UTF-8", null)
+                    }
+                }, 120L)
+            }
+        },
+        modifier = Modifier
+            .fillMaxSize()
+            .focusProperties { canFocus = false }
+            .clip(androidx.compose.ui.graphics.RectangleShape)
+            .clipToBounds(),
+    )
+}
+
+private fun buildBaseYoutubeWebView(context: Context): WebView {
+    return WebView(context).apply {
+        layoutParams = android.view.ViewGroup.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT
+        )
+        settings.apply {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            @Suppress("DEPRECATION")
+            databaseEnabled = true
+            cacheMode = WebSettings.LOAD_DEFAULT
+            mediaPlaybackRequiresUserGesture = false
+            useWideViewPort = true
+            loadWithOverviewMode = true
+            // TV-like UA for better compatibility.
+            userAgentString = "Mozilla/5.0 (Linux; Android 10; BRAVIA 4K VH2 Build/PG1.200115.002) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.7 Mobile Safari/537.36"
+            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+        }
+        isVerticalScrollBarEnabled = false
+        isHorizontalScrollBarEnabled = false
+        isFocusable = false
+        isFocusableInTouchMode = false
+        isClickable = false
+        isLongClickable = false
+        isHapticFeedbackEnabled = false
+        setOnLongClickListener { true }
+        // Ads are display-only; consume touch so WebView does not capture gestures/focus.
+        setOnTouchListener { _, _ -> true }
+        setBackgroundColor(android.graphics.Color.TRANSPARENT)
+        
+        webChromeClient = object : WebChromeClient() {
+            override fun onPermissionRequest(request: PermissionRequest?) {
+                // Ads do not require mic/camera recording; deny capture requests to avoid
+                // WebView/Chromium recording capability warnings.
+                request?.deny()
+            }
         }
     }
 }
+
+private fun applyYouTubeKioskMode(webView: WebView, isAdSoundEnabled: Boolean) {
+    // Best-effort DOM cleanup for YouTube shorts/watch pages rendered directly in WebView.
+    // Keeps video area while hiding surrounding page chrome/action panels.
+    val mutedJs = if (isAdSoundEnabled) "false" else "true"
+    val volumeJs = if (isAdSoundEnabled) "1.0" else "0.0"
+    val js = """
+        (function() {
+          try {
+            var styleId = 'callqtv-kiosk-style';
+            if (!document.getElementById(styleId)) {
+              var s = document.createElement('style');
+              s.id = styleId;
+              s.textContent = `
+                html, body { margin:0 !important; padding:0 !important; overflow:hidden !important; background:#000 !important; }
+                ytm-header-renderer, ytd-masthead, #header, #topbar, #guide-button,
+                ytm-sub-header-renderer, #ytm-navigation-bar,
+                #comments, ytd-comments, ytm-comments-entry-point-header-renderer,
+                ytd-reel-player-overlay-renderer, ytm-reel-player-overlay-renderer,
+                #actions, #menu, #related, #secondary, #below, #info, .metadata-container,
+                ytd-watch-next-secondary-results-renderer, ytd-watch-next-results-renderer,
+                ytm-pivot-bar-renderer, ytm-item-section-renderer, ytm-browse,
+                .ytp-show-cards-title, .ytp-pause-overlay, .ytp-ce-element,
+                .ytp-chrome-top, .ytp-chrome-bottom,
+                .ytp-unmute, .ytp-unmute-button, .ytp-unmute-inner, .ytp-mute-button {
+                  display:none !important;
+                }
+                video, .video-stream, .html5-main-video {
+                  width: 100% !important;
+                  height: 100% !important;
+                  max-width: 100vw !important;
+                  max-height: 100vh !important;
+                  object-fit: contain !important;
+                  background: #000 !important;
+                  position: absolute !important;
+                  top: 50% !important;
+                  left: 50% !important;
+                  transform: translate(-50%, -50%) !important;
+                }
+              `;
+              (document.head || document.documentElement).appendChild(s);
+            }
+            
+            // Auto-play + ended detection for watch/shorts pages without URL params
+            var v = document.querySelector('video');
+            if (v) {
+              try {
+                v.muted = $mutedJs;
+                v.volume = $volumeJs;
+                v.play().catch(function(e){ console.warn('Autoplay blocked:', e); });
+                if (window.CallQTVBridge && window.CallQTVBridge.onAdReady) {
+                  window.CallQTVBridge.onAdReady();
+                }
+              } catch (e) {}
+              // Set up a one-time ended listener to trigger the next ad
+              if (!v._callqtv_hooked) {
+                v._callqtv_hooked = true;
+                v.addEventListener('ended', function() {
+                  console.log('CallQTV: Video ended');
+                  if (window.CallQTVBridge && window.CallQTVBridge.onAdEnded) {
+                    window.CallQTVBridge.onAdEnded();
+                  }
+                  document.title = 'AD_ENDED';
+                });
+              }
+              // Keep re-applying autoplay and ended detection because YouTube DOM/video
+              // can be recreated during shorts/watch transitions.
+              if (!window._callqtv_autoplay_interval) {
+                window._callqtv_autoplay_interval = setInterval(function() {
+                  try {
+                    var vv = document.querySelector('video');
+                    if (!vv) return;
+                    if (vv.ended) {
+                      if (window.CallQTVBridge && window.CallQTVBridge.onAdEnded) {
+                        window.CallQTVBridge.onAdEnded();
+                      }
+                      document.title = 'AD_ENDED';
+                      return;
+                    }
+                    if (vv.paused) {
+                      vv.muted = $mutedJs;
+                      vv.volume = $volumeJs;
+                      vv.play().catch(function(){});
+                    }
+                    // Re-assert current app sound setting in case YouTube DOM mutates.
+                    vv.muted = $mutedJs;
+                    vv.volume = $volumeJs;
+                    if (window.CallQTVBridge && window.CallQTVBridge.onAdReady) {
+                      window.CallQTVBridge.onAdReady();
+                    }
+                  } catch (e) {}
+                }, 1200);
+              }
+            }
+          } catch (e) {}
+        })();
+    """.trimIndent()
+    try {
+        webView.evaluateJavascript(js, null)
+    } catch (_: Exception) {
+        // Ignore JS injection failures; playback should continue.
+    }
+}
+
+private fun nextYouTubeDnsFallbackUrl(currentUrl: String): String? {
+    return try {
+        val uri = Uri.parse(currentUrl)
+        val host = (uri.host ?: return null).lowercase()
+        val fallbackHost = when (host) {
+            "youtube.com", "www.youtube.com" -> "m.youtube.com"
+            "m.youtube.com" -> "www.youtube-nocookie.com"
+            "www.youtube-nocookie.com", "youtube-nocookie.com" -> "youtu.be"
+            else -> null
+        } ?: return null
+
+        if (fallbackHost == "youtu.be") {
+            val id = extractYoutubeIdForFallback(currentUrl) ?: return null
+            "https://youtu.be/$id"
+        } else {
+            uri.buildUpon()
+                .authority(fallbackHost)
+                .build()
+                .toString()
+        }
+    } catch (_: Exception) {
+        null
+    }
+}
+
+private fun extractYoutubeIdForFallback(url: String): String? {
+    val u = url.trim()
+    Regex("youtube\\.com/shorts/([a-zA-Z0-9_-]{11})").find(u)?.groupValues?.get(1)?.let { return it }
+    Regex("youtu\\.be/([a-zA-Z0-9_-]{11})").find(u)?.groupValues?.get(1)?.let { return it }
+    Regex("[?&]v=([a-zA-Z0-9_-]{11})").find(u)?.groupValues?.get(1)?.let { return it }
+    return null
+}
+
 
 @Composable
 fun AdVideoPlayer(videoUrl: String, player: ExoPlayer, onVideoEnded: () -> Unit, onReady: () -> Unit = {}, onError: () -> Unit = {}) {
@@ -1747,33 +2246,121 @@ fun AdVideoPlayer(videoUrl: String, player: ExoPlayer, onVideoEnded: () -> Unit,
     val latestOnError by rememberUpdatedState(onError)
 
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
+    val scope = rememberCoroutineScope()
+
+    var readyReported by remember(videoUrl) { mutableStateOf(false) }
+    var terminalEventReported by remember(videoUrl) { mutableStateOf(false) }
+    var loadStartedAtMs by remember(videoUrl) { mutableStateOf(0L) }
+
     DisposableEffect(videoUrl, player) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 when (state) {
                     Player.STATE_READY -> {
+                        readyReported = true
+                        Log.i(
+                            "AdVideoPerf",
+                            "STATE_READY in ${System.currentTimeMillis() - loadStartedAtMs} ms for url=${videoUrl.take(120)}"
+                        )
                         mainHandler.post { latestOnReady() }
                     }
                     Player.STATE_ENDED -> {
+                        terminalEventReported = true
                         mainHandler.post { latestOnVideoEnded() }
                     }
                 }
             }
             override fun onPlayerError(e: androidx.media3.common.PlaybackException) {
                 Log.e("AdVideoPlayer", "ExoPlayer error playing $videoUrl: ${e.message}", e)
-                mainHandler.post { latestOnError() }
+                Log.e(
+                    "AdVideoPerf",
+                    "Player error after ${System.currentTimeMillis() - loadStartedAtMs} ms for url=${videoUrl.take(120)}"
+                )
+                // ExoPlayer/Media3 enforces main-thread access for player methods.
+                mainHandler.post {
+                    try {
+                        player.stop()
+                        player.clearMediaItems()
+                    } catch (_: Exception) {
+                        // Ignore cleanup failures; we still trigger the ad skip.
+                    }
+                    terminalEventReported = true
+                    latestOnError()
+                }
             }
         }
         
         player.addListener(listener)
-        onDispose { player.removeListener(listener) }
+        onDispose {
+            player.removeListener(listener)
+            // Stop any ongoing network/buffering when this ad composable goes away.
+            // Prevents "hung" connections on reused ExoPlayer instances.
+            try {
+                // Keep player operations on main thread to avoid Media3 thread violations.
+                if (Looper.myLooper() == Looper.getMainLooper()) {
+                    player.stop()
+                    player.clearMediaItems()
+                } else {
+                    mainHandler.post {
+                        try {
+                            player.stop()
+                            player.clearMediaItems()
+                        } catch (_: Exception) {
+                            // Ignore; release/stop can throw on some TV device states.
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                // Ignore; release/stop can throw on some TV device states.
+            }
+        }
     }
     
     LaunchedEffect(videoUrl, player) {
-        val mediaItem = MediaItem.fromUri(videoUrl)
-        player.setMediaItem(mediaItem)
-        player.prepare()
-        player.playWhenReady = true
+        readyReported = false
+        terminalEventReported = false
+        loadStartedAtMs = System.currentTimeMillis()
+        // Media3 requires player method calls on the main thread.
+        // We only keep lightweight work off-main (MediaItem creation).
+        scope.launch(Dispatchers.Default) {
+            val mediaItem = try {
+                MediaItem.fromUri(videoUrl)
+            } catch (e: Exception) {
+                Log.e("AdVideoPlayer", "Failed to create media item: $videoUrl", e)
+                null
+            }
+            if (mediaItem == null) {
+                mainHandler.post {
+                    terminalEventReported = true
+                    latestOnError()
+                }
+                return@launch
+            }
+
+            mainHandler.post {
+                try {
+                    player.setMediaItem(mediaItem)
+                    player.prepare()
+                    player.playWhenReady = true
+                } catch (e: Exception) {
+                    Log.e("AdVideoPlayer", "Failed to prepare video: $videoUrl", e)
+                    terminalEventReported = true
+                    latestOnError()
+                }
+            }
+        }
+    }
+
+    // If ExoPlayer never reaches STATE_READY, treat it as a failed ad and skip.
+    // This complements AdArea's higher-level timeout, but prevents long "hangs".
+    LaunchedEffect(videoUrl) {
+        delay(30000)
+        if (!readyReported && !terminalEventReported) {
+            Log.w("AdVideoPlayer", "Video not ready within 30s; skipping. url=$videoUrl")
+            FileLogger.logError(context, "AdVideoPlayer", "Video not ready within 30s; skipping. url=$videoUrl")
+            terminalEventReported = true
+            latestOnError()
+        }
     }
 
     AndroidView(
@@ -1782,10 +2369,46 @@ fun AdVideoPlayer(videoUrl: String, player: ExoPlayer, onVideoEnded: () -> Unit,
                 this.player = player
                 useController = false
                 resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
+                isFocusable = false
+                isFocusableInTouchMode = false
+                isClickable = false
+                isLongClickable = false
+                setOnTouchListener { _, _ -> true }
             }
         },
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .focusProperties { canFocus = false }
     )
+}
+
+private object WebViewWarmup {
+    private val warmed = AtomicBoolean(false)
+
+    suspend fun warmUp(context: Context) {
+        if (!warmed.compareAndSet(false, true)) return
+        try {
+            withContext(Dispatchers.Main) {
+                val webView = WebView(context.applicationContext)
+                try {
+                    webView.settings.javaScriptEnabled = true
+                    webView.loadDataWithBaseURL(
+                        "https://www.youtube.com",
+                        "<html><body style='background:#000'></body></html>",
+                        "text/html",
+                        "UTF-8",
+                        null
+                    )
+                } finally {
+                    webView.stopLoading()
+                    webView.destroy()
+                }
+            }
+            Log.i("YouTubeAdPerf", "WebView warm-up completed")
+        } catch (e: Exception) {
+            Log.w("YouTubeAdPerf", "WebView warm-up failed: ${e.message}")
+        }
+    }
 }
 
 @UnstableApi
@@ -1796,7 +2419,16 @@ object MediaEngine {
     private var cacheFactory: DataSource.Factory? = null
 
     private fun createPlayer(context: Context): ExoPlayer {
+        // Large/remote ad videos can be slow to establish connections on TV networks.
+        // ExoPlayer's HTTP stack uses OkHttp underneath, so we must set longer timeouts here too.
         val httpClient = UnsafeOkHttpClient.getUnsafeOkHttpClient()
+            .newBuilder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(180, TimeUnit.SECONDS)
+            .writeTimeout(180, TimeUnit.SECONDS)
+            .callTimeout(240, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
         val okHttpFactory = OkHttpDataSource.Factory(httpClient)
         
         if (simpleCache == null) {
@@ -1819,7 +2451,28 @@ object MediaEngine {
             .setBufferDurationsMs(15000, 50000, 2500, 5000)
             .build()
 
+        // Enable decoder fallback to improve compatibility on heterogeneous Android TV/SoC decoders.
+        // Some devices fail MediaCodec.configure() for certain AVC streams; fallback lets ExoPlayer
+        // try alternative initialization paths instead of getting stuck on a single codec.
+        val renderersFactory = androidx.media3.exoplayer.DefaultRenderersFactory(context.applicationContext)
+            .setEnableDecoderFallback(true)
+
+        // Strictly enforce safe decoder bounds.
+        // Without strict enforcement, ExoPlayer may still pick the 2160x3840@25 track and crash with:
+        // "NoSupport sizeAndRate ... 2160x3840@25.0"
+        val trackSelector = DefaultTrackSelector(context.applicationContext).apply {
+            val params: androidx.media3.exoplayer.trackselection.DefaultTrackSelector.Parameters =
+                ParametersBuilder(context.applicationContext)
+                    .setMaxVideoSize(1080, 1920)
+                    .setMaxVideoFrameRate(30)
+                    .setExceedVideoConstraintsIfNecessary(false)
+                    .build()
+            this.parameters = params
+        }
+
         return ExoPlayer.Builder(context.applicationContext)
+            .setRenderersFactory(renderersFactory)
+            .setTrackSelector(trackSelector)
             .setMediaSourceFactory(DefaultMediaSourceFactory(cacheFactory!!))
             .setLoadControl(loadControl)
             .build().apply {
@@ -1838,6 +2491,20 @@ object MediaEngine {
             if (player2 == null) player2 = createPlayer(context)
             player2!!
         }
+    }
+
+    /**
+     * Pre-initialize players/cache to avoid heavy work on the first ad composition.
+     * Safe to call multiple times.
+     */
+    fun warmUp(context: Context) {
+        if (simpleCache == null) {
+            // Ensure cacheFactory is initialized as part of first player creation.
+            // (createPlayer() lazily initializes cacheFactory.)
+        }
+        if (player1 == null) player1 = createPlayer(context)
+        if (player2 == null) player2 = createPlayer(context)
+        // No return; players are now ready to be used by AdVideoPlayer.
     }
 
     fun updateVolume(context: Context) {
@@ -1874,12 +2541,17 @@ fun CountersArea(
     Box(modifier = Modifier.fillMaxSize().padding(1.dp)) {
         val numCounters = counters.size
 
-        // When there are many counters, split the UI into two parts.
-        // For landscape layouts (isPortrait = false) use a lower threshold (2),
-        // otherwise use 4. Orientation still controls only direction of split.
-        val splitThreshold = if (isPortrait) 4 else 2
+        // Use layoutType to influence splitting. 
+        // type "1" (default) = automated split
+        // type "2" = force no split (single grid/column)
+        // type "3" = force split even for few counters
+        val splitThreshold = when (layoutType) {
+            "2" -> 999 
+            "3" -> 0
+            else -> if (isPortrait) 4 else 2
+        }
 
-        if (numCounters > splitThreshold) {
+        if (numCounters > splitThreshold && numCounters > 1) {
             val firstHalfCount = (numCounters + 1) / 2
             val firstHalf = counters.take(firstHalfCount)
             val secondHalf = counters.drop(firstHalfCount)
@@ -1890,14 +2562,14 @@ fun CountersArea(
                     Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
                         firstHalf.forEach { counter ->
                             val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
-                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds)
+                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, layoutType = layoutType)
                         }
                     }
                     Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
                         secondHalf.forEach { counter ->
                             val sKey = counter.counterId?.trim() ?: counter.name?.trim() ?: counter.defaultName?.trim() ?: counter.buttonIndex?.toString() ?: ""
                             val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
-                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sKey] ?: 0L)
+                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sKey] ?: 0L, layoutType = layoutType)
                         }
                         if (secondHalf.size < firstHalf.size) {
                             Spacer(modifier = Modifier.weight(1f))
@@ -1911,14 +2583,14 @@ fun CountersArea(
                         firstHalf.forEach { counter ->
                             val sKey = counter.counterId?.trim() ?: counter.name?.trim() ?: counter.defaultName?.trim() ?: counter.buttonIndex?.toString() ?: ""
                             val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
-                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sKey] ?: 0L)
+                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sKey] ?: 0L, layoutType = layoutType)
                         }
                     }
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                         secondHalf.forEach { counter ->
                             val sKey = counter.counterId?.trim() ?: counter.name?.trim() ?: counter.defaultName?.trim() ?: counter.buttonIndex?.toString() ?: ""
                             val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
-                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sKey] ?: 0L)
+                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sKey] ?: 0L, layoutType = layoutType)
                         }
                         if (secondHalf.size < firstHalf.size) {
                             Spacer(modifier = Modifier.weight(1f))
@@ -1933,7 +2605,7 @@ fun CountersArea(
                     counters.forEach { counter ->
                         val sKey = counter.counterId?.trim() ?: counter.name?.trim() ?: counter.defaultName?.trim() ?: counter.buttonIndex?.toString() ?: ""
                         val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
-                        CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sKey] ?: 0L)
+                        CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sKey] ?: 0L, layoutType = layoutType)
                     }
                 }
             } else {
@@ -1942,7 +2614,7 @@ fun CountersArea(
                     counters.forEach { counter ->
                         val sKey = counter.counterId?.trim() ?: counter.name?.trim() ?: counter.defaultName?.trim() ?: counter.buttonIndex?.toString() ?: ""
                         val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
-                        CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sKey] ?: 0L)
+                        CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sKey] ?: 0L, layoutType = layoutType)
                     }
                 }
             }
@@ -1963,7 +2635,8 @@ fun CounterBoard(
     tokenBgHex: String,
     isPortrait: Boolean,
     hasAds: Boolean,
-    blinkTrigger: Long = 0L
+    blinkTrigger: Long = 0L,
+    layoutType: String = "1"
 ) {
     val counterName = remember(counter.name, counter.defaultName) { 
         (counter.name.orEmpty().ifBlank { counter.defaultName.orEmpty().ifBlank { "Counter" } }).uppercase()
@@ -2030,6 +2703,7 @@ fun CounterBoard(
         colors = CardDefaults.cardColors(containerColor = Color.Transparent)
     ) {
         Box(modifier = Modifier.fillMaxSize().background(counterBgBrush)) {
+            val usePrefix = config.enableCounterPrefix != false
             if (isPortrait) {
                 Row(modifier = Modifier.fillMaxSize().padding(1.dp)) {
                     // If ads exist, use 30% for name and 70% for tokens.
@@ -2073,11 +2747,13 @@ fun CounterBoard(
                             items(totalSlots) { index ->
                                 val token = tokens.getOrNull(index)
                                 val isFirst = index == 0
-                                val usePrefix = config.enableCounterPrefix != false
+                                val formattedToken = remember(token, config.tokenFormat) {
+                                    formatTokenByPattern(token, config.tokenFormat)
+                                }
                                 val displayToken = when {
-                                    token == null -> null
-                                    usePrefix && counterCode.isNotBlank() -> "$counterCode-$token"
-                                    else -> token
+                                    formattedToken == null -> null
+                                    usePrefix && counterCode.isNotBlank() -> "$counterCode-$formattedToken"
+                                    else -> formattedToken
                                 }
                                 val currentFontSize = if (isFirst) tokenFontSize else tokenFontSize
                                 val textColorToUse = if (isFirst) currentTokenTextColor else previousTokenTextColor
@@ -2119,11 +2795,13 @@ fun CounterBoard(
                         items(totalSlots) { index ->
                             val token = tokens.getOrNull(index)
                             val isFirst = index == 0
-                            val usePrefix = config.enableCounterPrefix != false
+                            val formattedToken = remember(token, config.tokenFormat) {
+                                formatTokenByPattern(token, config.tokenFormat)
+                            }
                             val displayToken = when {
-                                token == null -> null
-                                usePrefix && counterCode.isNotBlank() -> "$counterCode-$token"
-                                else -> token
+                                formattedToken == null -> null
+                                usePrefix && counterCode.isNotBlank() -> "$counterCode-$formattedToken"
+                                else -> formattedToken
                             }
                             val currentFontSize = if (isFirst) tokenFontSize else tokenFontSize
                             val textColorToUse = if (isFirst) currentTokenTextColor else previousTokenTextColor
@@ -2903,6 +3581,7 @@ fun NotificationSoundDialog(
     onSoundSelected: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     val soundOptions = listOf(
         "ding"      to "Ding",
         "ding2"     to "Ding 2",
@@ -2975,7 +3654,7 @@ fun NotificationSoundDialog(
                     OutlinedButton(
                         onClick = {
                             onSoundSelected(key)
-                            scope.launch { playTokenChime(key) }
+                            scope.launch { playTokenChime(context, key) }
                         },
                         modifier = Modifier.fillMaxWidth(),
                         border = if (isSelected)
@@ -3151,4 +3830,34 @@ private fun getTokensForCounter(counter: CounterEntity, tokensPerCounter: Map<St
         ?: emptyList()
         
     return rawList.filter { it.trim() != "0" && !it.contains("CAL", ignoreCase = true) }.map { it.trim() }.distinct()
+}
+
+private fun formatTokenByPattern(token: String?, pattern: String?): String? {
+    if (token == null) return null
+    if (pattern.isNullOrBlank()) return token
+    
+    return try {
+        // Simple numeric padding if pattern is like "000" or "00"
+        if (pattern.all { it == '0' || it == '#' }) {
+            val num = token.toIntOrNull()
+            if (num != null) {
+                val len = pattern.length
+                return num.toString().padStart(len, '0')
+            }
+        }
+        // If pattern contains prefix like "A-000", handle accordingly (e.g. up to 10 zeros)
+        if (pattern.contains("0")) {
+            val num = token.toIntOrNull()
+            if (num != null) {
+                val firstZeroIdx = pattern.indexOf('0')
+                val lastZeroIdx = pattern.lastIndexOf('0')
+                val prefix = pattern.substring(0, firstZeroIdx)
+                val formatLen = lastZeroIdx - firstZeroIdx + 1
+                return prefix + num.toString().padStart(formatLen, '0')
+            }
+        }
+        token
+    } catch (_: Exception) {
+        token
+    }
 }
