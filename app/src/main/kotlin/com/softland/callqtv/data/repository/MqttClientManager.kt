@@ -33,6 +33,7 @@ class MqttClientManager(
     private var topicsToSubscribe: String? = null
     private var qosToSubscribe: Int = 1
     private var isInitialized = false
+    private var hasConnectedOnce = false
 
     init {
         Log.d(TAG, "Initializing MQTT Client: serverUri=$serverUri, clientId=$clientId")
@@ -126,10 +127,10 @@ class MqttClientManager(
         val options = MqttConnectOptions().apply {
             isCleanSession = false // Enable persistent session to receive missed messages on reconnect
             isAutomaticReconnect = true
-            // LAN/Wi-Fi handshakes on some Android TV/embedded routers can exceed 10s.
-            // Keep timeout more tolerant to avoid false initial-connect failures.
-            connectionTimeout = 20
-            maxReconnectDelay = 20
+            // Use a faster initial timeout so unreachable brokers fail quickly and retry sooner.
+            // This improves first-boot connect latency on unstable LAN/Wi-Fi.
+            connectionTimeout = 10
+            maxReconnectDelay = 8
             // Very short keep-alive so PINGREQ is sent about every 120 seconds.
             // Note: this increases network chatter and sensitivity to brief hiccups.
             keepAliveInterval = 120
@@ -144,6 +145,7 @@ class MqttClientManager(
             mqttClient?.connect(options, null, object : IMqttActionListener {
                 override fun onSuccess(asyncActionToken: IMqttToken?) {
                     isConnecting = false
+                    hasConnectedOnce = true
                     Log.i(TAG, "==> INITIAL MQTT CONNECTION SUCCESS <== Server: $serverUri")
                     
                     mqttListener?.onConnectionStatus(true)
@@ -169,7 +171,11 @@ class MqttClientManager(
                         reasonCode = code
                     )
 
-                    val errorText = "Initial connection failed: $rawMsg"
+                    val errorText = if (hasConnectedOnce) {
+                        "Reconnect attempt failed: $rawMsg"
+                    } else {
+                        "Initial connection failed: $rawMsg"
+                    }
                     Log.w(TAG, "[$serverUri] onFailure: $errorText (Code: $code, Cause: $causeMsg)")
 
                     mqttListener?.let {

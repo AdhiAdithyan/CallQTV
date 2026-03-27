@@ -21,6 +21,8 @@ This document reflects the current codebase implementation and validation approa
 - `MqttViewModel` / `MqttClientManager`
   - Broker connection lifecycle, token stream handling, multi-broker reachability mapping
   - Manual retry attempt synchronization via global 30s timeout
+  - Faster initial connect path (10s connect timeout + aggressive first-connect retry cadence)
+  - Per-counter keypad/dispense indicator maps derived from MQTT activity (button-index keyed)
   - Config refresh trigger when valid MQTT payload contains `CLR`
 - `MyApplication`
   - Global uncaught exception handling and system service (Integrity) suppression
@@ -41,9 +43,12 @@ This document reflects the current codebase implementation and validation approa
 - Strict layout clipping (`clipToBounds`) and centered rendering for AdArea.
 - Ad area is display-only (non-focusable and non-clickable); no remote/touch interaction is required.
 - JavaScript bridge + kiosk-mode YouTube playback with autoplay and automatic next-ad transition.
-- Ad loop sequencing uses visible-ad index alignment to avoid post-loop stalls.
+- Ad loop sequencing is strict round-robin when multiple ads exist (no same-ad repeat).
+- Candidate ad preloading is image-only; YouTube/video use single visible-surface playback for GPU stability.
+- YouTube URL fallback retry (one-shot) on SSL/DNS main-frame failures before skipping.
 - Ad sound setting (`enable_ad_sound`) controls both ExoPlayer video ads and YouTube WebView ads.
 - MQTT connected status aggregates `any broker connected OR recent MQTT traffic`.
+- Counter-name tiles render two inner-corner connectivity dots (left=dispense, right=keypad) with 5-minute stale-to-red watchdog.
 
 ## 4) Build and Environment (Current)
 From current Gradle files:
@@ -61,7 +66,10 @@ From current Gradle files:
    - Cached-first startup with slow API
    - TTS init dialog separation
    - MQTT reconnect and token announcement path
-   - Mixed ad format playback (video/image/gif/webp)
+  - Mixed ad format playback (video/image/gif/webp + YouTube)
+  - Verify multi-ad loop plays all ads once per cycle without same-ad repetition
+  - Verify reconnect badge position (top-center of main content) and Try counter increments
+  - Verify per-counter indicator behavior: default RED, GREEN on MQTT activity, and RED after 5-minute inactivity
    - Offline ad sync with/without network
    - License API behavior in offline mode
 

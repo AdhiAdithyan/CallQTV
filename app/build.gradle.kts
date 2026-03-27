@@ -19,7 +19,7 @@ android {
         }
     }
 
-    val isLiveApk = true
+    val isLiveApk = false
     var palmAnd = ""
 
     defaultConfig {

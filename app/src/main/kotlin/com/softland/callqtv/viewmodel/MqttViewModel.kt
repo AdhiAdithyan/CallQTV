@@ -156,6 +156,16 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     private val _isBrokerReachable = MutableLiveData<Boolean>(false)
     fun isBrokerReachable(): LiveData<Boolean> = _isBrokerReachable
 
+    private val _dispenseConnectedByButton = MutableLiveData<Map<String, Boolean>>(emptyMap())
+    fun getDispenseConnectedByButton(): LiveData<Map<String, Boolean>> = _dispenseConnectedByButton
+
+    private val _keypadConnectedByButton = MutableLiveData<Map<String, Boolean>>(emptyMap())
+    fun getKeypadConnectedByButton(): LiveData<Map<String, Boolean>> = _keypadConnectedByButton
+
+    private val lastDispenseSeenAtByButton = ConcurrentHashMap<String, Long>()
+    private val lastKeypadSeenAtByButton = ConcurrentHashMap<String, Long>()
+    private var indicatorWatchdogJob: kotlinx.coroutines.Job? = null
+
     val tokenUpdateChannel =
         kotlinx.coroutines.channels.Channel<Pair<String, String>>(capacity = kotlinx.coroutines.channels.Channel.UNLIMITED)
     /**
@@ -637,15 +647,16 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         if (retryJobs[serverUri]?.isActive == true) return
 
         val attempt = retryAttempts[serverUri] ?: 0
-        // Faster initial backoff for first-time connect:
-        // 1s, 3s, 7s, 15s, then max 30s.
-        // This reduces perceived startup delay while still avoiding retry storms.
+        // Aggressive first-time backoff for faster initial connect:
+        // 0s, 1s, 2s, 4s, 8s, then max 12s.
+        // Keeps startup responsive while still adding bounded spacing.
         val delayMs = when {
-            attempt == 0 -> 1000L
-            attempt == 1 -> 3000L
-            attempt == 2 -> 7000L
-            attempt == 3 -> 15000L
-            else -> 30000L
+            attempt == 0 -> 0L
+            attempt == 1 -> 1000L
+            attempt == 2 -> 2000L
+            attempt == 3 -> 4000L
+            attempt == 4 -> 8000L
+            else -> 12000L
         }
 
         retryJobs[serverUri] = viewModelScope.launch {
@@ -893,7 +904,14 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
             val result = SemanticMqttParser.parse(message, topic)
             if (result != null) {
                 val (counter, token) = result
+                val buttonKey = normalizeButtonKey(counter)
+                if (buttonKey != null) {
+                    markKeypadSeen(buttonKey)
+                }
                 if (token != "0" && token.isNotBlank() && counter != "0" && counter.isNotBlank()) {
+                    if (buttonKey != null) {
+                        markDispenseSeen(buttonKey)
+                    }
                     val key = "${counter.trim()}_${token.trim()}"
                     val now = System.currentTimeMillis()
                     val lastQueued = queuedTokenTimestamps[key] ?: 0L
@@ -920,6 +938,61 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 "MqttViewModel",
                 "Failed to parse MQTT message '$message' on topic '$topic': ${e.message}"
             )
+        }
+    }
+
+    private fun normalizeButtonKey(counter: String?): String? {
+        val raw = counter?.trim().orEmpty()
+        if (raw.isEmpty()) return null
+        val asInt = raw.toIntOrNull() ?: return null
+        return asInt.toString()
+    }
+
+    private fun markDispenseSeen(buttonKey: String) {
+        val now = System.currentTimeMillis()
+        lastDispenseSeenAtByButton[buttonKey] = now
+        val current = _dispenseConnectedByButton.value?.toMutableMap() ?: mutableMapOf()
+        if (current[buttonKey] != true) {
+            current[buttonKey] = true
+            _dispenseConnectedByButton.postValue(current)
+        }
+        startIndicatorWatchdog()
+    }
+
+    private fun markKeypadSeen(buttonKey: String) {
+        val now = System.currentTimeMillis()
+        lastKeypadSeenAtByButton[buttonKey] = now
+        val current = _keypadConnectedByButton.value?.toMutableMap() ?: mutableMapOf()
+        if (current[buttonKey] != true) {
+            current[buttonKey] = true
+            _keypadConnectedByButton.postValue(current)
+        }
+        startIndicatorWatchdog()
+    }
+
+    private fun startIndicatorWatchdog() {
+        if (indicatorWatchdogJob?.isActive == true) return
+        indicatorWatchdogJob = viewModelScope.launch(Dispatchers.Default) {
+            while (isActive) {
+                delay(1000L)
+                val now = System.currentTimeMillis()
+                val dispense = mutableMapOf<String, Boolean>()
+                val keypad = mutableMapOf<String, Boolean>()
+
+                lastDispenseSeenAtByButton.forEach { (button, ts) ->
+                    if (now - ts <= INDICATOR_STALE_TIMEOUT_MS) {
+                        dispense[button] = true
+                    }
+                }
+                lastKeypadSeenAtByButton.forEach { (button, ts) ->
+                    if (now - ts <= INDICATOR_STALE_TIMEOUT_MS) {
+                        keypad[button] = true
+                    }
+                }
+
+                _dispenseConnectedByButton.postValue(dispense)
+                _keypadConnectedByButton.postValue(keypad)
+            }
         }
     }
 
@@ -1062,9 +1135,10 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     companion object {
-        private const val MQTT_MESSAGE_LIVENESS_TIMEOUT_MS = 30_000L
+        private const val MQTT_MESSAGE_LIVENESS_TIMEOUT_MS = 40_000L
         private const val MQTT_LIVENESS_STALE_STRIKES_BEFORE_RECONNECT = 4
         private const val CONFIG_REFRESH_DEBOUNCE_MS = 15_000L
+        private const val INDICATOR_STALE_TIMEOUT_MS = 300_000L
     }
 
     private fun requestConfigRefresh(reason: String) {
@@ -1080,6 +1154,8 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         super.onCleared()
         messageLivenessWatchdogJob?.cancel()
         messageLivenessWatchdogJob = null
+        indicatorWatchdogJob?.cancel()
+        indicatorWatchdogJob = null
         val toClose = managers.values.toList()
         managers.clear()
         reachabilityJobs.values.forEach { it.cancel() }

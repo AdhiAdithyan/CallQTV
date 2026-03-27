@@ -29,7 +29,7 @@ graph TD
         
         subgraph Overlays ["Dynamic Overlays"]
             F[Pending Calls Badge - Top Right]
-            G[Reconnect Status Badge - Top Left]
+            G[Reconnect Status Badge - Top Center of Main Content]
             H[Settings / Theme Dialogs - Center Modal]
         end
     end
@@ -37,12 +37,11 @@ graph TD
 
 ## 2. Reconnect Status Badge Layout
 
-This component appears in the top-left corner when the connection is lost.
+This component appears at the top-center of the main content area when the connection is lost.
 
 ```mermaid
 graph LR
     subgraph Badge ["ReconnectStatusBadge (Surface)"]
-        A["Bluetooth Icon (Amber)"]
         B["Text: 'Connecting to BLUCON... Try X | Ys'"]
     end
 ```
@@ -60,4 +59,21 @@ graph TD
             end
         end
     end
+```
+
+## 4. Counter Tile Indicators
+
+Each counter-name tile has two inner-corner status dots:
+- Left dot: dispense connectivity
+- Right dot: keypad connectivity
+
+```mermaid
+graph LR
+    subgraph CounterNameTile ["Counter Name Tile"]
+        L["Left Dot (Dispense)"]
+        N["Counter Name Text"]
+        R["Right Dot (Keypad)"]
+    end
+    L --> C1["RED default / GREEN active"]
+    R --> C2["RED default / GREEN active"]
 ```

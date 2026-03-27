@@ -30,6 +30,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -436,6 +437,8 @@ fun TokenDisplayScreen(
     val connectTimer by mqttViewModel.getConnectTimer().observeAsState(0)
     val mqttRetryAttempt by mqttViewModel.getMqttRetryAttempt().observeAsState(0)
     val isBrokerReachable by mqttViewModel.isBrokerReachable().observeAsState(true)
+    val dispenseConnectedByButton by mqttViewModel.getDispenseConnectedByButton().observeAsState(emptyMap())
+    val keypadConnectedByButton by mqttViewModel.getKeypadConnectedByButton().observeAsState(emptyMap())
 
     // Background Music Player (Loops tokenMusicUrl if provided)
     val musicUrl = config?.tokenMusicUrl
@@ -481,6 +484,18 @@ fun TokenDisplayScreen(
     // we are connected - do NOT let the TCP ping override that.
     // (Some broker devices accept only one connection; the ping would fail even when MQTT works.)
     val brokerConnected = mqttConnected || isBrokerReachable
+    var stableBrokerConnected by remember { mutableStateOf(false) }
+    LaunchedEffect(brokerConnected) {
+        if (brokerConnected) {
+            stableBrokerConnected = true
+        } else {
+            // Prevent brief MQTT status flaps from showing a false red BLUCON indicator.
+            delay(15000L)
+            if (!brokerConnected) {
+                stableBrokerConnected = false
+            }
+        }
+    }
     var reconnectUiSeconds by remember { mutableIntStateOf(0) }
     var reconnectDisplayTry by remember { mutableIntStateOf(1) }
     LaunchedEffect(mqttRetryAttempt, brokerConnected, showMqttRetryDialog) {
@@ -491,10 +506,10 @@ fun TokenDisplayScreen(
         }
     }
     LaunchedEffect(brokerConnected, showMqttRetryDialog) {
-        if (!brokerConnected && !showMqttRetryDialog) {
+        if (!stableBrokerConnected && !showMqttRetryDialog) {
             reconnectUiSeconds = 0
             reconnectDisplayTry = maxOf(reconnectDisplayTry, mqttRetryAttempt.coerceAtLeast(1))
-            while (!brokerConnected && !showMqttRetryDialog) {
+            while (!stableBrokerConnected && !showMqttRetryDialog) {
                 delay(1000)
                 reconnectUiSeconds += 1
                 if (reconnectUiSeconds >= 30) {
@@ -696,7 +711,7 @@ fun TokenDisplayScreen(
                     adAreaReloadToken = adAreaReloadToken,
                     macAddress = macAddress,
                     appVersion = appVersion,
-                    isMqttConnected = brokerConnected,
+                    isMqttConnected = stableBrokerConnected,
                     isNetworkAvailable = isNetworkAvailable,
                     counters = counters,
                     adFiles = viewModel.localAdFiles.observeAsState(emptyList()).value,
@@ -710,14 +725,10 @@ fun TokenDisplayScreen(
                     onTokenBgChange = onTokenBgChange,
                     onRefresh = { viewModel.loadData(mqttViewModel, forceShowOverlay = true) },
                     blinkTriggers = blinkTriggers,
-                    showReconnectBadge = !brokerConnected && !showMqttRetryDialog,
+                    showReconnectBadge = !stableBrokerConnected && !showMqttRetryDialog,
                     reconnectRetryAttempt = reconnectDisplayTry,
-                    reconnectUiSeconds = reconnectUiSeconds
-                )
-
-                PendingCallsBadge(
-                    pendingCallCount = pendingCallCount,
-                    modifier = Modifier.align(Alignment.TopEnd)
+                    reconnectUiSeconds = reconnectUiSeconds,
+                    pendingCallCount = pendingCallCount
                 )
 
                 
@@ -844,12 +855,12 @@ private fun PendingCallsBadge(
     modifier: Modifier = Modifier
 ) {
     AnimatedVisibility(
+        modifier = modifier,
         visible = pendingCallCount > 0,
         enter = fadeIn(tween(180)),
         exit = fadeOut(tween(180))
     ) {
         Surface(
-            modifier = modifier.padding(top = 8.dp, end = 8.dp),
             shape = RoundedCornerShape(8.dp),
             color = Color(0xCC1E1E1E),
             border = BorderStroke(1.dp, Color(0xFF64B5F6))
@@ -872,13 +883,13 @@ private fun ReconnectStatusBadge(
     modifier: Modifier = Modifier
 ) {
     AnimatedVisibility(
+        modifier = modifier,
         visible = visible,
         enter = fadeIn(tween(180)),
         exit = fadeOut(tween(180))
     ) {
         val retryCount = retryAttempt.coerceAtLeast(1)
         Surface(
-            modifier = modifier.padding(top = 8.dp),
             shape = RoundedCornerShape(8.dp),
             color = Color(0xCC2E2E2E),
             border = BorderStroke(1.dp, Color(0xFFFFA726))
@@ -965,7 +976,8 @@ private fun TokenDisplayContent(
     blinkTriggers: Map<String, Long>,
     showReconnectBadge: Boolean,
     reconnectRetryAttempt: Int,
-    reconnectUiSeconds: Int
+    reconnectUiSeconds: Int,
+    pendingCallCount: Int
 ) {
     val viewModel = viewModel<com.softland.callqtv.viewmodel.TokenDisplayViewModel>()
     val mqttViewModel = viewModel<MqttViewModel>()
@@ -1028,6 +1040,11 @@ private fun TokenDisplayContent(
     val rows = remember(config.displayRows) { (config.displayRows ?: 3).coerceAtLeast(1) }
     val columns = remember(config.displayColumns) { (config.displayColumns ?: 4).coerceAtLeast(1) }
     val companyName = if (config.companyName.isNotBlank()) config.companyName else "CALL-Q"
+    val hasScrollingFooter = remember(config.scrollEnabled, config.noOfTextFields, config.scrollTextLinesJson) {
+        config.scrollEnabled?.equals("on", ignoreCase = true) == true &&
+            (config.noOfTextFields ?: 0) > 0 &&
+            !config.scrollTextLinesJson.isNullOrBlank()
+    }
 
     val primary = MaterialTheme.colorScheme.primary
     val bgIntensity = remember { 0.15f }
@@ -1063,32 +1080,52 @@ private fun TokenDisplayContent(
 
         Spacer(modifier = Modifier.height(responsivePadding))
 
-        TokenDisplayBody(
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            config = config,
-            adAreaReloadToken = adAreaReloadToken,
-            adFiles = adFiles,
-            countersToDisplay = countersToDisplay,
-            tokensPerCounter = tokensPerCounter,
-            rows = rows,
-            columns = columns,
-            scale = scale,
-            counterBgHex = counterBgHex,
-            tokenBgHex = tokenBgHex,
-            usePortraitLayout = usePortraitLayout,
-            adPlacement = adPlacement,
-            blinkTriggers = blinkTriggers,
-            showReconnectBadge = showReconnectBadge,
-            reconnectRetryAttempt = reconnectRetryAttempt,
-            reconnectUiSeconds = reconnectUiSeconds
-        )
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                TokenDisplayBody(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    config = config,
+                    adAreaReloadToken = adAreaReloadToken,
+                    adFiles = adFiles,
+                    countersToDisplay = countersToDisplay,
+                    tokensPerCounter = tokensPerCounter,
+                    rows = rows,
+                    columns = columns,
+                    scale = scale,
+                    counterBgHex = counterBgHex,
+                    tokenBgHex = tokenBgHex,
+                    usePortraitLayout = usePortraitLayout,
+                    adPlacement = adPlacement,
+                    blinkTriggers = blinkTriggers,
+                    showReconnectBadge = false,
+                    reconnectRetryAttempt = reconnectRetryAttempt,
+                    reconnectUiSeconds = reconnectUiSeconds,
+                )
 
-        TokenDisplayFooter(
-            config = config,
-            responsivePadding = responsivePadding,
-            scale = scale,
-            deviceIsPortrait = deviceIsPortrait
-        )
+                TokenDisplayFooter(
+                    config = config,
+                    responsivePadding = responsivePadding,
+                    scale = scale,
+                    deviceIsPortrait = deviceIsPortrait
+                )
+            }
+
+            ReconnectStatusBadge(
+                visible = showReconnectBadge,
+                retryAttempt = reconnectRetryAttempt,
+                reconnectUiSeconds = reconnectUiSeconds,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 8.dp, bottom = if (hasScrollingFooter) 0.dp else 8.dp)
+            )
+
+            PendingCallsBadge(
+                pendingCallCount = pendingCallCount,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 8.dp, bottom = if (hasScrollingFooter) 0.dp else 8.dp)
+            )
+        }
     }
 }
 
@@ -1201,12 +1238,6 @@ private fun TokenDisplayBody(
             }
         }
 
-        ReconnectStatusBadge(
-            visible = showReconnectBadge,
-            retryAttempt = reconnectRetryAttempt,
-            reconnectUiSeconds = reconnectUiSeconds,
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 8.dp)
-        )
     }
 }
 
@@ -1239,7 +1270,6 @@ private fun TokenDisplayFooter(
     }
 
     if (scrollEnabled && noOfTextFields > 0 && scrollLines.isNotEmpty()) {
-        Spacer(modifier = Modifier.height(responsivePadding))
         ScrollingFooter(
             textLines = scrollLines,
             scale = scale,
@@ -2175,7 +2205,7 @@ private fun applyYouTubeKioskMode(webView: WebView, isAdSoundEnabled: Boolean) {
                   height: 100% !important;
                   max-width: 100vw !important;
                   max-height: 100vh !important;
-                  object-fit: contain !important;
+                  object-fit: cover !important;
                   background: #000 !important;
                   position: absolute !important;
                   top: 50% !important;
@@ -2790,7 +2820,7 @@ fun CounterBoard(
                     val tokenWeight = if (hasAds) 0.70f else 0.8f
 
                     // Counter name area
-                    Box(
+                    BoxWithConstraints(
                         modifier = Modifier
                             .weight(nameWeight)
                             .fillMaxHeight(),
@@ -2852,14 +2882,21 @@ fun CounterBoard(
                 }
             } else {
                 Column(modifier = Modifier.fillMaxSize().padding(1.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = counterName,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = (counterFontSize * scale).sp,
-                        color = counterColor,
-                        maxLines = 1,
-                        textAlign = TextAlign.Center
-                    )
+                    BoxWithConstraints(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 2.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = counterName,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = (counterFontSize * scale).sp,
+                            color = counterColor,
+                            maxLines = 1,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                     Spacer(modifier = Modifier.height(1.dp))
 
                     LazyVerticalGrid(
@@ -3097,6 +3134,7 @@ fun AppearanceSettingsDialog(
     // Always open Settings with the first tab selected.
     LaunchedEffect(Unit) { selectedTabIndex = 0 }
     val appThemeFocusRequester = remember { FocusRequester() }
+    val settingsHelpFocusRequester = remember { FocusRequester() }
     LaunchedEffect(selectedTabIndex) {
         if (selectedTabIndex == 0) {
             // Defer focus request until dialog/tab content is composed.
@@ -3105,6 +3143,15 @@ fun AppearanceSettingsDialog(
                 appThemeFocusRequester.requestFocus()
             } catch (_: IllegalStateException) {
                 // Focus tree may not be ready yet.
+            }
+        }
+    }
+    LaunchedEffect(showSettingsHelpDialog) {
+        if (showSettingsHelpDialog) {
+            delay(120)
+            try {
+                settingsHelpFocusRequester.requestFocus()
+            } catch (_: IllegalStateException) {
             }
         }
     }
@@ -3180,37 +3227,118 @@ fun AppearanceSettingsDialog(
             }
         )
     } else if (showSettingsHelpDialog) {
+        val displayHelp = listOf(
+            "App Theme: changes overall app color theme.",
+            "Counter BG: changes background color behind counters.",
+            "Token BG: changes background color behind token values."
+        )
+        val audioHelp = listOf(
+            "Notification Sound: selects the alert sound.",
+            "Advertisement Sound: enables/disables ad audio."
+        )
+        val otherHelp = listOf(
+            "24-Hour Format: toggles time display between 24h and 12h.",
+            "Offline Advertisements: play ads from downloaded local files.",
+            "Allow YouTube Ads: allows YouTube links in ad playlist.",
+            "YouTube Strict Autoplay: forces muted autoplay for better TV compatibility.",
+            "YouTube: Play Until Ended: waits for natural video end (long safety fallback).",
+            "Clear saved token history: resets stored/queued token call history."
+        )
+        val systemHelp = listOf(
+            "Shows device/app info and useful diagnostic details."
+        )
         AlertDialog(
-            modifier = Modifier.fillMaxWidth(0.75f),
+            modifier = Modifier.fillMaxWidth(0.9f),
             onDismissRequest = { showSettingsHelpDialog = false },
             title = { Text("Settings Help", style = MaterialTheme.typography.titleLarge) },
             text = {
-                Column(
+                LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 420.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                        .heightIn(max = 480.dp)
+                        .focusRequester(settingsHelpFocusRequester)
+                        .focusable(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Display", fontWeight = FontWeight.Bold, color = settingsPrimary)
-                    Text("• App Theme: changes overall app color theme.")
-                    Text("• Counter BG: changes background color behind counters.")
-                    Text("• Token BG: changes background color behind token values.")
+                    item {
+                        Text("Display", fontWeight = FontWeight.Bold, color = settingsPrimary)
+                    }
+                    items(displayHelp) { text ->
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = settingsCard),
+                            border = BorderStroke(1.dp, settingsBorder),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "• $text",
+                                color = settingsText,
+                                fontSize = 14.sp,
+                                softWrap = true,
+                                textAlign = TextAlign.Start,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                    }
 
-                    Text("Audios", fontWeight = FontWeight.Bold, color = settingsPrimary)
-                    Text("• Notification Sound: selects the alert sound.")
-                    Text("• Advertisement Sound: enables/disables ad audio.")
+                    item {
+                        Text("Audios", fontWeight = FontWeight.Bold, color = settingsPrimary)
+                    }
+                    items(audioHelp) { text ->
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = settingsCard),
+                            border = BorderStroke(1.dp, settingsBorder),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "• $text",
+                                color = settingsText,
+                                fontSize = 14.sp,
+                                softWrap = true,
+                                textAlign = TextAlign.Start,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                    }
 
-                    Text("Other", fontWeight = FontWeight.Bold, color = settingsPrimary)
-                    Text("• 24-Hour Format: toggles time display between 24h and 12h.")
-                    Text("• Offline Advertisements: play ads from downloaded local files.")
-                    Text("• Allow YouTube Ads: allows YouTube links in ad playlist.")
-                    Text("• YouTube Strict Autoplay: forces muted autoplay for better TV compatibility.")
-                    Text("• YouTube: Play Until Ended: waits for natural video end (long safety fallback).")
-                    Text("• Clear saved token history: resets stored/queued token call history.")
+                    item {
+                        Text("Other", fontWeight = FontWeight.Bold, color = settingsPrimary)
+                    }
+                    items(otherHelp) { text ->
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = settingsCard),
+                            border = BorderStroke(1.dp, settingsBorder),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "• $text",
+                                color = settingsText,
+                                fontSize = 14.sp,
+                                softWrap = true,
+                                textAlign = TextAlign.Start,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                    }
 
-                    Text("System", fontWeight = FontWeight.Bold, color = settingsPrimary)
-                    Text("• Shows device/app info and useful diagnostic details.")
+                    item {
+                        Text("System", fontWeight = FontWeight.Bold, color = settingsPrimary)
+                    }
+                    items(systemHelp) { text ->
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = settingsCard),
+                            border = BorderStroke(1.dp, settingsBorder),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "• $text",
+                                color = settingsText,
+                                fontSize = 14.sp,
+                                softWrap = true,
+                                textAlign = TextAlign.Start,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                    }
                 }
             },
             confirmButton = {
@@ -4026,7 +4154,8 @@ fun ScrollingFooter(
 
     val textColor = android.graphics.Color.WHITE
     val textSizeSp = if (isPortrait) 12f else 14f
-    val marqueeText = remember(scrollText) { "$scrollText      \u2022      $scrollText" }
+    // Use a compact repeating unit so ticker flow feels continuous (no visible block reset).
+    val marqueeText = remember(scrollText) { "$scrollText   \u2022   " }
     val footerHeight = if (isPortrait) 24.dp else 28.dp
 
     Box(
@@ -4052,7 +4181,6 @@ fun ScrollingFooter(
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
                 .clipToBounds()
         )
     }
@@ -4135,7 +4263,8 @@ private class SeamlessTickerView(context: Context) : FrameLayout(context) {
             if (w <= 0f) return@post
 
             val textWidth = text1.paint.measureText(text1.text?.toString().orEmpty()).coerceAtLeast(1f)
-            val gap = 56f * resources.displayMetrics.density
+            // Keep inter-copy gap small for a seamless continuous reading flow.
+            val gap = 16f * resources.displayMetrics.density
             val distance = textWidth + gap
             lastDistance = distance
             val speedPxPerSec = (cachedSpeedDpPerSec.coerceAtLeast(8f)) * resources.displayMetrics.density

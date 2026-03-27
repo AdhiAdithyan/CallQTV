@@ -14,10 +14,13 @@ CallQTV is a specialized Android TV application designed for queue management an
 ### 2.2 Advertisement Playback
 - **FR5**: The system shall play a sequence of advertisements (Images, Videos, YouTube) in the designated Ad Area.
 - **FR6**: YouTube ads shall be displayed in a "Kiosk Mode" (clean UI, no headers/footers) and centered perfectly within the Ad Area.
-- **FR7**: YouTube ads shall loop automatically without user intervention.
+- **FR7**: YouTube ads shall play until natural end when possible; if no ended event is received, a long safety timeout shall advance to the next ad.
 - **FR8**: The system shall support offline ad synchronization, downloading remote assets to local storage for playback when the network is unstable.
 - **FR8a**: The Ad Area shall be display-only and shall not receive focus or click interaction.
 - **FR8b**: Ad audio control shall be unified: a single setting shall enable/disable sound for both normal video ads and YouTube ads.
+- **FR8c**: When more than one ad exists, ad rotation shall be strict round-robin and shall not repeatedly replay the same ad.
+- **FR8d**: Offscreen preloading shall be limited to image ads; YouTube/video ads shall use a single visible surface path for stability.
+- **FR8e**: On YouTube SSL/DNS failures, one fallback URL retry may be attempted before skipping the ad.
 
 ### 2.3 Connectivity & Status
 - **FR9**: The system shall display a "Connecting to BLUCON..." status badge when MQTT connection is lost.
@@ -25,12 +28,17 @@ CallQTV is a specialized Android TV application designed for queue management an
 - **FR11**: The system shall perform a hard reconnect every 30 seconds if the connection remains lost.
 - **FR12**: In multi-broker setups, connectivity shall be treated as active when any configured broker is connected, or when recent MQTT traffic is observed.
 - **FR13**: The system shall trigger configuration refresh when a valid MQTT payload contains `CLR` for the mapped keypad serial.
+- **FR14**: Initial BLUCON connection retries shall use an aggressive early retry cadence to reduce first-connect delay.
+- **FR15**: Each counter-name tile shall show two connection indicators: left for dispense and right for keypad.
+- **FR16**: Indicator state shall be tracked per counter button index.
+- **FR17**: Indicators shall default RED and turn GREEN when relevant MQTT heartbeat/message is observed.
+- **FR18**: If no relevant MQTT signal is observed for 5 minutes, indicators shall revert to RED.
 
 ## 3. Non-Functional Requirements
 
 ### 3.1 Performance
 - **NFR1**: The application shall load cached configuration within 2 seconds of launch to provide an "instant-on" feel.
-- **NFR2**: Ad transitions shall be smooth, with background preparation of the next ad to minimize black screens.
+- **NFR2**: Ad transitions shall be smooth, minimizing black screens while avoiding excessive offscreen media surface churn.
 
 ### 3.2 Reliability
 - **NFR3**: The system shall handle background system service exceptions (e.g., Google Play Integrity) without crashing.
