@@ -47,6 +47,23 @@ class MyApplication : Application() {
         
         val stackTrace = exception.stackTraceToString()
         val message = exception.message ?: ""
+
+        // Google Play Express Integrity warm-up can fail transiently on some networks
+        // (Cronet ERR_CONNECTION_CLOSED / ERR_INTERNET_DISCONNECTED, etc.).
+        // These are external service failures and should not crash the app.
+        val isExpressIntegrityNetworkFailure =
+            stackTrace.contains("ExpressIntegrityException", ignoreCase = true) ||
+            stackTrace.contains("expressintegrityservice", ignoreCase = true) ||
+            stackTrace.contains("CronetUrlRequest", ignoreCase = true) ||
+            stackTrace.contains("NetworkExceptionImpl", ignoreCase = true) ||
+            message.contains("ERR_CONNECTION_CLOSED", ignoreCase = true) ||
+            message.contains("ERR_INTERNET_DISCONNECTED", ignoreCase = true) ||
+            message.contains("ERR_NETWORK_CHANGED", ignoreCase = true) ||
+            message.contains("ERR_TIMED_OUT", ignoreCase = true)
+
+        if (isExpressIntegrityNetworkFailure) {
+            return true
+        }
         
         // Check for NameNotFoundException related to com.miui.miwallpaper
         if (exception is PackageManager.NameNotFoundException || 
