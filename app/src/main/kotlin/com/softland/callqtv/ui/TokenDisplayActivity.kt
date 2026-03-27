@@ -12,6 +12,11 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.widget.Toast
+import android.animation.ValueAnimator
+import android.view.animation.LinearInterpolator
+import android.widget.FrameLayout
+import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -75,7 +80,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.ExperimentalFoundationApi
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -417,6 +421,7 @@ fun TokenDisplayScreen(
         mqttViewModel.setLicenseExpired(isLicenseExpired)
     }
     val config by viewModel.config.observeAsState(null)
+    val adAreaReloadToken by viewModel.adAreaReloadToken.observeAsState(0)
     val counters by viewModel.counters.observeAsState(emptyList())
     val daysUntilExpiry by viewModel.daysUntilExpiry.observeAsState(null)
     val currentDateTime by viewModel.currentDateTime.observeAsState("")
@@ -677,6 +682,7 @@ fun TokenDisplayScreen(
             Box(modifier = Modifier.fillMaxSize()) {
                 TokenDisplayContent(
                     config = cfg,
+                    adAreaReloadToken = adAreaReloadToken,
                     macAddress = macAddress,
                     appVersion = appVersion,
                     isMqttConnected = brokerConnected,
@@ -931,6 +937,7 @@ fun MqttErrorBar(error: String, exhausted: Boolean, retryAttempt: Int, onRetry: 
 @Composable
 private fun TokenDisplayContent(
     config: TvConfigEntity,
+    adAreaReloadToken: Int,
     macAddress: String,
     appVersion: String,
     isMqttConnected: Boolean,
@@ -1047,6 +1054,7 @@ private fun TokenDisplayContent(
         TokenDisplayBody(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             config = config,
+            adAreaReloadToken = adAreaReloadToken,
             adFiles = adFiles,
             countersToDisplay = countersToDisplay,
             tokensPerCounter = tokensPerCounter,
@@ -1073,6 +1081,7 @@ private fun TokenDisplayContent(
 private fun TokenDisplayBody(
     modifier: Modifier,
     config: TvConfigEntity,
+    adAreaReloadToken: Int,
     adFiles: List<AdFileEntity>,
     countersToDisplay: List<CounterEntity>,
     tokensPerCounter: Map<String, List<String>>,
@@ -1095,6 +1104,11 @@ private fun TokenDisplayBody(
         if (!showAds) 0f else if (configuredCounterLimit <= 2) 0.5f else 0.4f
     }
     val countersWeight = remember(adWeight) { if (adWeight > 0f) 1f - adWeight else 1f }
+    val adAreaContent: @Composable () -> Unit = {
+        key(adAreaReloadToken) {
+            AdArea(adFiles, config)
+        }
+    }
 
     Box(modifier = modifier) {
         if (usePortraitLayout) {
@@ -1106,7 +1120,7 @@ private fun TokenDisplayBody(
                 if (isTop || isBottom) {
                     Column(modifier = Modifier.fillMaxSize()) {
                         if (isTop) {
-                            Box(modifier = Modifier.weight(adWeight).fillMaxWidth().clipToBounds()) { AdArea(adFiles, config) }
+                            Box(modifier = Modifier.weight(adWeight).fillMaxWidth().clipToBounds()) { adAreaContent() }
                             Box(modifier = Modifier.weight(countersWeight).fillMaxWidth()) {
                                 CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers)
                             }
@@ -1114,7 +1128,7 @@ private fun TokenDisplayBody(
                             Box(modifier = Modifier.weight(countersWeight).fillMaxWidth()) {
                                 CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers)
                             }
-                            Box(modifier = Modifier.weight(adWeight).fillMaxWidth().clipToBounds()) { AdArea(adFiles, config) }
+                            Box(modifier = Modifier.weight(adWeight).fillMaxWidth().clipToBounds()) { adAreaContent() }
                         }
                     }
                 } else {
@@ -1124,9 +1138,9 @@ private fun TokenDisplayBody(
                             Box(modifier = Modifier.weight(countersWeight).fillMaxHeight()) {
                                 CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers)
                             }
-                            Box(modifier = Modifier.weight(adWeight).fillMaxHeight().clipToBounds()) { AdArea(adFiles, config) }
+                            Box(modifier = Modifier.weight(adWeight).fillMaxHeight().clipToBounds()) { adAreaContent() }
                         } else {
-                            Box(modifier = Modifier.weight(adWeight).fillMaxHeight().clipToBounds()) { AdArea(adFiles, config) }
+                            Box(modifier = Modifier.weight(adWeight).fillMaxHeight().clipToBounds()) { adAreaContent() }
                             Box(modifier = Modifier.weight(countersWeight).fillMaxHeight()) {
                                 CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers)
                             }
@@ -1153,7 +1167,7 @@ private fun TokenDisplayBody(
             if (hasAds) {
                 Row(modifier = Modifier.fillMaxSize()) {
                     if (adPlacement.equals("left", ignoreCase = true)) {
-                        Box(modifier = Modifier.weight(adWeight).fillMaxHeight().clipToBounds()) { AdArea(adFiles, config) }
+                        Box(modifier = Modifier.weight(adWeight).fillMaxHeight().clipToBounds()) { adAreaContent() }
                         Box(modifier = Modifier.weight(countersWeight).fillMaxHeight()) {
                             CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers)
                         }
@@ -1161,7 +1175,7 @@ private fun TokenDisplayBody(
                         Box(modifier = Modifier.weight(countersWeight).fillMaxHeight()) {
                             CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers)
                         }
-                        Box(modifier = Modifier.weight(adWeight).fillMaxHeight().clipToBounds()) { AdArea(adFiles, config) }
+                        Box(modifier = Modifier.weight(adWeight).fillMaxHeight().clipToBounds()) { adAreaContent() }
                     }
                 }
             } else {
@@ -1493,7 +1507,10 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
         if (orderedAds.isEmpty() || visibleAd == null) return
         val currentIdx = orderedAds.indexOfFirst { it.id == visibleAd!!.id && it.position == visibleAd!!.position }
             .takeIf { it >= 0 } ?: orderedAds.indexOfFirst { it.filePath == visibleAd!!.filePath }.coerceAtLeast(0)
-        val nextIdx = (currentIdx + 1) % orderedAds.size
+        var nextIdx = (currentIdx + 1) % orderedAds.size
+        if (orderedAds.size > 1 && orderedAds[nextIdx].filePath == visibleAd!!.filePath) {
+            nextIdx = (nextIdx + 1) % orderedAds.size
+        }
         val current = orderedAds.getOrNull(currentIdx)
         val next = orderedAds.getOrNull(nextIdx)
         if (current != null && next != null) {
@@ -1517,7 +1534,10 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
                     .takeIf { it >= 0 } ?: orderedAds.indexOfFirst { it.filePath == current.filePath }
             } else -1
             val baseIdx = if (currIdx >= 0) currIdx else nextAdIndex
-            val nextIdx = (baseIdx + 1) % orderedAds.size
+            var nextIdx = (baseIdx + 1) % orderedAds.size
+            if (orderedAds.size > 1 && current != null && orderedAds[nextIdx].filePath == current.filePath) {
+                nextIdx = (nextIdx + 1) % orderedAds.size
+            }
             val next = orderedAds.getOrNull(nextIdx)
             if (current != null && next != null) {
                 Log.i(
@@ -1565,16 +1585,6 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
         )
 
         if (isVideo || isYouTube) {
-            if (isYouTube) {
-                // Show YouTube ad container immediately and let YouTubeAdPlayer handle
-                // its own ready/timeout logic. This avoids black gaps after video end
-                // while waiting on WebView readiness callbacks.
-                activePlayerIdx = 1 - activePlayerIdx
-                visibleAd = targetAd
-                isNextReady = true
-                return@LaunchedEffect
-            }
-
             if (isVideo && isWmvUnsupportedVideo(targetAd.filePath)) {
                 Log.w("AdPlayer", "Skipping unsupported WMV ad: ${targetAd.filePath}")
                 FileLogger.logError(context, "AdPlayer", "Skipping unsupported WMV ad: ${targetAd.filePath}")
@@ -1589,20 +1599,11 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
                 Log.w("YouTubeAdFlow", "Network appears unvalidated; still attempting YouTube ad load")
                 FileLogger.logError(context, "YouTubeAdFlow", "Network appears unvalidated; still attempting YouTube ad load")
             }
-            // Video or YouTube: wait for onReady or timeout
-            withTimeoutOrNull(45000) { // 45s timeout for slow/TV WebView buffering
-                while (!isNextReady) { delay(200) }
-            }
-            if (!isNextReady) {
-                if (isYouTube) {
-                    Log.w("YouTubeAdFlow", "Skipping YouTube ad: ready timeout (30s)")
-                    FileLogger.logError(context, "YouTubeAdFlow", "Skipping YouTube ad: ready timeout (30s)")
-                }
-                triggerNext() 
-            } else {
-                activePlayerIdx = 1 - activePlayerIdx
-                visibleAd = targetAd
-            }
+            // No hidden preloader is used. To avoid deadlocks/skips, show media ads immediately.
+            // Per-player/per-webview timeouts handle stalled loads and then trigger next ad.
+            activePlayerIdx = 1 - activePlayerIdx
+            visibleAd = targetAd
+            isNextReady = true
         } else {
             // Image is shown immediately; interval-based advance is handled by the
             // dedicated visible-image timer effect above.
@@ -1807,6 +1808,7 @@ fun YouTubeAdPlayer(
     var readyReported by remember(activeUrl) { mutableStateOf(false) }
     var terminalEventReported by remember(activeUrl) { mutableStateOf(false) }
     var loadStartedAtMs by remember(activeUrl) { mutableStateOf(0L) }
+    var reportedDurationMs by remember(activeUrl) { mutableStateOf<Long?>(null) }
 
     // Safety timeout: if ad doesn't report ready/ended within 45s, skip it.
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
@@ -1835,15 +1837,22 @@ fun YouTubeAdPlayer(
         }
     }
 
-    // YouTube page mode has no reliable "ended" callback in this setup.
-    // Auto-advance after a bounded play window so ad loop never stalls.
-    LaunchedEffect(activeUrl, readyReported, terminalEventReported) {
+    // Duration-based safety fallback:
+    // prefer natural ended callback; if unavailable, use detected video duration.
+    LaunchedEffect(activeUrl, readyReported, terminalEventReported, reportedDurationMs) {
         if (!readyReported || terminalEventReported) return@LaunchedEffect
-        // Safety fallback only; normal advance should happen via JS ended callback.
-        delay(120000)
+        val fallbackDelayMs = if (reportedDurationMs != null && reportedDurationMs!! > 0L) {
+            (reportedDurationMs!! + 10_000L).coerceAtMost(4 * 60 * 60 * 1000L) // +10s grace, cap 4h
+        } else {
+            10 * 60 * 1000L // metadata unavailable; long safety only
+        }
+        delay(fallbackDelayMs)
         if (!terminalEventReported) {
             terminalEventReported = true
-            Log.i("YouTubeAdPerf", "Auto-advance after 120s safety play window for url=${activeUrl.take(120)}")
+            Log.i(
+                "YouTubeAdPerf",
+                "Duration safety auto-advance after ${fallbackDelayMs} ms for url=${activeUrl.take(120)}"
+            )
             latestOnVideoEnded()
         }
     }
@@ -1855,17 +1864,25 @@ fun YouTubeAdPlayer(
             if (sharedWebView == null) {
                 webView.stopLoading()
                 webView.loadUrl("about:blank")
+                (webView.parent as? android.view.ViewGroup)?.removeView(webView)
                 webView.destroy()
             } else {
                 // Keep shared WebView alive between ad transitions to avoid recreate churn
                 // and prevent transient black frames from forcing about:blank.
                 webView.stopLoading()
+                // Shared WebView may be reattached by a new AndroidView host.
+                // Detach from any old parent to prevent "specified child already has a parent".
+                (webView.parent as? android.view.ViewGroup)?.removeView(webView)
             }
         }
     }
 
     AndroidView(
-        factory = { webView },
+        factory = {
+            // Defensive detach for shared instance reuse across Compose hosts.
+            (webView.parent as? android.view.ViewGroup)?.removeView(webView)
+            webView
+        },
         update = { view ->
             try {
                 view.removeJavascriptInterface("CallQTVBridge")
@@ -1888,6 +1905,18 @@ fun YouTubeAdPlayer(
                         if (!readyReported) {
                             readyReported = true
                             latestOnReady()
+                        }
+                    }
+                }
+
+                @JavascriptInterface
+                fun onAdDuration(seconds: Double) {
+                    if (!seconds.isFinite() || seconds <= 0.0) return
+                    mainHandler.post {
+                        val ms = (seconds * 1000.0).toLong()
+                        if (reportedDurationMs == null || kotlin.math.abs((reportedDurationMs ?: 0L) - ms) > 1000L) {
+                            reportedDurationMs = ms
+                            Log.i("YouTubeAdPerf", "Detected YouTube duration=${ms}ms for url=${activeUrl.take(120)}")
                         }
                     }
                 }
@@ -2149,6 +2178,20 @@ private fun applyYouTubeKioskMode(webView: WebView, isAdSoundEnabled: Boolean) {
                 v.muted = $mutedJs;
                 v.volume = $volumeJs;
                 v.play().catch(function(e){ console.warn('Autoplay blocked:', e); });
+                if (isFinite(v.duration) && v.duration > 0) {
+                  if (window.CallQTVBridge && window.CallQTVBridge.onAdDuration) {
+                    window.CallQTVBridge.onAdDuration(v.duration);
+                  }
+                } else {
+                  v.addEventListener('loadedmetadata', function() {
+                    try {
+                      if (isFinite(v.duration) && v.duration > 0 &&
+                          window.CallQTVBridge && window.CallQTVBridge.onAdDuration) {
+                        window.CallQTVBridge.onAdDuration(v.duration);
+                      }
+                    } catch (e) {}
+                  }, { once: true });
+                }
                 if (window.CallQTVBridge && window.CallQTVBridge.onAdReady) {
                   window.CallQTVBridge.onAdReady();
                 }
@@ -2182,6 +2225,10 @@ private fun applyYouTubeKioskMode(webView: WebView, isAdSoundEnabled: Boolean) {
                       vv.muted = $mutedJs;
                       vv.volume = $volumeJs;
                       vv.play().catch(function(){});
+                    }
+                    if (isFinite(vv.duration) && vv.duration > 0 &&
+                        window.CallQTVBridge && window.CallQTVBridge.onAdDuration) {
+                      window.CallQTVBridge.onAdDuration(vv.duration);
                     }
                     // Re-assert current app sound setting in case YouTube DOM mutates.
                     vv.muted = $mutedJs;
@@ -2987,6 +3034,9 @@ fun AppearanceSettingsDialog(
     var isAdSoundEnabled by remember { mutableStateOf(false) }
     var isYouTubeAdsEnabled by remember { mutableStateOf(true) }
     var isOfflineAdsEnabled by remember { mutableStateOf(true) }
+    var isExportingSnapshot by remember { mutableStateOf(false) }
+    var exportSnapshotStatus by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
         withContext(Dispatchers.Default) {
             currentCounterHex = ThemeColorManager.getCounterBackgroundColor(context)
@@ -3361,6 +3411,33 @@ fun AppearanceSettingsDialog(
                                 
                                 Spacer(modifier = Modifier.height(1.dp))
                                 HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+                                Spacer(modifier = Modifier.height(4.dp))
+                                OutlinedButton(
+                                    onClick = {
+                                        if (isExportingSnapshot) return@OutlinedButton
+                                        isExportingSnapshot = true
+                                        exportSnapshotStatus = "Exporting snapshot..."
+                                        scope.launch(Dispatchers.IO) {
+                                            val result = DiagnosticsExporter.exportConfigSnapshot(context)
+                                            withContext(Dispatchers.Main) {
+                                                isExportingSnapshot = false
+                                                exportSnapshotStatus = result.message
+                                                Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                    }
+                                ) {
+                                    Text(if (isExportingSnapshot) "Exporting..." else "Export Logs/Config Snapshot")
+                                }
+                                exportSnapshotStatus?.let { status ->
+                                    Text(
+                                        text = status,
+                                        fontSize = 12.sp,
+                                        color = settingsMutedText,
+                                        maxLines = 2
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
                                 Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text("Developed by", fontSize = 16.sp, color = settingsPrimary, fontWeight = FontWeight.Bold)
                                     androidx.compose.foundation.Image(
@@ -3728,8 +3805,6 @@ fun PresetThemeColorDialog(
     )
 }
 
-private const val MARQUEE_VELOCITY_DP_PER_SEC = 42f
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ScrollingFooter(
     textLines: List<String>,
@@ -3741,42 +3816,10 @@ fun ScrollingFooter(
     }
     if (scrollText.isEmpty()) return
 
-    val density = LocalDensity.current
-    var travelPx by remember { mutableFloatStateOf(0f) }
-    val textMeasurer = rememberTextMeasurer()
-    // Keep footer typography stable to reduce per-frame glyph/raster churn on TVs.
-    val textStyle = MaterialTheme.typography.titleMedium.copy(
-        fontSize = if (isPortrait) 12.sp else 14.sp,
-        fontWeight = FontWeight.Bold,
-        color = Color.White
-    )
-    val textLayoutResult = remember(scrollText, textStyle, textMeasurer) {
-        textMeasurer.measure(
-            text = scrollText,
-            style = textStyle,
-            maxLines = 1
-        )
-    }
-    val footerHeight = with(density) {
-        // Match container to measured text height with light breathing room.
-        textLayoutResult.size.height.toDp() + 8.dp
-    }
-    val gapPx = with(density) { 24.dp.toPx() }
-    val totalDistance = (textLayoutResult.size.width + gapPx).coerceAtLeast(1f)
-    val pxPerSec = with(density) { MARQUEE_VELOCITY_DP_PER_SEC.dp.toPx() }
-    LaunchedEffect(totalDistance, pxPerSec) {
-        var lastFrameNanos = 0L
-        while (true) {
-            withFrameNanos { frameNanos ->
-                if (lastFrameNanos != 0L) {
-                    val deltaSec = (frameNanos - lastFrameNanos) / 1_000_000_000f
-                    // Continuous modulo-based motion avoids the restart "jerk".
-                    travelPx = (travelPx + (pxPerSec * deltaSec)) % totalDistance
-                }
-                lastFrameNanos = frameNanos
-            }
-        }
-    }
+    val textColor = android.graphics.Color.WHITE
+    val textSizeSp = if (isPortrait) 12f else 14f
+    val marqueeText = remember(scrollText) { "$scrollText      \u2022      $scrollText" }
+    val footerHeight = if (isPortrait) 24.dp else 28.dp
 
     Box(
         modifier = Modifier
@@ -3786,27 +3829,148 @@ fun ScrollingFooter(
             .height(footerHeight),
         contentAlignment = Alignment.CenterStart
     ) {
-        Canvas(
+        AndroidView(
+            factory = { ctx ->
+                SeamlessTickerView(ctx)
+            },
+            update = { ticker ->
+                ticker.bind(
+                    text = marqueeText,
+                    textColor = textColor,
+                    textSizeSp = textSizeSp,
+                    isBold = true,
+                    speedDpPerSec = if (isPortrait) 24f else 28f
+                )
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
-        ) {
-            val baselineY = (size.height - textLayoutResult.size.height) / 2f
-            var x = -travelPx
-            while (x < size.width + totalDistance) {
-                drawText(
-                    textLayoutResult = textLayoutResult,
-                    topLeft = Offset(x, baselineY)
-                )
-                x += totalDistance
+                .clipToBounds()
+        )
+    }
+}
+
+private class SeamlessTickerView(context: Context) : FrameLayout(context) {
+    private val text1 = TextView(context)
+    private val text2 = TextView(context)
+    private var animator: ValueAnimator? = null
+    private var cachedText: String = ""
+    private var cachedSpeedDpPerSec: Float = -1f
+    private var cachedTextColor: Int = Int.MIN_VALUE
+    private var cachedTextSizeSp: Float = -1f
+    private var cachedIsBold: Boolean = false
+    private var currentOffset: Float = 0f
+    private var lastDistance: Float = 1f
+
+    init {
+        clipToPadding = true
+        clipChildren = true
+        setWillNotDraw(true)
+
+        val lp = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT)
+        text1.layoutParams = lp
+        text2.layoutParams = lp
+        addView(text1)
+        addView(text2)
+    }
+
+    fun bind(
+        text: String,
+        textColor: Int,
+        textSizeSp: Float,
+        isBold: Boolean,
+        speedDpPerSec: Float
+    ) {
+        val styleChanged =
+            cachedTextColor != textColor || cachedTextSizeSp != textSizeSp || cachedIsBold != isBold
+        if (styleChanged) {
+            cachedTextColor = textColor
+            cachedTextSizeSp = textSizeSp
+            cachedIsBold = isBold
+            configureTextView(text1, textColor, textSizeSp, isBold)
+            configureTextView(text2, textColor, textSizeSp, isBold)
+        }
+
+        val textChanged = cachedText != text
+        val speedChanged = cachedSpeedDpPerSec != speedDpPerSec
+        if (textChanged) {
+            cachedText = text
+            text1.text = text
+            text2.text = text
+        }
+        if (speedChanged) {
+            cachedSpeedDpPerSec = speedDpPerSec
+        }
+        if (textChanged || speedChanged || styleChanged) {
+            restartAnimation(preservePhase = true)
+        } else if (animator?.isRunning != true) {
+            restartAnimation(preservePhase = true)
+        }
+    }
+
+    private fun configureTextView(tv: TextView, color: Int, sizeSp: Float, isBold: Boolean) {
+        tv.setTextColor(color)
+        tv.textSize = sizeSp
+        tv.setTypeface(tv.typeface, if (isBold) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+        tv.isSingleLine = true
+        tv.includeFontPadding = false
+        tv.gravity = android.view.Gravity.CENTER_VERTICAL
+        tv.setHorizontallyScrolling(true)
+        tv.setLayerType(LAYER_TYPE_HARDWARE, null)
+    }
+
+    private fun restartAnimation(preservePhase: Boolean) {
+        post {
+            val previousOffset = currentOffset
+            animator?.cancel()
+            val w = width.toFloat()
+            if (w <= 0f) return@post
+
+            val textWidth = text1.paint.measureText(text1.text?.toString().orEmpty()).coerceAtLeast(1f)
+            val gap = 56f * resources.displayMetrics.density
+            val distance = textWidth + gap
+            lastDistance = distance
+            val speedPxPerSec = (cachedSpeedDpPerSec.coerceAtLeast(8f)) * resources.displayMetrics.density
+            val durationMs = ((distance / speedPxPerSec) * 1000f).toLong().coerceAtLeast(1L)
+            val startFraction = if (preservePhase) {
+                ((previousOffset % distance) / distance).coerceIn(0f, 1f)
+            } else {
+                0f
             }
-            if (x < size.width) {
-                drawText(
-                    textLayoutResult = textLayoutResult,
-                    topLeft = Offset(x, baselineY)
-                )
+
+            val updatePositions: (Float) -> Unit = { offset ->
+                currentOffset = offset
+                text1.translationX = -offset
+                text2.translationX = distance - offset
+            }
+            updatePositions(distance * startFraction)
+
+            animator = ValueAnimator.ofFloat(0f, distance).apply {
+                duration = durationMs
+                repeatCount = ValueAnimator.INFINITE
+                repeatMode = ValueAnimator.RESTART
+                interpolator = LinearInterpolator()
+                addUpdateListener { va ->
+                    updatePositions(va.animatedValue as Float)
+                }
+                start()
+                currentPlayTime = (durationMs * startFraction).toLong().coerceIn(0L, durationMs)
             }
         }
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        if (w > 0 && oldw > 0 && w != oldw) {
+            // Width changes during startup/composition can otherwise cause visible jumps.
+            restartAnimation(preservePhase = true)
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        animator?.cancel()
+        animator = null
+        super.onDetachedFromWindow()
     }
 }
 

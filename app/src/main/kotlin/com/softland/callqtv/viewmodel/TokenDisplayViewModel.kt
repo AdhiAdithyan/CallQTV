@@ -46,6 +46,9 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
 
     private val _localAdFiles = MutableLiveData<List<AdFileEntity>>(emptyList())
     val localAdFiles: LiveData<List<AdFileEntity>> = _localAdFiles
+    // Monotonic token to force AdArea remount after each config API cycle.
+    private val _adAreaReloadToken = MutableLiveData(0)
+    val adAreaReloadToken: LiveData<Int> = _adAreaReloadToken
 
     private val _connectedDevices = MutableLiveData<List<ConnectedDeviceEntity>>(emptyList())
     val connectedDevices: LiveData<List<ConnectedDeviceEntity>> = _connectedDevices
@@ -318,6 +321,7 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                 }
             } finally {
                 _isLoading.value = false
+                _adAreaReloadToken.value = (_adAreaReloadToken.value ?: 0) + 1
                 // Connected devices may have changed; invalidate keypad serial cache so that
                 // subsequent keypad validation uses the latest mapping.
                 mqttViewModel.invalidateKeypadSerialCache()

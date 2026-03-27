@@ -131,22 +131,6 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 delay(1000)
                 connectTime++
                 _connectTimer.postValue(connectTime)
-                
-                // If attempt reaches 30s without success, force a fresh retry loop
-                // ONLY if there isn't already a manual retry scheduled for all brokers.
-                if (connectTime >= 30) {
-                    val anyRetryScheduled = retryJobs.values.any { it.isActive }
-                    if (!anyRetryScheduled) {
-                        android.util.Log.w("MqttViewModel", "MQTT Connection attempt timed out after 30s; forcing a fresh retry.")
-                        FileLogger.logError(getApplication(), "MQTT_RETRY", "Global 30s timeout triggered; no active per-broker retries found. Restarting.")
-                        retryConnect()
-                    } else {
-                        android.util.Log.d("MqttViewModel", "Global 30s timeout reached, but per-broker retries are already scheduled. Skipping.")
-                    }
-                    // Reset timer window after check.
-                    connectTime = 0
-                    _connectTimer.postValue(0)
-                }
             }
         }
     }
@@ -325,6 +309,10 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 override fun onMessageReceived(topic: String, message: String) {
+                    // Treat any payload traffic on subscribed topic as broker liveness.
+                    // This prevents false "disconnected" flips when payload is non-business.
+                    lastMessageAtByServerUri[serverUri] = System.currentTimeMillis()
+                    staleTrafficStrikeByServerUri[serverUri] = 0
                     if (isLicenseExpired) return
                     // Enqueue ALL raw payloads first, without any filtering.
                     val trimmed = message.trim()
@@ -649,13 +637,15 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         if (retryJobs[serverUri]?.isActive == true) return
 
         val attempt = retryAttempts[serverUri] ?: 0
-        // Tiered backoff: 5s, 10s, 20s, 40s, max 60s
+        // Faster initial backoff for first-time connect:
+        // 1s, 3s, 7s, 15s, then max 30s.
+        // This reduces perceived startup delay while still avoiding retry storms.
         val delayMs = when {
-            attempt == 0 -> 5000L
-            attempt == 1 -> 10000L
-            attempt == 2 -> 20000L
-            attempt == 3 -> 40000L
-            else -> 60000L
+            attempt == 0 -> 1000L
+            attempt == 1 -> 3000L
+            attempt == 2 -> 7000L
+            attempt == 3 -> 15000L
+            else -> 30000L
         }
 
         retryJobs[serverUri] = viewModelScope.launch {
@@ -993,15 +983,23 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                     if (!manager.isConnected()) continue
                     val last = lastMessageAtByServerUri[serverUri] ?: 0L
                     if (last == 0L) continue
-                    if (now - last > MQTT_MESSAGE_LIVENESS_TIMEOUT_MS) {
-                        val strikes = (staleTrafficStrikeByServerUri[serverUri] ?: 0) + 1
+                    val silenceMs = now - last
+                    if (silenceMs > MQTT_MESSAGE_LIVENESS_TIMEOUT_MS) {
+                        // Count stale "strikes" by full timeout windows, not every watchdog tick.
+                        // Example with 30s timeout: 1 strike at >30s, 2 at >60s, 3 at >90s, 4 at >120s.
+                        val strikes = (silenceMs / MQTT_MESSAGE_LIVENESS_TIMEOUT_MS).toInt()
                         staleTrafficStrikeByServerUri[serverUri] = strikes
+                        android.util.Log.d(
+                            "MqttLivenessDebug",
+                            "server=$serverUri silenceMs=$silenceMs strikeWindow=$strikes/" +
+                                "$MQTT_LIVENESS_STALE_STRIKES_BEFORE_RECONNECT connected=${manager.isConnected()}"
+                        )
                         if (strikes >= MQTT_LIVENESS_STALE_STRIKES_BEFORE_RECONNECT) {
                             forceReconnectDueToStaleTraffic(serverUri)
                         } else {
                             android.util.Log.d(
                                 "MqttViewModel",
-                                "Stale MQTT traffic for $serverUri (${now - last}ms). " +
+                                "Stale MQTT traffic for $serverUri (${silenceMs}ms). " +
                                     "Strike $strikes/$MQTT_LIVENESS_STALE_STRIKES_BEFORE_RECONNECT; skipping reconnect."
                             )
                         }
