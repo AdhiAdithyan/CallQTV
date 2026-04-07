@@ -57,14 +57,14 @@ fun VoiceInitializationDialog(isVisible: Boolean) {
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(0.62f)
+                    .fillMaxWidth(0.82f)
                     .wrapContentHeight()
                     .background(Color(0xFF102027), RoundedCornerShape(16.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
                 ) {
                     CircularProgressIndicator(color = Color(0xFF4DD0E1))
                     Spacer(modifier = Modifier.height(12.dp))
@@ -73,15 +73,17 @@ fun VoiceInitializationDialog(isVisible: Boolean) {
                         color = Color.White,
                         style = MaterialTheme.typography.titleSmall,
                         textAlign = TextAlign.Center,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        maxLines = 2,
+                        overflow = TextOverflow.Clip
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "Configuration already loaded",
                         color = Color(0xFFB2DFDB),
                         style = MaterialTheme.typography.bodySmall,
-                        textAlign = TextAlign.Center
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Clip
                     )
                 }
             }

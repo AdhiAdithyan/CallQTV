@@ -1,6 +1,9 @@
 package com.softland.callqtv.viewmodel
 
 import android.app.Application
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -614,8 +617,9 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 current[serverUri] = isConnected
                 _connectionStatusMap.postValue(current)
                 val now = System.currentTimeMillis()
+                val livenessTimeoutMs = getMqttLivenessTimeoutMs()
                 val hasRecentTraffic = lastMessageAtByServerUri.values.any { ts ->
-                    now - ts <= MQTT_MESSAGE_LIVENESS_TIMEOUT_MS
+                    now - ts <= livenessTimeoutMs
                 }
                 // BLUCON should be considered connected if ANY configured broker is connected
                 // or if we are still receiving recent MQTT traffic.
@@ -647,16 +651,28 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         if (retryJobs[serverUri]?.isActive == true) return
 
         val attempt = retryAttempts[serverUri] ?: 0
+        val lowNetwork = isLowBandwidthNetwork()
         // Aggressive first-time backoff for faster initial connect:
         // 0s, 1s, 2s, 4s, 8s, then max 12s.
         // Keeps startup responsive while still adding bounded spacing.
-        val delayMs = when {
-            attempt == 0 -> 0L
-            attempt == 1 -> 1000L
-            attempt == 2 -> 2000L
-            attempt == 3 -> 4000L
-            attempt == 4 -> 8000L
-            else -> 12000L
+        val delayMs = if (lowNetwork) {
+            when {
+                attempt == 0 -> 0L
+                attempt == 1 -> 3000L
+                attempt == 2 -> 6000L
+                attempt == 3 -> 12000L
+                attempt == 4 -> 20000L
+                else -> 30000L
+            }
+        } else {
+            when {
+                attempt == 0 -> 0L
+                attempt == 1 -> 1000L
+                attempt == 2 -> 2000L
+                attempt == 3 -> 4000L
+                attempt == 4 -> 8000L
+                else -> 12000L
+            }
         }
 
         retryJobs[serverUri] = viewModelScope.launch {
@@ -1052,28 +1068,30 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
             while (isActive) {
                 delay(1000L)
                 val now = System.currentTimeMillis()
+                val timeoutMs = getMqttLivenessTimeoutMs()
+                val strikeThreshold = getMqttStaleStrikeThreshold()
                 for ((serverUri, manager) in managers.toMap()) {
                     if (!manager.isConnected()) continue
                     val last = lastMessageAtByServerUri[serverUri] ?: 0L
                     if (last == 0L) continue
                     val silenceMs = now - last
-                    if (silenceMs > MQTT_MESSAGE_LIVENESS_TIMEOUT_MS) {
+                    if (silenceMs > timeoutMs) {
                         // Count stale "strikes" by full timeout windows, not every watchdog tick.
                         // Example with 30s timeout: 1 strike at >30s, 2 at >60s, 3 at >90s, 4 at >120s.
-                        val strikes = (silenceMs / MQTT_MESSAGE_LIVENESS_TIMEOUT_MS).toInt()
+                        val strikes = (silenceMs / timeoutMs).toInt()
                         staleTrafficStrikeByServerUri[serverUri] = strikes
                         android.util.Log.d(
                             "MqttLivenessDebug",
                             "server=$serverUri silenceMs=$silenceMs strikeWindow=$strikes/" +
-                                "$MQTT_LIVENESS_STALE_STRIKES_BEFORE_RECONNECT connected=${manager.isConnected()}"
+                                "$strikeThreshold connected=${manager.isConnected()} lowNetwork=${isLowBandwidthNetwork()}"
                         )
-                        if (strikes >= MQTT_LIVENESS_STALE_STRIKES_BEFORE_RECONNECT) {
+                        if (strikes >= strikeThreshold) {
                             forceReconnectDueToStaleTraffic(serverUri)
                         } else {
                             android.util.Log.d(
                                 "MqttViewModel",
                                 "Stale MQTT traffic for $serverUri (${silenceMs}ms). " +
-                                    "Strike $strikes/$MQTT_LIVENESS_STALE_STRIKES_BEFORE_RECONNECT; skipping reconnect."
+                                    "Strike $strikes/$strikeThreshold; skipping reconnect."
                             )
                         }
                     } else {
@@ -1089,14 +1107,15 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         if (!staleReconnectInFlight.add(serverUri)) return
         viewModelScope.launch(Dispatchers.IO) {
             try {
+                val timeoutMs = getMqttLivenessTimeoutMs()
                 android.util.Log.w(
                     "MqttViewModel",
-                    "No MQTT traffic for $serverUri for >${MQTT_MESSAGE_LIVENESS_TIMEOUT_MS / 1000}s; forcing reconnect"
+                    "No MQTT traffic for $serverUri for >${timeoutMs / 1000}s; forcing reconnect"
                 )
                 FileLogger.logError(
                     getApplication(),
                     "MqttLiveness",
-                    "No MQTT traffic for $serverUri for >${MQTT_MESSAGE_LIVENESS_TIMEOUT_MS / 1000}s; forcing reconnect"
+                    "No MQTT traffic for $serverUri for >${timeoutMs / 1000}s; forcing reconnect"
                 )
                 incrementMqttRetryAttemptCounter(serverUri)
                 lastMessageAtByServerUri.remove(serverUri)
@@ -1111,7 +1130,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                     _connectionStatusMap.postValue(current)
                     val now = System.currentTimeMillis()
                     val hasRecentTraffic = lastMessageAtByServerUri.values.any { ts ->
-                        now - ts <= MQTT_MESSAGE_LIVENESS_TIMEOUT_MS
+                        now - ts <= timeoutMs
                     }
                     _connectionStatus.postValue(current.values.any { it } || hasRecentTraffic)
                 }
@@ -1135,10 +1154,44 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     companion object {
-        private const val MQTT_MESSAGE_LIVENESS_TIMEOUT_MS = 40_000L
+        private const val MQTT_MESSAGE_LIVENESS_TIMEOUT_MS = 120_000L
         private const val MQTT_LIVENESS_STALE_STRIKES_BEFORE_RECONNECT = 4
+        private const val MQTT_MESSAGE_LIVENESS_TIMEOUT_MS_LOW_NETWORK = 180_000L
+        private const val MQTT_LIVENESS_STALE_STRIKES_BEFORE_RECONNECT_LOW_NETWORK = 6
         private const val CONFIG_REFRESH_DEBOUNCE_MS = 15_000L
         private const val INDICATOR_STALE_TIMEOUT_MS = 300_000L
+    }
+
+    private fun isLowBandwidthNetwork(): Boolean {
+        return try {
+            val cm = getApplication<Application>()
+                .getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                ?: return false
+            val network = cm.activeNetwork ?: return false
+            val caps = cm.getNetworkCapabilities(network) ?: return false
+            val downKbps = caps.linkDownstreamBandwidthKbps
+            val onCellular = caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+            val downIsLow = downKbps in 1..4_000
+            onCellular || downIsLow
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun getMqttLivenessTimeoutMs(): Long {
+        return if (isLowBandwidthNetwork()) {
+            MQTT_MESSAGE_LIVENESS_TIMEOUT_MS_LOW_NETWORK
+        } else {
+            MQTT_MESSAGE_LIVENESS_TIMEOUT_MS
+        }
+    }
+
+    private fun getMqttStaleStrikeThreshold(): Int {
+        return if (isLowBandwidthNetwork()) {
+            MQTT_LIVENESS_STALE_STRIKES_BEFORE_RECONNECT_LOW_NETWORK
+        } else {
+            MQTT_LIVENESS_STALE_STRIKES_BEFORE_RECONNECT
+        }
     }
 
     private fun requestConfigRefresh(reason: String) {

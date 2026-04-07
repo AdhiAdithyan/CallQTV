@@ -5,6 +5,8 @@ package com.softland.callqtv.ui
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -104,6 +106,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 import android.graphics.Color as AndroidColor
+import android.graphics.Color as AndroidGraphicsColor
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.DialogProperties
 import androidx.media3.common.MediaItem
@@ -136,12 +139,15 @@ import android.util.Log
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.coroutines.resume
 import java.net.URLConnection
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 class TokenDisplayActivity : ComponentActivity() {
 
@@ -255,6 +261,26 @@ class TokenDisplayActivity : ComponentActivity() {
                 ActivityCompat.requestPermissions(this, permissions, 1001)
             }
         }
+    }
+}
+
+private object UiPerfProbe {
+    private val lastTokenUiUpdateAtMs = AtomicLong(0L)
+
+    fun markTokenUiUpdated(counterKey: String, tokenLabel: String) {
+        val now = System.currentTimeMillis()
+        lastTokenUiUpdateAtMs.set(now)
+        Log.i("UiPerfProbe", "TOKEN_UI_UPDATED counter=$counterKey token=$tokenLabel at=$now")
+    }
+
+    fun logAdEvent(event: String, adPath: String) {
+        val now = System.currentTimeMillis()
+        val lastTokenAt = lastTokenUiUpdateAtMs.get()
+        val delta = if (lastTokenAt > 0L) now - lastTokenAt else -1L
+        Log.i(
+            "UiPerfProbe",
+            "AD_EVENT event=$event deltaFromLastTokenMs=$delta at=$now ad=${adPath.take(120)}"
+        )
     }
 }
 
@@ -498,6 +524,7 @@ fun TokenDisplayScreen(
     }
     var reconnectUiSeconds by remember { mutableIntStateOf(0) }
     var reconnectDisplayTry by remember { mutableIntStateOf(1) }
+    val effectiveRetryAttempt = maxOf(reconnectDisplayTry, mqttRetryAttempt.coerceAtLeast(1))
     LaunchedEffect(mqttRetryAttempt, brokerConnected, showMqttRetryDialog) {
         if (!brokerConnected && !showMqttRetryDialog) {
             reconnectDisplayTry = maxOf(reconnectDisplayTry, mqttRetryAttempt.coerceAtLeast(1))
@@ -579,109 +606,115 @@ fun TokenDisplayScreen(
 
     val latestConfigState = rememberUpdatedState(config)
     val latestCountersState = rememberUpdatedState(counters)
+    val announcementMutex = remember { Mutex() }
 
     LaunchedEffect(Unit) {
         mqttViewModel.tokenUpdateChannel.receiveAsFlow().collect { pair ->
-            try {
-                val (counterIdOrName, tokenLabel) = pair
+            val currentConfig = latestConfigState.value
+            val currentCounters = latestCountersState.value
 
-                val currentConfig = latestConfigState.value
-                val currentCounters = latestCountersState.value
+            launch(Dispatchers.Default) {
+                try {
+                    val (counterIdOrName, tokenLabel) = pair
 
-                // 1. Drop any tokens whose counter does NOT match a buttonIndex
-                val mqttCounterIdx = counterIdOrName.toIntOrNull()
-                val actualCounter = currentCounters.find {
-                    it.buttonIndex != null && it.buttonIndex == mqttCounterIdx
-                }
-
-                if (actualCounter == null) {
-                    android.util.Log.d(
-                        "TokenDisplay",
-                        "Dropping token '$tokenLabel' for unknown counter '$counterIdOrName'"
-                    )
-                    return@collect
-                }
-
-                // 2. Use a canonical storage key so the same physical counter always shares history,
-                //    even if MQTT uses different identifiers (id, name, button index).
-                val storageKey =
-                    actualCounter.counterId?.trim()?.takeIf { it.isNotBlank() }
-                        ?: actualCounter.name?.trim()?.takeIf { it.isNotBlank() }
-                        ?: actualCounter.defaultName?.trim()?.takeIf { it.isNotBlank() }
-                        ?: actualCounter.buttonIndex?.toString()
-                        ?: counterIdOrName.trim()
-                val btnKey = actualCounter.buttonIndex?.toString()?.trim()
-
-                // Rule: If this exact token is already at first position and the last same
-                // announcement is within 10s, skip BOTH announcement and UI update.
-                if (mqttViewModel.shouldSkipTopTokenWithin10s(storageKey, tokenLabel)) {
-                    return@collect
-                }
-
-                // Deduplicate: skip chime/TTS if we already announced this token call recently
-                if (mqttViewModel.isAlreadyAnnounced(storageKey, tokenLabel)) {
-                    return@collect
-                }
-
-                // Mark before playing any sound so duplicate messages don't re-play
-                mqttViewModel.markAsAnnounced(storageKey, tokenLabel)
-                if (btnKey != null) mqttViewModel.markAsAnnounced(btnKey, tokenLabel)
-
-                // Show token in UI at announcement start (not after completion).
-                val isNewOrMoved = mqttViewModel.processTokenUpdateForKeys(storageKey, tokenLabel, btnKey)
-                if (!isNewOrMoved) return@collect
-
-                // Signal re-call by updating timestamp (blink restart) at announcement start.
-                blinkTriggers[storageKey] = System.currentTimeMillis()
-
-                // Keep sequential announcement handling and bounded timeout so idle-state
-                // TTS does not stall the pipeline for long periods.
-
-                // Brief pause to keep speech/chime pacing natural.
-                delay(50)
-
-                // Always play notification chime first.
-                val soundKey = ThemeColorManager.getNotificationSoundKey(context)
-                playTokenChime(
-                    context = context,
-                    soundKey = soundKey,
-                    tokenAudioUrl = currentConfig?.tokenAudioUrl,
-                    counterAudioUrl = actualCounter.audioUrl
-                )
-
-                if (currentConfig?.enableTokenAnnouncement == true) {
-                    val displayName =
-                        (actualCounter.name?.takeIf { it.isNotBlank() }
-                            ?: actualCounter.defaultName?.takeIf { it.isNotBlank() }
-                            ?: "Counter ${actualCounter.buttonIndex}")
-
-                    val announcementCounterName =
-                        if (currentConfig.enableCounterAnnouncement == true) displayName else ""
-
-                    val counterCode = actualCounter.code.orEmpty().trim().ifBlank {
-                        actualCounter.defaultCode.orEmpty().trim()
+                    // 1. Drop any tokens whose counter does NOT match a buttonIndex
+                    val mqttCounterIdx = counterIdOrName.toIntOrNull()
+                    val actualCounter = currentCounters.find {
+                        it.buttonIndex != null && it.buttonIndex == mqttCounterIdx
                     }
-                    val usePrefix = currentConfig.enableCounterPrefix != false
-                    val tokenLabelWithCode =
-                        if (usePrefix && counterCode.isNotBlank()) "$counterCode-$tokenLabel" else tokenLabel
 
-                    // Cap announcement wait to avoid long idle wake-up delays.
-                    withTimeoutOrNull(6000) {
-                        suspendCancellableCoroutine<Unit> { continuation ->
-                            TokenAnnouncer.announceToken(
+                    if (actualCounter == null) {
+                        android.util.Log.d(
+                            "TokenDisplay",
+                            "Dropping token '$tokenLabel' for unknown counter '$counterIdOrName'"
+                        )
+                        return@launch
+                    }
+
+                    // 2. Use a canonical storage key so the same physical counter always shares history,
+                    //    even if MQTT uses different identifiers (id, name, button index).
+                    val storageKey =
+                        actualCounter.counterId?.trim()?.takeIf { it.isNotBlank() }
+                            ?: actualCounter.name?.trim()?.takeIf { it.isNotBlank() }
+                            ?: actualCounter.defaultName?.trim()?.takeIf { it.isNotBlank() }
+                            ?: actualCounter.buttonIndex?.toString()
+                            ?: counterIdOrName.trim()
+                    val btnKey = actualCounter.buttonIndex?.toString()?.trim()
+
+                    // Rule: If this exact token is already at first position and the last same
+                    // announcement is within 10s, skip BOTH announcement and UI update.
+                    if (mqttViewModel.shouldSkipTopTokenWithin10s(storageKey, tokenLabel)) {
+                        return@launch
+                    }
+
+                    // Deduplicate: skip chime/TTS if we already announced this token call recently
+                    if (mqttViewModel.isAlreadyAnnounced(storageKey, tokenLabel)) {
+                        return@launch
+                    }
+
+                    // Mark before playing any sound so duplicate messages don't re-play
+                    mqttViewModel.markAsAnnounced(storageKey, tokenLabel)
+                    if (btnKey != null) mqttViewModel.markAsAnnounced(btnKey, tokenLabel)
+
+                    // Token list update is independent from ad/player pipeline.
+                    val isNewOrMoved =
+                        mqttViewModel.processTokenUpdateForKeys(storageKey, tokenLabel, btnKey)
+                    if (!isNewOrMoved) return@launch
+
+                    withContext(Dispatchers.Main.immediate) {
+                        // Signal re-call by updating timestamp (blink restart) at update time.
+                        blinkTriggers[storageKey] = System.currentTimeMillis()
+                    }
+                    UiPerfProbe.markTokenUiUpdated(storageKey, tokenLabel)
+
+                    // Keep audio announcements sequential, but do not block token population.
+                    announcementMutex.withLock {
+                        delay(50)
+
+                        val soundKey = ThemeColorManager.getNotificationSoundKey(context)
+                        withContext(Dispatchers.Main.immediate) {
+                            playTokenChime(
                                 context = context,
-                                audioLanguage = currentConfig.audioLanguage,
-                                counterName = announcementCounterName,
-                                tokenLabel = tokenLabelWithCode,
-                                onDone = {
-                                    if (continuation.isActive) continuation.resume(Unit)
-                                }
+                                soundKey = soundKey,
+                                tokenAudioUrl = currentConfig?.tokenAudioUrl,
+                                counterAudioUrl = actualCounter.audioUrl
                             )
                         }
+
+                        if (currentConfig?.enableTokenAnnouncement == true) {
+                            val displayName =
+                                (actualCounter.name?.takeIf { it.isNotBlank() }
+                                    ?: actualCounter.defaultName?.takeIf { it.isNotBlank() }
+                                    ?: "Counter ${actualCounter.buttonIndex}")
+
+                            val announcementCounterName =
+                                if (currentConfig.enableCounterAnnouncement == true) displayName else ""
+
+                            val counterCode = actualCounter.code.orEmpty().trim().ifBlank {
+                                actualCounter.defaultCode.orEmpty().trim()
+                            }
+                            val usePrefix = currentConfig.enableCounterPrefix != false
+                            val tokenLabelWithCode =
+                                if (usePrefix && counterCode.isNotBlank()) "$counterCode-$tokenLabel" else tokenLabel
+
+                            withTimeoutOrNull(6000) {
+                                suspendCancellableCoroutine<Unit> { continuation ->
+                                    TokenAnnouncer.announceToken(
+                                        context = context,
+                                        audioLanguage = currentConfig.audioLanguage,
+                                        counterName = announcementCounterName,
+                                        tokenLabel = tokenLabelWithCode,
+                                        onDone = {
+                                            if (continuation.isActive) continuation.resume(Unit)
+                                        }
+                                    )
+                                }
+                            }
+                        }
                     }
+                } finally {
+                    mqttViewModel.announcementQueueSize.decrementAndGet()
                 }
-            } finally {
-                mqttViewModel.announcementQueueSize.decrementAndGet()
             }
         }
     }
@@ -813,7 +846,7 @@ fun TokenDisplayScreen(
             text = { 
                 Column {
                     Text(
-                        "The display could not connect to the messaging server (Attempt $mqttRetryAttempt).\n" +
+                        "The display could not connect to the messaging server (Attempt $effectiveRetryAttempt).\n" +
                         "Please check your network or broker settings, then tap Retry.",
                         style = MaterialTheme.typography.bodyMedium
                     )
@@ -831,7 +864,8 @@ fun TokenDisplayScreen(
                         // User-initiated retry: close dialog and trigger reconnect
                         showMqttRetryDialog = false
                         mqttRetryShownAt = null
-                        mqttViewModel.retryConnect(resetAttempts = true)
+                        reconnectDisplayTry = maxOf(reconnectDisplayTry + 1, mqttRetryAttempt.coerceAtLeast(1) + 1)
+                        mqttViewModel.retryConnect(resetAttempts = false)
                     }
                 ) {
                     Text("Retry Connection")
@@ -1495,8 +1529,11 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
 
     // visibleAd stays on-screen until next ad is actually ready.
     var visibleAd by remember(orderedAds) { mutableStateOf(orderedAds.getOrNull(0)) }
+    // Strict round-robin cursor for predictable 1->2->3->1 ordering.
+    var visibleAdIdx by remember(orderedAds) { mutableIntStateOf(0) }
     // candidateAd is preloaded in background; we switch only after its onReady callback.
     var candidateAd by remember(orderedAds) { mutableStateOf<AdFileEntity?>(null) }
+    var candidateAdIdx by remember(orderedAds) { mutableIntStateOf(-1) }
     var candidateLoadToken by remember(orderedAds) { mutableIntStateOf(0) }
     var visibleReplayToken by remember(orderedAds) { mutableIntStateOf(0) }
     // Keep one stable player instance active; alternating players without true preloading
@@ -1515,6 +1552,20 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
                 sharedYoutubeWebView.destroy()
             } catch (_: Exception) {
             }
+        }
+    }
+
+    LaunchedEffect(orderedAds) {
+        if (orderedAds.isEmpty()) {
+            visibleAd = null
+            visibleAdIdx = 0
+            candidateAd = null
+            candidateAdIdx = -1
+        } else {
+            visibleAdIdx = visibleAdIdx.coerceIn(0, orderedAds.lastIndex)
+            visibleAd = orderedAds[visibleAdIdx]
+            candidateAd = null
+            candidateAdIdx = -1
         }
     }
 
@@ -1546,6 +1597,8 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
                 lc.contains("youtu.be") ||
                 lc.contains("youtube-nocookie.com") -> AdMediaType.YouTube
             isAdVideo(path) -> AdMediaType.Video
+            isAdImage(path) -> AdMediaType.Image
+            lc.startsWith("http://") || lc.startsWith("https://") -> AdMediaType.Web
             else -> AdMediaType.Image
         }
     }
@@ -1566,23 +1619,17 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
             if (!stillSame) return
         }
 
-        val current = visibleAd
-        val currentIdx = if (current != null) {
-            orderedAds.indexOfFirst { it.id == current.id && it.position == current.position }
-                .takeIf { it >= 0 } ?: orderedAds.indexOfFirst { it.filePath == current.filePath }
-        } else -1
-        var nextIdx = if (currentIdx >= 0) (currentIdx + 1) % orderedAds.size else 0
-        if (orderedAds.size > 1 && current != null && orderedAds[nextIdx].filePath == current.filePath) {
-            nextIdx = (nextIdx + 1) % orderedAds.size
-        }
+        val currentIdx = visibleAdIdx.coerceIn(0, orderedAds.lastIndex)
+        val nextIdx = (currentIdx + 1) % orderedAds.size
         val next = orderedAds[nextIdx]
         Log.i(
             "AdLoop",
-            "triggerNext current[${currentIdx.coerceAtLeast(0)}]=${current?.filePath?.take(90)} -> next[$nextIdx]=${next.filePath.take(90)}"
+            "triggerNext current[${currentIdx.coerceAtLeast(0)}]=${visibleAd?.filePath?.take(90)} -> next[$nextIdx]=${next.filePath.take(90)}"
         )
         // Preload the next ad first, keep current ad on screen meanwhile.
         candidateLoadToken += 1
         candidateAd = next
+        candidateAdIdx = nextIdx
     }
 
     fun triggerNextFrom(ad: AdFileEntity, expectedCurrentAd: AdFileEntity? = null) {
@@ -1593,22 +1640,20 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
             if (!stillSame) return
         }
         val currentIdx = orderedAds.indexOfFirst { it.id == ad.id && it.position == ad.position }
-            .takeIf { it >= 0 } ?: orderedAds.indexOfFirst { it.filePath == ad.filePath }
-        var nextIdx = if (currentIdx >= 0) (currentIdx + 1) % orderedAds.size else 0
-        if (orderedAds.size > 1 && orderedAds[nextIdx].filePath == ad.filePath) {
-            nextIdx = (nextIdx + 1) % orderedAds.size
-        }
+            .takeIf { it >= 0 } ?: visibleAdIdx.coerceIn(0, orderedAds.lastIndex)
+        val nextIdx = (currentIdx + 1) % orderedAds.size
         candidateLoadToken += 1
         candidateAd = orderedAds[nextIdx]
+        candidateAdIdx = nextIdx
     }
 
-    // Ensure image ads always advance by configured interval so the full ad list
+    // Ensure non-ended media types always advance by configured interval so the full ad list
     // loops continuously (videos/YouTube already advance via ended/error callbacks).
     LaunchedEffect(visibleAd?.id, visibleAd?.position, orderedAds.size, intervalSeconds) {
         val current = visibleAd ?: return@LaunchedEffect
         if (orderedAds.isEmpty()) return@LaunchedEffect
         val currentType = mediaTypeCache[current.filePath] ?: fastInferMediaType(current.filePath)
-        if (currentType != AdMediaType.Image) return@LaunchedEffect
+        if (currentType == AdMediaType.Video || currentType == AdMediaType.YouTube) return@LaunchedEffect
 
         delay(intervalSeconds * 1000L)
         triggerNext(expectedCurrentAd = current)
@@ -1636,6 +1681,10 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
                 val ad = state.first
                 if (ad != null) {
                     val mediaType = mediaTypeCache[ad.filePath] ?: fastInferMediaType(ad.filePath)
+                    Log.i(
+                        "AdClassifier",
+                        "VISIBLE type=$mediaType url=${ad.filePath.take(140)}"
+                    )
                     AdUnifiedPlayer(
                         ad = ad,
                         mediaType = mediaType,
@@ -1643,8 +1692,11 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
                         sharedYoutubeWebView = sharedYoutubeWebView,
                         activePlayerIdx = activePlayerIdx,
                         isWmvUnsupportedVideo = ::isWmvUnsupportedVideo,
-                        onReady = { },
+                        onReady = {
+                            UiPerfProbe.logAdEvent("READY", ad.filePath)
+                        },
                         onEnded = {
+                            UiPerfProbe.logAdEvent("ENDED", ad.filePath)
                             triggerNext(expectedCurrentAd = ad)
                             // Only replay when there is a single ad configured.
                             // For multiple ads, enforce round-robin without repeating same ad.
@@ -1652,7 +1704,10 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
                                 visibleReplayToken += 1
                             }
                         },
-                        onError = { triggerNext(expectedCurrentAd = ad) }
+                        onError = {
+                            UiPerfProbe.logAdEvent("ERROR", ad.filePath)
+                            triggerNext(expectedCurrentAd = ad)
+                        }
                     )
                 }
             }
@@ -1663,6 +1718,10 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
             if (preloadAd != null && (visibleAd == null || preloadAd.filePath != visibleAd?.filePath || preloadAd.id != visibleAd?.id)) {
                 val preloadTokenSnapshot = candidateLoadToken
                 val preloadType = mediaTypeCache[preloadAd.filePath] ?: fastInferMediaType(preloadAd.filePath)
+                Log.i(
+                    "AdClassifier",
+                    "PRELOAD type=$preloadType url=${preloadAd.filePath.take(140)}"
+                )
                 if (preloadType == AdMediaType.Image) {
                     Box(
                         modifier = Modifier
@@ -1679,14 +1738,18 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
                             isWmvUnsupportedVideo = ::isWmvUnsupportedVideo,
                             onReady = {
                                 if (preloadTokenSnapshot == candidateLoadToken) {
+                                    UiPerfProbe.logAdEvent("PRELOAD_READY", preloadAd.filePath)
                                     visibleAd = preloadAd
+                                    visibleAdIdx = candidateAdIdx.coerceAtLeast(0)
                                     candidateAd = null
+                                    candidateAdIdx = -1
                                     visibleReplayToken = 0
                                 }
                             },
                             onEnded = { },
                             onError = {
                                 if (preloadTokenSnapshot == candidateLoadToken) {
+                                    UiPerfProbe.logAdEvent("PRELOAD_ERROR", preloadAd.filePath)
                                     triggerNextFrom(preloadAd, expectedCurrentAd = visibleAd)
                                 }
                             }
@@ -1696,7 +1759,9 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
                     // Single-surface strategy for YouTube/video: avoid offscreen playback surfaces.
                     if (preloadTokenSnapshot == candidateLoadToken) {
                         visibleAd = preloadAd
+                        visibleAdIdx = candidateAdIdx.coerceAtLeast(0)
                         candidateAd = null
+                        candidateAdIdx = -1
                         visibleReplayToken = 0
                     }
                 }
@@ -1710,11 +1775,14 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
 // YouTube components replaced by direct WebView implementation per user request to use exact links.
 
 private fun isAdVideo(path: String): Boolean {
-    val lc = path.lowercase().substringBefore("?").substringBefore("#")
-    return lc.endsWith(".mp4") || lc.endsWith(".mkv") || lc.endsWith(".mov") || 
-           lc.endsWith(".3gp") || lc.endsWith(".webm") || lc.endsWith(".avi") || 
-           lc.endsWith(".flv") || lc.endsWith(".ts") || lc.endsWith(".m4v") || 
-           lc.endsWith(".mpg") || lc.endsWith(".mpeg") || lc.endsWith(".m2ts")
+    val lowerFull = path.lowercase()
+    val lc = lowerFull.substringBefore("?").substringBefore("#")
+    return lc.endsWith(".mp4") || lc.endsWith(".mkv") || lc.endsWith(".mov") ||
+           lc.endsWith(".3gp") || lc.endsWith(".webm") || lc.endsWith(".avi") ||
+           lc.endsWith(".flv") || lc.endsWith(".ts") || lc.endsWith(".m4v") ||
+           lc.endsWith(".mpg") || lc.endsWith(".mpeg") || lc.endsWith(".m2ts") ||
+           lc.endsWith(".m3u8") || lc.endsWith(".mpd") || lc.endsWith(".ism") ||
+           lc.endsWith(".isml") || lowerFull.contains(".m3u8") || lowerFull.contains(".mpd")
 }
 
 private fun isAdImage(path: String): Boolean {
@@ -1724,7 +1792,7 @@ private fun isAdImage(path: String): Boolean {
         lc.endsWith(".svg")
 }
 
-enum class AdMediaType { YouTube, Video, Image }
+enum class AdMediaType { YouTube, Video, Image, Web }
 
 private const val PREF_YOUTUBE_AD_MAX_SECONDS = "youtube_ad_max_seconds"
 private const val PREF_YOUTUBE_STRICT_AUTOPLAY = "youtube_strict_autoplay"
@@ -1740,9 +1808,15 @@ private fun resolveAdMediaType(path: String, context: Context): AdMediaType {
         lc.contains("youtube.com") || lc.contains("youtu.be") || lc.contains("youtube-nocookie.com") -> AdMediaType.YouTube
         isAdVideo(path) -> AdMediaType.Video
         isAdImage(path) -> AdMediaType.Image
+        lc.startsWith("http://") || lc.startsWith("https://") -> AdMediaType.Web
         else -> {
             val mime = detectMimeType(path, context)
-            if (mime?.startsWith("video/") == true) AdMediaType.Video else AdMediaType.Image
+            when {
+                mime?.startsWith("video/") == true -> AdMediaType.Video
+                mime?.startsWith("image/") == true -> AdMediaType.Image
+                lc.startsWith("http://") || lc.startsWith("https://") -> AdMediaType.Web
+                else -> AdMediaType.Image
+            }
         }
     }
     // Log for debugging (only to logcat, not FileLogger yet to avoid spam)
@@ -1809,6 +1883,7 @@ fun YouTubeAdPlayer(
     var loadStartedAtMs by remember(activeUrl) { mutableStateOf(0L) }
     var reportedDurationMs by remember(activeUrl) { mutableStateOf<Long?>(null) }
     var dnsFallbackTried by remember(activeUrl) { mutableStateOf(false) }
+    var embedFallbackTried by remember(activeUrl) { mutableStateOf(false) }
     val hardMaxPlaybackMs = remember(activeUrl) {
         // Shorts/embedded pages can sometimes miss ended callbacks on TV WebView.
         // Keep a configurable hard cap so ad rotation never gets stuck.
@@ -1825,6 +1900,7 @@ fun YouTubeAdPlayer(
         context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
             .getBoolean(PREF_YOUTUBE_PLAY_UNTIL_ENDED, true)
     }
+    val isLowBandwidth = remember(activeUrl) { isAdLowBandwidthNetwork(context) }
 
     // Safety timeout: if ad doesn't report ready/ended within 45s, skip it.
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
@@ -1834,20 +1910,46 @@ fun YouTubeAdPlayer(
         Log.i("YouTubeAdPerf", "Start load for url=${activeUrl.take(120)}")
     }
 
+    // Early fallback: page-style YouTube URLs can be slow on some TV WebViews.
+    // If not ready quickly, switch once to a lighter embed URL before the hard timeout.
+    LaunchedEffect(activeUrl, readyReported, terminalEventReported) {
+        if (readyReported || terminalEventReported || embedFallbackTried) return@LaunchedEffect
+        delay(12000)
+        if (readyReported || terminalEventReported || embedFallbackTried) return@LaunchedEffect
+        val embedUrl = nextYouTubeEmbedFallbackUrl(activeUrl)
+        if (!embedUrl.isNullOrBlank() && !embedUrl.equals(activeUrl, ignoreCase = true)) {
+            embedFallbackTried = true
+            Log.w(
+                "YouTubeAdPerf",
+                "Early fallback to embed URL after slow ready: ${embedUrl.take(120)}"
+            )
+            activeUrl = embedUrl
+            readyReported = false
+            terminalEventReported = false
+            reportedDurationMs = null
+            loadStartedAtMs = System.currentTimeMillis()
+        }
+    }
+
     // If YouTube page never becomes visible, skip.
-    // Use a tolerant timeout because some TV WebViews report ready just after 30s.
+    // Use a more tolerant timeout for low-network scenarios.
     LaunchedEffect(activeUrl, readyReported, terminalEventReported) {
         if (readyReported || terminalEventReported) return@LaunchedEffect
-        delay(45000)
+        val readyTimeoutMs = if (isLowBandwidth) 90_000L else 70_000L
+        delay(readyTimeoutMs)
         // Extra grace window to avoid boundary races where ready lands
         // right around timeout expiry.
         if (!readyReported && !terminalEventReported) {
             delay(1500)
         }
         if (!readyReported && !terminalEventReported) {
-            Log.w("YouTubeAdPlayer", "Ready timeout (45s) for YouTube ad: $activeUrl")
+            Log.w("YouTubeAdPlayer", "Ready timeout (${readyTimeoutMs / 1000}s) for YouTube ad: $activeUrl")
             withContext(Dispatchers.IO) {
-                FileLogger.logError(context, "YouTubeAdPlayer", "Ready timeout (45s) for: $activeUrl")
+                FileLogger.logError(
+                    context,
+                    "YouTubeAdPlayer",
+                    "Ready timeout (${readyTimeoutMs / 1000}s) for: $activeUrl"
+                )
             }
             Log.w(
                 "YouTubeAdPerf",
@@ -2343,6 +2445,28 @@ private fun extractYoutubeIdForFallback(url: String): String? {
     return null
 }
 
+private fun nextYouTubeEmbedFallbackUrl(currentUrl: String): String? {
+    val id = extractYoutubeIdForFallback(currentUrl) ?: return null
+    val lower = currentUrl.lowercase()
+    if (lower.contains("/embed/$id")) return null
+    return "https://www.youtube.com/embed/$id?autoplay=1&mute=1&playsinline=1&controls=0&rel=0"
+}
+
+internal fun isAdLowBandwidthNetwork(context: Context): Boolean {
+    return try {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return false
+        val network = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(network) ?: return false
+        val downKbps = caps.linkDownstreamBandwidthKbps
+        val onCellular = caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+        val downIsLow = downKbps in 1..4_000
+        onCellular || downIsLow
+    } catch (_: Exception) {
+        false
+    }
+}
+
 
 @Composable
 fun AdVideoPlayer(videoUrl: String, player: ExoPlayer, onVideoEnded: () -> Unit, onReady: () -> Unit = {}, onError: () -> Unit = {}) {
@@ -2358,6 +2482,7 @@ fun AdVideoPlayer(videoUrl: String, player: ExoPlayer, onVideoEnded: () -> Unit,
     var readyReported by remember(videoUrl) { mutableStateOf(false) }
     var terminalEventReported by remember(videoUrl) { mutableStateOf(false) }
     var loadStartedAtMs by remember(videoUrl) { mutableStateOf(0L) }
+    val isLowBandwidth = remember(videoUrl) { isAdLowBandwidthNetwork(context) }
 
     DisposableEffect(videoUrl, player) {
         val listener = object : Player.Listener {
@@ -2432,7 +2557,20 @@ fun AdVideoPlayer(videoUrl: String, player: ExoPlayer, onVideoEnded: () -> Unit,
         // We only keep lightweight work off-main (MediaItem creation).
         scope.launch(Dispatchers.Default) {
             val mediaItem = try {
-                MediaItem.fromUri(videoUrl)
+                val lower = videoUrl.lowercase()
+                val mimeType = when {
+                    lower.contains(".m3u8") || lower.contains("format=m3u8") -> androidx.media3.common.MimeTypes.APPLICATION_M3U8
+                    lower.contains(".mpd") -> androidx.media3.common.MimeTypes.APPLICATION_MPD
+                    else -> null
+                }
+                if (mimeType != null) {
+                    MediaItem.Builder()
+                        .setUri(videoUrl)
+                        .setMimeType(mimeType)
+                        .build()
+                } else {
+                    MediaItem.fromUri(videoUrl)
+                }
             } catch (e: Exception) {
                 Log.e("AdVideoPlayer", "Failed to create media item: $videoUrl", e)
                 null
@@ -2460,12 +2598,21 @@ fun AdVideoPlayer(videoUrl: String, player: ExoPlayer, onVideoEnded: () -> Unit,
     }
 
     // If ExoPlayer never reaches STATE_READY, treat it as a failed ad and skip.
-    // This complements AdArea's higher-level timeout, but prevents long "hangs".
+    // Keep a longer timeout for low-bandwidth/live links.
     LaunchedEffect(videoUrl) {
-        delay(30000)
+        val isLikelyLive = videoUrl.lowercase().contains(".m3u8") ||
+            videoUrl.lowercase().contains(".mpd") ||
+            videoUrl.lowercase().contains("live")
+        val timeoutMs = when {
+            isLikelyLive && isLowBandwidth -> 120_000L
+            isLikelyLive -> 90_000L
+            isLowBandwidth -> 80_000L
+            else -> 60_000L
+        }
+        delay(timeoutMs)
         if (!readyReported && !terminalEventReported) {
-            Log.w("AdVideoPlayer", "Video not ready within 30s; skipping. url=$videoUrl")
-            FileLogger.logError(context, "AdVideoPlayer", "Video not ready within 30s; skipping. url=$videoUrl")
+            Log.w("AdVideoPlayer", "Video not ready within timeout; skipping. url=$videoUrl")
+            FileLogger.logError(context, "AdVideoPlayer", "Video not ready within timeout; skipping. url=$videoUrl")
             terminalEventReported = true
             latestOnError()
         }
@@ -2476,6 +2623,9 @@ fun AdVideoPlayer(videoUrl: String, player: ExoPlayer, onVideoEnded: () -> Unit,
             PlayerView(context).apply {
                 this.player = player
                 useController = false
+                // Reduce visible black flashes between ad transitions.
+                setKeepContentOnPlayerReset(true)
+                setShutterBackgroundColor(AndroidGraphicsColor.TRANSPARENT)
                 resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
                 isFocusable = false
                 isFocusableInTouchMode = false
@@ -2555,8 +2705,10 @@ object MediaEngine {
         }
 
         val loadControl = DefaultLoadControl.Builder()
-            // Standard buffers (in ms): Min 15s, Max 50s, For Playback 2.5s, After Rebuffer 5s
-            .setBufferDurationsMs(15000, 50000, 2500, 5000)
+            // Faster ad startup for remote/live links:
+            // Min 3s, Max 15s, start playback at 0.8s, rebuffer at 1.5s.
+            .setBufferDurationsMs(3000, 15000, 800, 1500)
+            .setPrioritizeTimeOverSizeThresholds(true)
             .build()
 
         // Enable decoder fallback to improve compatibility on heterogeneous Android TV/SoC decoders.

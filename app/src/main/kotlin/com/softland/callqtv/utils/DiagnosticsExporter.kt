@@ -1,12 +1,19 @@
 package com.softland.callqtv.utils
 
 import android.content.Context
+import android.content.ContentValues
+import android.os.Build
 import android.os.Environment
+import android.provider.MediaStore
 import android.util.Log
 import java.io.File
+import java.io.FileInputStream
+import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 object DiagnosticsExporter {
     private const val TAG = "DiagnosticsExporter"
@@ -19,13 +26,21 @@ object DiagnosticsExporter {
         val message: String
     )
 
+    private data class SharedExportResult(
+        val success: Boolean,
+        val location: String,
+        val message: String
+    )
+
     fun exportConfigSnapshot(context: Context): ExportResult {
         return try {
             // Ensure latest DB backup is generated into CALLQTV_CONFIG/<date>.
             DatabaseBackup.backupDatabase(context)
 
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-            val exportParent = getExportParent(context)
+            val exportParent = File(context.cacheDir, EXPORT_ROOT).apply { mkdirs() }
+            clearDirectoryContents(exportParent)
+            clearSharedDownloadsExports(context)
             val exportDir = File(exportParent, "snapshot_$timestamp").apply { mkdirs() }
             val copiedFiles = mutableListOf<String>()
 
@@ -89,10 +104,14 @@ object DiagnosticsExporter {
                 }
             )
 
+            val zipName = "snapshot_$timestamp.zip"
+            val sharedExport = exportSnapshotZipToSharedDownloads(context, exportDir, zipName)
+            clearDirectoryContents(exportParent)
+
             ExportResult(
-                success = true,
-                path = exportDir.absolutePath,
-                message = "Export created at ${exportDir.absolutePath}"
+                success = sharedExport.success,
+                path = sharedExport.location,
+                message = sharedExport.message
             )
         } catch (e: Exception) {
             Log.e(TAG, "Export failed", e)
@@ -152,6 +171,92 @@ object DiagnosticsExporter {
         destination.parentFile?.mkdirs()
         source.copyTo(destination, overwrite = true)
         copiedFiles.add(destination.absolutePath)
+    }
+
+    private fun clearDirectoryContents(dir: File) {
+        if (!dir.exists()) return
+        dir.listFiles()?.forEach { child ->
+            try {
+                if (child.isDirectory) child.deleteRecursively() else child.delete()
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to delete old export ${child.absolutePath}: ${e.message}")
+            }
+        }
+    }
+
+    private fun clearSharedDownloadsExports(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        try {
+            val resolver = context.contentResolver
+            val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+            val relPath = "${Environment.DIRECTORY_DOWNLOADS}/$EXPORT_ROOT/"
+            val where = "${MediaStore.Downloads.RELATIVE_PATH} = ?"
+            val args = arrayOf(relPath)
+            resolver.delete(collection, where, args)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to clear shared Downloads exports: ${e.message}")
+        }
+    }
+
+    private fun exportSnapshotZipToSharedDownloads(
+        context: Context,
+        sourceDir: File,
+        zipName: String
+    ): SharedExportResult {
+        return try {
+            val resolver = context.contentResolver
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, zipName)
+                put(MediaStore.Downloads.MIME_TYPE, "application/zip")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/$EXPORT_ROOT")
+                }
+            }
+
+            val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+            val itemUri = resolver.insert(collection, values)
+                ?: return SharedExportResult(
+                    success = false,
+                    location = "",
+                    message = "Export failed: unable to create shared Downloads entry"
+                )
+
+            resolver.openOutputStream(itemUri)?.use { out ->
+                zipDirectoryToStream(sourceDir, out)
+            } ?: return SharedExportResult(
+                success = false,
+                location = "",
+                message = "Export failed: unable to open shared Downloads output stream"
+            )
+
+            SharedExportResult(
+                success = true,
+                location = "Downloads/$EXPORT_ROOT/$zipName",
+                message = "Exported ZIP to shared Downloads/$EXPORT_ROOT/$zipName"
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Shared ZIP export failed: ${e.message}")
+            SharedExportResult(
+                success = false,
+                location = "",
+                message = "Export failed: ${e.message ?: "shared storage write error"}"
+            )
+        }
+    }
+
+    private fun zipDirectoryToStream(sourceDir: File, outputStream: OutputStream) {
+        ZipOutputStream(outputStream).use { zos ->
+            sourceDir.walkTopDown()
+                .filter { it.isFile }
+                .forEach { file ->
+                    val relPath = file.relativeTo(sourceDir).invariantSeparatorsPath
+                    zos.putNextEntry(ZipEntry(relPath))
+                    FileInputStream(file).use { input ->
+                        input.copyTo(zos)
+                    }
+                    zos.closeEntry()
+                }
+        }
     }
 }
 
