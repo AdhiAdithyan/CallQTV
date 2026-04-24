@@ -106,13 +106,11 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 import android.graphics.Color as AndroidColor
-import android.graphics.Color as AndroidGraphicsColor
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.DialogProperties
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.PlayerView
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector.ParametersBuilder
@@ -135,6 +133,7 @@ import java.io.BufferedInputStream
 import android.media.MediaPlayer
 import android.media.AudioManager
 import android.media.ToneGenerator
+import android.graphics.Matrix
 import android.util.Log
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -153,6 +152,7 @@ class TokenDisplayActivity : ComponentActivity() {
 
     private lateinit var viewModel: TokenDisplayViewModel
     private lateinit var mqttViewModel: MqttViewModel
+    private var launchInstanceId: Long = 0L
 
     override fun onStart() {
         super.onStart()
@@ -161,6 +161,18 @@ class TokenDisplayActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Belt-and-suspenders guard: if a second instance is created in the same task,
+        // close it immediately and keep the existing one.
+        if (!isTaskRoot && savedInstanceState == null) {
+            Log.w(
+                "TokenDisplayLaunch",
+                "Ignoring duplicate TokenDisplayActivity instance taskId=$taskId action=${intent?.action.orEmpty()}"
+            )
+            finish()
+            return
+        }
+        launchInstanceId = nextLaunchInstanceId()
+        logLaunchOrigin("onCreate", savedInstanceState != null)
         
         // Prevent screen from sleeping while this activity is in the foreground
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -232,9 +244,55 @@ class TokenDisplayActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        android.util.Log.i(
+            "TokenDisplayLaunch",
+            "onDestroy instance=$launchInstanceId taskId=$taskId isFinishing=$isFinishing isDestroyed=$isDestroyed"
+        )
         super.onDestroy()
         MediaEngine.shutdown()
         TokenAnnouncer.shutdown()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        logLaunchOrigin("onNewIntent", savedInstanceStateAvailable = false)
+    }
+
+    private fun logLaunchOrigin(event: String, savedInstanceStateAvailable: Boolean) {
+        val i = intent
+        val extrasKeys = try {
+            i?.extras?.keySet()?.joinToString(",").orEmpty()
+        } catch (_: Exception) {
+            ""
+        }
+        val referrerValue = try {
+            referrer?.toString().orEmpty()
+        } catch (_: Exception) {
+            ""
+        }
+        val callerValue = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+            try {
+                callingPackage.orEmpty()
+            } catch (_: Exception) {
+                ""
+            }
+        } else {
+            ""
+        }
+        android.util.Log.i(
+            "TokenDisplayLaunch",
+            "event=$event instance=$launchInstanceId taskId=$taskId " +
+                "flags=0x${Integer.toHexString(i?.flags ?: 0)} action=${i?.action.orEmpty()} " +
+                "hasExtras=${(i?.extras != null)} extrasKeys=$extrasKeys " +
+                "referrer=$referrerValue caller=$callerValue restored=$savedInstanceStateAvailable"
+        )
+    }
+
+    companion object {
+        private val launchCounter = java.util.concurrent.atomic.AtomicLong(0L)
+
+        private fun nextLaunchInstanceId(): Long = launchCounter.incrementAndGet()
     }
 
     private fun checkAndRequestStoragePermissions() {
@@ -423,6 +481,8 @@ fun TokenDisplayScreen(
     // Warm up ExoPlayer instances/cache on a background dispatcher.
     // This reduces first-ad stutter/ANR during initial player/cache initialization.
     LaunchedEffect(Unit) {
+        // Let first frame settle before expensive subsystem warm-up.
+        delay(1200)
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 MediaEngine.warmUp(context)
@@ -434,6 +494,8 @@ fun TokenDisplayScreen(
 
     // Pre-warm WebView provider once, so first YouTube ad doesn't pay full Chromium init cost.
     LaunchedEffect(Unit) {
+        // Stagger from Exo warm-up to avoid startup contention on UI thread.
+        delay(2200)
         WebViewWarmup.warmUp(context)
     }
 
@@ -1536,6 +1598,10 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
     var candidateAdIdx by remember(orderedAds) { mutableIntStateOf(-1) }
     var candidateLoadToken by remember(orderedAds) { mutableIntStateOf(0) }
     var visibleReplayToken by remember(orderedAds) { mutableIntStateOf(0) }
+    val adSwitchScope = rememberCoroutineScope()
+    val transitionHoldMs = 180L
+    var visibleAdReady by remember(orderedAds) { mutableStateOf(false) }
+    val visibleReadyTimeoutMs = 20_000L
     // Keep one stable player instance active; alternating players without true preloading
     // can add handoff delay on constrained TV devices.
     val activePlayerIdx = 0
@@ -1543,15 +1609,13 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
     val sharedYoutubeWebView = remember(context) {
         buildBaseYoutubeWebView(context)
     }
+    val sharedAdTextureView = remember(context) {
+        buildSharedAdTextureView(context)
+    }
 
     DisposableEffect(sharedYoutubeWebView) {
         onDispose {
-            try {
-                sharedYoutubeWebView.stopLoading()
-                sharedYoutubeWebView.loadUrl("about:blank")
-                sharedYoutubeWebView.destroy()
-            } catch (_: Exception) {
-            }
+            releaseYouTubeWebView(sharedYoutubeWebView, destroy = true)
         }
     }
 
@@ -1562,8 +1626,29 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
             candidateAd = null
             candidateAdIdx = -1
         } else {
-            visibleAdIdx = visibleAdIdx.coerceIn(0, orderedAds.lastIndex)
-            visibleAd = orderedAds[visibleAdIdx]
+            // Keep current visible ad stable while DB rows refresh (e.g., remote -> local path swap).
+            // Restarting the same slot mid-play causes repeated codec/surface churn.
+            val current = visibleAd
+            if (current != null) {
+                val sameAdIdx = orderedAds.indexOfFirst {
+                    // Prefer stable identity; falling back to slot-only can pin loop to first ad
+                    // when multiple ads share the same position.
+                    val idMatch = current.id == it.id && current.id != 0L
+                    val pathMatch = current.filePath.equals(it.filePath, ignoreCase = true)
+                    val positionMatch = current.position == it.position
+                    idMatch || (pathMatch && positionMatch) || pathMatch
+                }
+                if (sameAdIdx >= 0) {
+                    visibleAdIdx = sameAdIdx
+                    visibleAd = orderedAds[sameAdIdx]
+                } else {
+                    visibleAdIdx = visibleAdIdx.coerceIn(0, orderedAds.lastIndex)
+                    visibleAd = orderedAds[visibleAdIdx]
+                }
+            } else {
+                visibleAdIdx = visibleAdIdx.coerceIn(0, orderedAds.lastIndex)
+                visibleAd = orderedAds[visibleAdIdx]
+            }
             candidateAd = null
             candidateAdIdx = -1
         }
@@ -1647,16 +1732,57 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
         candidateAdIdx = nextIdx
     }
 
+    fun promoteCandidateAfterHold(preloadTokenSnapshot: Int, nextAd: AdFileEntity, nextIdx: Int) {
+        adSwitchScope.launch {
+            delay(transitionHoldMs)
+            if (preloadTokenSnapshot != candidateLoadToken) return@launch
+            visibleAd = nextAd
+            visibleAdIdx = nextIdx.coerceAtLeast(0)
+            candidateAd = null
+            candidateAdIdx = -1
+            visibleReplayToken = 0
+        }
+    }
+
     // Ensure non-ended media types always advance by configured interval so the full ad list
     // loops continuously (videos/YouTube already advance via ended/error callbacks).
+    // For remote URLs with ambiguous extensions, wait for resolved media type before applying
+    // interval-based switching so video ads are not prematurely cut as "web".
     LaunchedEffect(visibleAd?.id, visibleAd?.position, orderedAds.size, intervalSeconds) {
         val current = visibleAd ?: return@LaunchedEffect
         if (orderedAds.isEmpty()) return@LaunchedEffect
-        val currentType = mediaTypeCache[current.filePath] ?: fastInferMediaType(current.filePath)
+        val cachedType = mediaTypeCache[current.filePath]
+        val currentType = cachedType ?: fastInferMediaType(current.filePath)
+        val hasAmbiguousRemotePath = cachedType == null &&
+            current.filePath.startsWith("http", ignoreCase = true) &&
+            !isAdVideo(current.filePath) &&
+            !isAdImage(current.filePath) &&
+            !current.filePath.contains("youtube.com", ignoreCase = true) &&
+            !current.filePath.contains("youtu.be", ignoreCase = true) &&
+            !isValidYoutubeVideoIdForEmbed(current.filePath.trim())
+        if (hasAmbiguousRemotePath) return@LaunchedEffect
         if (currentType == AdMediaType.Video || currentType == AdMediaType.YouTube) return@LaunchedEffect
 
         delay(intervalSeconds * 1000L)
         triggerNext(expectedCurrentAd = current)
+    }
+
+    // Black-screen watchdog: if a visible ad never becomes ready, skip it quickly.
+    LaunchedEffect(visibleAd?.id, visibleAd?.position) {
+        visibleAdReady = false
+    }
+    LaunchedEffect(visibleAd?.id, visibleAd?.position, visibleAdReady) {
+        val current = visibleAd ?: return@LaunchedEffect
+        if (visibleAdReady) return@LaunchedEffect
+        delay(visibleReadyTimeoutMs)
+        val stillSame = visibleAd?.id == current.id && visibleAd?.position == current.position
+        if (stillSame && !visibleAdReady) {
+            Log.w(
+                "AdLoop",
+                "Visible ad not ready within ${visibleReadyTimeoutMs / 1000}s; skipping ${current.filePath.take(120)}"
+            )
+            triggerNext(expectedCurrentAd = current)
+        }
     }
 
     Box(
@@ -1690,9 +1816,11 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
                         mediaType = mediaType,
                         allowYoutubeAds = allowYoutubeAds,
                         sharedYoutubeWebView = sharedYoutubeWebView,
+                        sharedVideoTextureView = sharedAdTextureView,
                         activePlayerIdx = activePlayerIdx,
                         isWmvUnsupportedVideo = ::isWmvUnsupportedVideo,
                         onReady = {
+                            visibleAdReady = true
                             UiPerfProbe.logAdEvent("READY", ad.filePath)
                         },
                         onEnded = {
@@ -1734,16 +1862,17 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
                             mediaType = preloadType,
                             allowYoutubeAds = allowYoutubeAds,
                             sharedYoutubeWebView = sharedYoutubeWebView,
+                            sharedVideoTextureView = sharedAdTextureView,
                             activePlayerIdx = activePlayerIdx,
                             isWmvUnsupportedVideo = ::isWmvUnsupportedVideo,
                             onReady = {
                                 if (preloadTokenSnapshot == candidateLoadToken) {
                                     UiPerfProbe.logAdEvent("PRELOAD_READY", preloadAd.filePath)
-                                    visibleAd = preloadAd
-                                    visibleAdIdx = candidateAdIdx.coerceAtLeast(0)
-                                    candidateAd = null
-                                    candidateAdIdx = -1
-                                    visibleReplayToken = 0
+                                    promoteCandidateAfterHold(
+                                        preloadTokenSnapshot = preloadTokenSnapshot,
+                                        nextAd = preloadAd,
+                                        nextIdx = candidateAdIdx
+                                    )
                                 }
                             },
                             onEnded = { },
@@ -1758,11 +1887,11 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
                 } else {
                     // Single-surface strategy for YouTube/video: avoid offscreen playback surfaces.
                     if (preloadTokenSnapshot == candidateLoadToken) {
-                        visibleAd = preloadAd
-                        visibleAdIdx = candidateAdIdx.coerceAtLeast(0)
-                        candidateAd = null
-                        candidateAdIdx = -1
-                        visibleReplayToken = 0
+                        promoteCandidateAfterHold(
+                            preloadTokenSnapshot = preloadTokenSnapshot,
+                            nextAd = preloadAd,
+                            nextIdx = candidateAdIdx
+                        )
                     }
                 }
             }
@@ -1873,9 +2002,16 @@ fun YouTubeAdPlayer(
     val latestOnReady by rememberUpdatedState(onReady)
     val latestOnError by rememberUpdatedState(onError)
 
-    // Use the URL exactly as provided by backend/user.
     val originalUrl = remember(url) { url.trim() }
-    var activeUrl by remember(originalUrl) { mutableStateOf(originalUrl) }
+    // Prefer original URL first. Some videos block embedded playback (Error 152/153)
+    // but still work as regular watch/shorts pages inside WebView.
+    // Normalize short/share links (e.g., youtu.be/...) to watch URLs for better TV WebView compatibility.
+    val initialPlaybackUrl = remember(originalUrl) { normalizeYouTubePlaybackUrl(originalUrl) }
+    val expectedVideoId = remember(originalUrl) { extractYoutubeIdForAnyUrl(originalUrl) }
+    val expectedWatchUrl = remember(expectedVideoId) {
+        expectedVideoId?.let { "https://www.youtube.com/watch?v=$it" }
+    }
+    var activeUrl by remember(initialPlaybackUrl) { mutableStateOf(initialPlaybackUrl) }
     var currentLoadToken by remember { mutableIntStateOf(0) }
 
     var readyReported by remember(activeUrl) { mutableStateOf(false) }
@@ -1884,6 +2020,9 @@ fun YouTubeAdPlayer(
     var reportedDurationMs by remember(activeUrl) { mutableStateOf<Long?>(null) }
     var dnsFallbackTried by remember(activeUrl) { mutableStateOf(false) }
     var embedFallbackTried by remember(activeUrl) { mutableStateOf(false) }
+    var embedRestrictionFallbackTried by remember(activeUrl) { mutableStateOf(false) }
+    var iframeFallbackTried by remember(originalUrl) { mutableStateOf(false) }
+    var mismatchedVideoRetried by remember(activeUrl) { mutableStateOf(false) }
     val hardMaxPlaybackMs = remember(activeUrl) {
         // Shorts/embedded pages can sometimes miss ended callbacks on TV WebView.
         // Keep a configurable hard cap so ad rotation never gets stuck.
@@ -1909,11 +2048,21 @@ fun YouTubeAdPlayer(
         loadStartedAtMs = System.currentTimeMillis()
         Log.i("YouTubeAdPerf", "Start load for url=${activeUrl.take(120)}")
     }
+    LaunchedEffect(initialPlaybackUrl) {
+        if (!initialPlaybackUrl.equals(originalUrl, ignoreCase = true)) {
+            Log.i(
+                "YouTubeAdPerf",
+                "Normalized YouTube URL from=${originalUrl.take(120)} to=${initialPlaybackUrl.take(120)}"
+            )
+        }
+    }
 
-    // Early fallback: page-style YouTube URLs can be slow on some TV WebViews.
-    // If not ready quickly, switch once to a lighter embed URL before the hard timeout.
+    // Early fallback: embed URLs can be flaky too, so do not force watch/shorts pages
+    // into embed mode. Keep watch playback path stable on TVs where embeds are restricted.
     LaunchedEffect(activeUrl, readyReported, terminalEventReported) {
         if (readyReported || terminalEventReported || embedFallbackTried) return@LaunchedEffect
+        val looksLikeEmbed = activeUrl.contains("/embed/", ignoreCase = true)
+        if (!looksLikeEmbed) return@LaunchedEffect
         delay(12000)
         if (readyReported || terminalEventReported || embedFallbackTried) return@LaunchedEffect
         val embedUrl = nextYouTubeEmbedFallbackUrl(activeUrl)
@@ -1987,16 +2136,14 @@ fun YouTubeAdPlayer(
     DisposableEffect(webView, sharedWebView) {
         onDispose {
             if (sharedWebView == null) {
-                webView.stopLoading()
-                webView.loadUrl("about:blank")
-                (webView.parent as? android.view.ViewGroup)?.removeView(webView)
-                webView.destroy()
+                releaseYouTubeWebView(webView, destroy = true)
             } else {
                 // Keep shared WebView alive between ad transitions to avoid recreate churn
                 // and avoid transient black frames from forcing about:blank.
                 try {
                     webView.onPause()
                     webView.pauseTimers()
+                    webView.stopLoading()
                 } catch (_: Exception) {
                 }
                 // Shared WebView may be reattached by a new AndroidView host.
@@ -2068,6 +2215,44 @@ fun YouTubeAdPlayer(
             }
             view.addJavascriptInterface(jsBridge, "CallQTVBridge")
 
+            fun handleYouTubeRestrictionToken(webView: WebView, token: String) {
+                val normalized = token.lowercase()
+                val hasEmbedConfigError = normalized == "152" || normalized == "153" || normalized == "config"
+                if (!hasEmbedConfigError) return
+                val watchFallbackUrl = nextYouTubeWatchFallbackUrl(activeUrl)
+                if (!embedRestrictionFallbackTried &&
+                    !watchFallbackUrl.isNullOrBlank() &&
+                    !watchFallbackUrl.equals(activeUrl, ignoreCase = true)
+                ) {
+                    embedRestrictionFallbackTried = true
+                    Log.w(
+                        "YouTubeAdPerf",
+                        "Embed restriction detected; retrying with watch URL: ${watchFallbackUrl.take(120)}"
+                    )
+                    activeUrl = watchFallbackUrl
+                    readyReported = false
+                    terminalEventReported = false
+                    reportedDurationMs = null
+                    loadStartedAtMs = System.currentTimeMillis()
+                    webView.tag = null
+                    loadYouTubeUrlWithHeaders(webView, watchFallbackUrl)
+                    return
+                }
+                // Avoid repeated iframe/loadData retries on restricted videos.
+                // On IMG GPUs this can trigger heavy surface churn and RTS exhaustion.
+                if (!iframeFallbackTried && activeUrl.contains("/embed/", ignoreCase = true)) {
+                    iframeFallbackTried = true
+                    Log.w(
+                        "YouTubeAdPerf",
+                        "Embed restriction persists on url=${activeUrl.take(120)}; skipping without iframe fallback"
+                    )
+                }
+                if (!terminalEventReported) {
+                    terminalEventReported = true
+                    latestOnError()
+                }
+            }
+
             view.webViewClient = object : WebViewClient() {
                 private val readyPosted = AtomicBoolean(false)
                 private var mainFrameFailed = false
@@ -2075,8 +2260,30 @@ fun YouTubeAdPlayer(
                 private fun reportReadyOnce(urlHint: String?) {
                     if (!readyPosted.compareAndSet(false, true)) return
                     if (mainFrameFailed) return
-                    val u = (urlHint ?: activeUrl).lowercase()
+                    val finalUrl = (urlHint ?: activeUrl)
+                    val u = finalUrl.lowercase()
                     if (u.startsWith("chrome-error://")) return
+                    val loadedVideoId = extractYoutubeIdForAnyUrl(finalUrl)
+                    if (!mismatchedVideoRetried &&
+                        !expectedVideoId.isNullOrBlank() &&
+                        !loadedVideoId.isNullOrBlank() &&
+                        !loadedVideoId.equals(expectedVideoId, ignoreCase = true)
+                    ) {
+                        val canonicalTarget = expectedWatchUrl
+                        if (!canonicalTarget.isNullOrBlank()) {
+                            mismatchedVideoRetried = true
+                            Log.w(
+                                "YouTubeAdPerf",
+                                "Detected mismatched YouTube video id loaded=$loadedVideoId expected=$expectedVideoId; retrying $canonicalTarget"
+                            )
+                            activeUrl = canonicalTarget
+                            readyReported = false
+                            terminalEventReported = false
+                            reportedDurationMs = null
+                            loadStartedAtMs = System.currentTimeMillis()
+                            return
+                        }
+                    }
                     if (!readyReported) {
                         readyReported = true
                         Log.i(
@@ -2103,27 +2310,28 @@ fun YouTubeAdPlayer(
                         .getBoolean("enable_ad_sound", false)
                     view?.let { applyYouTubeKioskMode(it, isAdSoundEnabled) }
                     reportReadyOnce(urlStr)
-                    // Detect fatal player config errors (e.g., Error 153) and skip.
+                    // Detect embed restriction/player config errors (e.g., Error 152/153).
+                    // If we are on an embed URL, fallback once to watch/shorts URL before skipping.
                     view?.evaluateJavascript(
                         """
                         (function() {
                           try {
                             var txt = (document.body && document.body.innerText ? document.body.innerText : '').toLowerCase();
-                            return txt.indexOf('error 153') >= 0 ||
-                                   txt.indexOf('video player configuration error') >= 0 ||
-                                   txt.indexOf('watch video on youtube') >= 0;
+                            var has152 = txt.indexOf('error 152') >= 0 || txt.indexOf('error code: 152') >= 0;
+                            var has153 = txt.indexOf('error 153') >= 0 || txt.indexOf('error code: 153') >= 0;
+                            var hasConfig = txt.indexOf('video player configuration error') >= 0;
+                            if (has152) return '152';
+                            if (has153) return '153';
+                            if (hasConfig) return 'config';
+                            return 'none';
                           } catch (e) {
-                            return false;
+                            return 'none';
                           }
                         })();
                         """.trimIndent()
                     ) { result ->
-                        val hasEmbedConfigError = result.equals("true", ignoreCase = true)
-                        if (!hasEmbedConfigError) return@evaluateJavascript
-                        if (!terminalEventReported) {
-                            terminalEventReported = true
-                            latestOnError()
-                        }
+                        val token = result.trim().trim('"')
+                        if (view != null) handleYouTubeRestrictionToken(view, token)
                     }
                     Log.i(
                         "YouTubeAdPerf",
@@ -2175,7 +2383,7 @@ fun YouTubeAdPlayer(
                             reportedDurationMs = null
                             loadStartedAtMs = System.currentTimeMillis()
                             view?.tag = null
-                            view?.loadUrl(fallbackUrl)
+                            view?.let { loadYouTubeUrlWithHeaders(it, fallbackUrl) }
                             return
                         }
                     }
@@ -2188,8 +2396,24 @@ fun YouTubeAdPlayer(
                 }
 
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                    // Allow normal YouTube navigations; returning true can cause black screen
-                    // when loading shorts/watch URLs directly.
+                    if (request == null || !request.isForMainFrame) return false
+                    val requestedUrl = request.url?.toString().orEmpty()
+                    val requestedId = extractYoutubeIdForAnyUrl(requestedUrl)
+                    if (!expectedVideoId.isNullOrBlank() &&
+                        !requestedId.isNullOrBlank() &&
+                        !requestedId.equals(expectedVideoId, ignoreCase = true)
+                    ) {
+                        val canonicalTarget = expectedWatchUrl
+                        if (!canonicalTarget.isNullOrBlank()) {
+                            Log.w(
+                                "YouTubeAdPerf",
+                                "Blocked navigation to different YouTube id=$requestedId; keeping id=$expectedVideoId"
+                            )
+                            view?.tag = canonicalTarget
+                            loadYouTubeUrlWithHeaders(view ?: return true, canonicalTarget)
+                            return true
+                        }
+                    }
                     return false
                 }
             }
@@ -2205,6 +2429,22 @@ fun YouTubeAdPlayer(
                             terminalEventReported = true
                             latestOnVideoEnded()
                         }
+                        return
+                    }
+                    val t = title.orEmpty().lowercase()
+                    val restrictionFromTitle =
+                        when {
+                            t.contains("error 152") || t.contains("error code: 152") -> "152"
+                            t.contains("error 153") || t.contains("error code: 153") -> "153"
+                            t.contains("watch video on youtube") || t.contains("video player configuration error") -> "config"
+                            else -> null
+                        }
+                    if (view != null && !restrictionFromTitle.isNullOrBlank()) {
+                        Log.w(
+                            "YouTubeAdPerf",
+                            "Embed restriction inferred from title='$title' for url=${activeUrl.take(120)}"
+                        )
+                        handleYouTubeRestrictionToken(view, restrictionFromTitle)
                     }
                 }
             }
@@ -2219,7 +2459,7 @@ fun YouTubeAdPlayer(
                 mainHandler.post {
                     if (view.tag != preferredLoadUrl) return@post
                     if (tokenForLoad != currentLoadToken) return@post
-                    view.loadUrl(preferredLoadUrl)
+                    loadYouTubeUrlWithHeaders(view, preferredLoadUrl)
                 }
             }
         },
@@ -2272,6 +2512,51 @@ private fun buildBaseYoutubeWebView(context: Context): WebView {
     }
 }
 
+private fun releaseYouTubeWebView(webView: WebView, destroy: Boolean) {
+    try {
+        webView.stopLoading()
+    } catch (_: Exception) {
+    }
+    try {
+        webView.removeJavascriptInterface("CallQTVBridge")
+    } catch (_: Exception) {
+    }
+    try {
+        // Prevent late chromium callbacks from targeting stale handlers.
+        webView.webViewClient = WebViewClient()
+        webView.webChromeClient = WebChromeClient()
+    } catch (_: Exception) {
+    }
+    try {
+        webView.loadUrl("about:blank")
+    } catch (_: Exception) {
+    }
+    try {
+        webView.onPause()
+        webView.pauseTimers()
+    } catch (_: Exception) {
+    }
+    try {
+        (webView.parent as? android.view.ViewGroup)?.removeView(webView)
+    } catch (_: Exception) {
+    }
+    if (!destroy) return
+    try {
+        // Delay actual destroy slightly so queued chromium callbacks drain first.
+        webView.post {
+            try {
+                webView.destroy()
+            } catch (_: Exception) {
+            }
+        }
+    } catch (_: Exception) {
+        try {
+            webView.destroy()
+        } catch (_: Exception) {
+        }
+    }
+}
+
 private fun applyYouTubeKioskMode(webView: WebView, isAdSoundEnabled: Boolean) {
     // Best-effort DOM cleanup for YouTube shorts/watch pages rendered directly in WebView.
     // Keeps video area while hiding surrounding page chrome/action panels.
@@ -2281,6 +2566,7 @@ private fun applyYouTubeKioskMode(webView: WebView, isAdSoundEnabled: Boolean) {
     val effectiveMuted = strictAutoplay || !isAdSoundEnabled
     val mutedJs = if (effectiveMuted) "true" else "false"
     val volumeJs = if (effectiveMuted) "0.0" else "1.0"
+    val restoreSoundAfterAutoplayJs = if (effectiveMuted) "false" else "true"
     val js = """
         (function() {
           try {
@@ -2290,16 +2576,45 @@ private fun applyYouTubeKioskMode(webView: WebView, isAdSoundEnabled: Boolean) {
               s.id = styleId;
               s.textContent = `
                 html, body { margin:0 !important; padding:0 !important; overflow:hidden !important; background:#000 !important; }
+                body * { -webkit-user-select: none !important; user-select: none !important; }
+                #page-manager, #content, #container, #player-container, #player-container-id,
+                #player, #movie_player, .html5-video-player, .ytp-player-content, .player-api,
+                ytd-app, ytd-watch-flexy, ytd-player, ytd-page-manager,
+                ytm-app, ytm-watch, ytm-watch-page, ytm-player, ytm-single-column-watch-next-results-renderer {
+                  width: 100vw !important;
+                  height: 100vh !important;
+                  max-width: 100vw !important;
+                  max-height: 100vh !important;
+                  margin: 0 !important;
+                  padding: 0 !important;
+                  position: relative !important;
+                  inset: 0 !important;
+                  transform: none !important;
+                  background: #000 !important;
+                  overflow: hidden !important;
+                }
                 ytm-header-renderer, ytd-masthead, #header, #topbar, #guide-button,
                 ytm-sub-header-renderer, #ytm-navigation-bar,
+                ytm-mobile-topbar-renderer, ytm-topbar-logo-renderer, ytm-topbar-menu-button-renderer,
+                ytm-topbar-search-button-renderer, ytm-open-app-button-renderer, .mobile-topbar-header,
+                .ytm-topbar-menu-button, .ytm-topbar-logo, .ytm-header-container,
                 #comments, ytd-comments, ytm-comments-entry-point-header-renderer,
                 ytd-reel-player-overlay-renderer, ytm-reel-player-overlay-renderer,
                 #actions, #menu, #related, #secondary, #below, #info, .metadata-container,
                 ytd-watch-next-secondary-results-renderer, ytd-watch-next-results-renderer,
                 ytm-pivot-bar-renderer, ytm-item-section-renderer, ytm-browse,
+                ytm-watch-metadata, ytm-slim-owner-renderer, ytm-expandable-video-description-body-renderer,
+                ytm-watch-next-secondary-results-renderer, ytm-structured-description-content-renderer,
                 .ytp-show-cards-title, .ytp-pause-overlay, .ytp-ce-element,
                 .ytp-chrome-top, .ytp-chrome-bottom,
-                .ytp-unmute, .ytp-unmute-button, .ytp-unmute-inner, .ytp-mute-button {
+                .ytp-title, .ytp-title-channel, .ytp-title-link,
+                .ytp-endscreen-content, .ytp-endscreen-element,
+                .branding-img-container, .iv-branding,
+                .ytp-unmute, .ytp-unmute-button, .ytp-unmute-inner, .ytp-mute-button,
+                .ytp-controls, .ytp-progress-bar-container, .ytp-time-display,
+                .ytp-button, .ytp-right-controls, .ytp-left-controls,
+                .ytp-gradient-top, .ytp-gradient-bottom, .ytp-cued-thumbnail-overlay,
+                .html5-endscreen, .ytp-player-content ytp-ce-element {
                   display:none !important;
                 }
                 video, .video-stream, .html5-main-video {
@@ -2313,18 +2628,91 @@ private fun applyYouTubeKioskMode(webView: WebView, isAdSoundEnabled: Boolean) {
                   top: 50% !important;
                   left: 50% !important;
                   transform: translate(-50%, -50%) !important;
+                  z-index: 2147483646 !important;
+                }
+                video::-webkit-media-controls,
+                video::-webkit-media-controls-panel,
+                video::-webkit-media-controls-play-button,
+                video::-webkit-media-controls-start-playback-button,
+                video::-webkit-media-controls-timeline,
+                video::-webkit-media-controls-current-time-display,
+                video::-webkit-media-controls-time-remaining-display,
+                video::-webkit-media-controls-mute-button,
+                video::-webkit-media-controls-fullscreen-button {
+                  display: none !important;
+                  -webkit-appearance: none !important;
                 }
               `;
               (document.head || document.documentElement).appendChild(s);
             }
+            function removeMobileChrome() {
+              try {
+                var selectors = [
+                  'ytm-mobile-topbar-renderer',
+                  'ytm-topbar-logo-renderer',
+                  'ytm-topbar-menu-button-renderer',
+                  'ytm-topbar-search-button-renderer',
+                  'ytm-open-app-button-renderer',
+                  '.mobile-topbar-header',
+                  '.ytm-header-container',
+                  '#header',
+                  '#topbar'
+                ];
+                selectors.forEach(function(sel) {
+                  document.querySelectorAll(sel).forEach(function(node) {
+                    try { node.remove(); } catch (e) {
+                      try {
+                        node.style.setProperty('display', 'none', 'important');
+                        node.style.setProperty('visibility', 'hidden', 'important');
+                        node.style.setProperty('opacity', '0', 'important');
+                        node.style.setProperty('pointer-events', 'none', 'important');
+                      } catch (e2) {}
+                    }
+                  });
+                });
+              } catch (e) {}
+            }
+            removeMobileChrome();
             
             // Auto-play + ended detection for watch/shorts pages without URL params
             var v = document.querySelector('video');
             if (v) {
               try {
-                v.muted = $mutedJs;
-                v.volume = $volumeJs;
-                v.play().catch(function(e){ console.warn('Autoplay blocked:', e); });
+                try {
+                  v.controls = false;
+                  v.removeAttribute('controls');
+                  v.setAttribute('playsinline', 'true');
+                  v.setAttribute('webkit-playsinline', 'true');
+                  v.setAttribute('controlsList', 'nodownload nofullscreen noplaybackrate noremoteplayback');
+                  v.disablePictureInPicture = true;
+                } catch (e) {}
+                // Start muted for autoplay reliability, then optionally restore sound.
+                v.muted = true;
+                v.volume = 0.0;
+                var playPromise = v.play();
+                if (playPromise && typeof playPromise.then === 'function') {
+                  playPromise.then(function() {
+                    if ($restoreSoundAfterAutoplayJs) {
+                      try {
+                        v.muted = false;
+                        v.volume = 1.0;
+                      } catch (e) {}
+                    } else {
+                      v.muted = $mutedJs;
+                      v.volume = $volumeJs;
+                    }
+                  }).catch(function(e){ console.warn('Autoplay blocked:', e); });
+                } else {
+                  if ($restoreSoundAfterAutoplayJs) {
+                    try {
+                      v.muted = false;
+                      v.volume = 1.0;
+                    } catch (e) {}
+                  } else {
+                    v.muted = $mutedJs;
+                    v.volume = $volumeJs;
+                  }
+                }
                 // Best-effort user-gesture simulation for TVs where autoplay policy is stricter.
                 try {
                   var clickEv = new MouseEvent('click', { bubbles: true, cancelable: true, view: window });
@@ -2373,6 +2761,14 @@ private fun applyYouTubeKioskMode(webView: WebView, isAdSoundEnabled: Boolean) {
                   try {
                     var vv = document.querySelector('video');
                     if (!vv) return;
+                    try {
+                      vv.controls = false;
+                      vv.removeAttribute('controls');
+                      vv.setAttribute('playsinline', 'true');
+                      vv.setAttribute('webkit-playsinline', 'true');
+                      vv.setAttribute('controlsList', 'nodownload nofullscreen noplaybackrate noremoteplayback');
+                      vv.disablePictureInPicture = true;
+                    } catch (e) {}
                     if (vv.ended) {
                       if (window.CallQTVBridge && window.CallQTVBridge.onAdEnded) {
                         window.CallQTVBridge.onAdEnded();
@@ -2381,20 +2777,37 @@ private fun applyYouTubeKioskMode(webView: WebView, isAdSoundEnabled: Boolean) {
                       return;
                     }
                     if (vv.paused) {
-                      vv.muted = $mutedJs;
-                      vv.volume = $volumeJs;
-                      vv.play().catch(function(){});
+                      // Re-attempt autoplay in muted mode first to satisfy policy.
+                      vv.muted = true;
+                      vv.volume = 0.0;
+                      var resumePromise = vv.play();
+                      if (resumePromise && typeof resumePromise.then === 'function') {
+                        resumePromise.then(function() {
+                          if ($restoreSoundAfterAutoplayJs) {
+                            try {
+                              vv.muted = false;
+                              vv.volume = 1.0;
+                            } catch (e) {}
+                          } else {
+                            vv.muted = $mutedJs;
+                            vv.volume = $volumeJs;
+                          }
+                        }).catch(function(){});
+                      }
                     }
                     if (isFinite(vv.duration) && vv.duration > 0 &&
                         window.CallQTVBridge && window.CallQTVBridge.onAdDuration) {
                       window.CallQTVBridge.onAdDuration(vv.duration);
                     }
                     // Re-assert current app sound setting in case YouTube DOM mutates.
-                    vv.muted = $mutedJs;
-                    vv.volume = $volumeJs;
+                    if (!$restoreSoundAfterAutoplayJs) {
+                      vv.muted = $mutedJs;
+                      vv.volume = $volumeJs;
+                    }
                     if (window.CallQTVBridge && window.CallQTVBridge.onAdReady) {
                       window.CallQTVBridge.onAdReady();
                     }
+                    removeMobileChrome();
                   } catch (e) {}
                 }, 1200);
               }
@@ -2449,7 +2862,70 @@ private fun nextYouTubeEmbedFallbackUrl(currentUrl: String): String? {
     val id = extractYoutubeIdForFallback(currentUrl) ?: return null
     val lower = currentUrl.lowercase()
     if (lower.contains("/embed/$id")) return null
-    return "https://www.youtube.com/embed/$id?autoplay=1&mute=1&playsinline=1&controls=0&rel=0"
+    return "https://www.youtube.com/embed/$id?autoplay=1&mute=1&playsinline=1&controls=0&rel=0&enablejsapi=1&origin=https%3A%2F%2Fwww.youtube.com&widget_referrer=https%3A%2F%2Fwww.youtube.com"
+}
+
+private fun nextYouTubeWatchFallbackUrl(currentUrl: String): String? {
+    val id = extractYoutubeIdForAnyUrl(currentUrl) ?: return null
+    val target = "https://www.youtube.com/watch?v=$id"
+    return if (currentUrl.equals(target, ignoreCase = true)) null else target
+}
+
+private fun normalizeYouTubePlaybackUrl(url: String): String {
+    val trimmed = url.trim()
+    return nextYouTubeWatchFallbackUrl(trimmed) ?: trimmed
+}
+
+private fun extractYoutubeIdForAnyUrl(url: String): String? {
+    val u = url.trim()
+    Regex("youtube\\.com/embed/([a-zA-Z0-9_-]{11})").find(u)?.groupValues?.get(1)?.let { return it }
+    return extractYoutubeIdForFallback(u)
+}
+
+private fun loadYouTubeUrlWithHeaders(webView: WebView, url: String) {
+    val headers = mapOf(
+        "Referer" to "https://www.youtube.com/",
+        "Origin" to "https://www.youtube.com",
+        // Clearing this header improves compatibility with some embedded providers.
+        "X-Requested-With" to ""
+    )
+    try {
+        webView.loadUrl(url, headers)
+    } catch (_: Exception) {
+        webView.loadUrl(url)
+    }
+}
+
+private fun loadYouTubeIframeFallback(webView: WebView, sourceUrl: String): Boolean {
+    val id = extractYoutubeIdForAnyUrl(sourceUrl) ?: return false
+    val embedUrl =
+        "https://www.youtube.com/embed/$id?autoplay=1&mute=1&playsinline=1&controls=0&rel=0&enablejsapi=1&origin=https%3A%2F%2Fwww.youtube.com&widget_referrer=https%3A%2F%2Fwww.youtube.com"
+    val html = """
+        <!doctype html>
+        <html>
+        <head>
+          <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+          <style>
+            html, body { margin: 0; padding: 0; background: #000; width: 100%; height: 100%; overflow: hidden; }
+            iframe { border: 0; width: 100%; height: 100%; display: block; }
+          </style>
+        </head>
+        <body>
+          <iframe
+            src="$embedUrl"
+            allow="autoplay; encrypted-media; picture-in-picture"
+            referrerpolicy="origin"
+            allowfullscreen>
+          </iframe>
+        </body>
+        </html>
+    """.trimIndent()
+    return try {
+        webView.loadDataWithBaseURL("https://www.youtube.com", html, "text/html", "utf-8", null)
+        true
+    } catch (_: Exception) {
+        false
+    }
 }
 
 internal fun isAdLowBandwidthNetwork(context: Context): Boolean {
@@ -2469,7 +2945,14 @@ internal fun isAdLowBandwidthNetwork(context: Context): Boolean {
 
 
 @Composable
-fun AdVideoPlayer(videoUrl: String, player: ExoPlayer, onVideoEnded: () -> Unit, onReady: () -> Unit = {}, onError: () -> Unit = {}) {
+fun AdVideoPlayer(
+    videoUrl: String,
+    player: ExoPlayer,
+    sharedTextureView: android.view.TextureView? = null,
+    onVideoEnded: () -> Unit,
+    onReady: () -> Unit = {},
+    onError: () -> Unit = {}
+) {
     val context = LocalContext.current
     
     val latestOnVideoEnded by rememberUpdatedState(onVideoEnded)
@@ -2478,6 +2961,8 @@ fun AdVideoPlayer(videoUrl: String, player: ExoPlayer, onVideoEnded: () -> Unit,
 
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val scope = rememberCoroutineScope()
+    val videoTextureRef = remember(sharedTextureView) { mutableStateOf<android.view.TextureView?>(sharedTextureView) }
+    var latestVideoSize by remember { mutableStateOf(androidx.media3.common.VideoSize.UNKNOWN) }
 
     var readyReported by remember(videoUrl) { mutableStateOf(false) }
     var terminalEventReported by remember(videoUrl) { mutableStateOf(false) }
@@ -2520,22 +3005,52 @@ fun AdVideoPlayer(videoUrl: String, player: ExoPlayer, onVideoEnded: () -> Unit,
                     latestOnError()
                 }
             }
+
+            override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                latestVideoSize = videoSize
+                videoTextureRef.value?.post {
+                    applyFitCenterTransform(videoTextureRef.value, videoSize)
+                }
+            }
         }
         
         player.addListener(listener)
         onDispose {
             player.removeListener(listener)
-            // Keep player warm across ad switches to reduce surface/codec churn
-            // on constrained TV GPUs. We only pause here; the next video load
-            // will replace media item and resume playback.
+            // Detach texture host and pause playback, but keep decoder session warm.
+            // Using TextureView avoids repeated SurfaceView lifecycle churn on IMG GPUs.
             try {
                 // Keep player operations on main thread to avoid Media3 thread violations.
                 if (Looper.myLooper() == Looper.getMainLooper()) {
+                    val activeTexture = videoTextureRef.value
+                    if (sharedTextureView == null) {
+                        activeTexture?.let { texture ->
+                            player.clearVideoTextureView(texture)
+                            (texture.parent as? android.view.ViewGroup)?.removeView(texture)
+                        }
+                    }
+                    if (sharedTextureView == null) {
+                        videoTextureRef.value = null
+                    } else {
+                        videoTextureRef.value = sharedTextureView
+                    }
                     player.playWhenReady = false
                     player.pause()
                 } else {
                     mainHandler.post {
                         try {
+                            val activeTexture = videoTextureRef.value
+                            if (sharedTextureView == null) {
+                                activeTexture?.let { texture ->
+                                    player.clearVideoTextureView(texture)
+                                    (texture.parent as? android.view.ViewGroup)?.removeView(texture)
+                                }
+                            }
+                            if (sharedTextureView == null) {
+                                videoTextureRef.value = null
+                            } else {
+                                videoTextureRef.value = sharedTextureView
+                            }
                             player.playWhenReady = false
                             player.pause()
                         } catch (_: Exception) {
@@ -2585,6 +3100,11 @@ fun AdVideoPlayer(videoUrl: String, player: ExoPlayer, onVideoEnded: () -> Unit,
 
             mainHandler.post {
                 try {
+                    applyAdaptiveVideoTrackCap(
+                        player = player,
+                        videoUrl = videoUrl,
+                        isLowBandwidth = isLowBandwidth
+                    )
                     player.setMediaItem(mediaItem)
                     player.prepare()
                     player.playWhenReady = true
@@ -2620,24 +3140,134 @@ fun AdVideoPlayer(videoUrl: String, player: ExoPlayer, onVideoEnded: () -> Unit,
 
     AndroidView(
         factory = {
-            PlayerView(context).apply {
-                this.player = player
-                useController = false
-                // Reduce visible black flashes between ad transitions.
-                setKeepContentOnPlayerReset(true)
-                setShutterBackgroundColor(AndroidGraphicsColor.TRANSPARENT)
-                resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
-                isFocusable = false
-                isFocusableInTouchMode = false
-                isClickable = false
-                isLongClickable = false
-                setOnTouchListener { _, _ -> true }
+            val texture = sharedTextureView ?: buildSharedAdTextureView(context)
+            (texture.parent as? android.view.ViewGroup)?.removeView(texture)
+            if (texture.tag != "callqtv_ad_texture_bound") {
+                texture.tag = "callqtv_ad_texture_bound"
+                texture.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+                    applyFitCenterTransform(texture, latestVideoSize)
+                }
             }
+            videoTextureRef.value = texture
+            player.setVideoTextureView(texture)
+            texture
+        },
+        update = { view ->
+            if (videoTextureRef.value !== view) {
+                videoTextureRef.value?.let { oldTexture ->
+                    if (oldTexture !== view) player.clearVideoTextureView(oldTexture)
+                }
+                videoTextureRef.value = view
+                player.setVideoTextureView(view)
+            }
+            applyFitCenterTransform(view, latestVideoSize)
         },
         modifier = Modifier
             .fillMaxSize()
             .focusProperties { canFocus = false }
     )
+}
+
+private fun buildSharedAdTextureView(context: Context): android.view.TextureView {
+    return android.view.TextureView(context).apply {
+        setOpaque(false)
+        isFocusable = false
+        isFocusableInTouchMode = false
+        isClickable = false
+        isLongClickable = false
+        layoutParams = android.view.ViewGroup.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT
+        )
+    }
+}
+
+private fun applyAdaptiveVideoTrackCap(
+    player: ExoPlayer,
+    videoUrl: String,
+    isLowBandwidth: Boolean
+) {
+    val lower = videoUrl.lowercase()
+    val isLikelyLive = lower.contains(".m3u8") || lower.contains(".mpd") || lower.contains("live")
+    val maxBitrate = when {
+        // Keep adaptive/live streams conservative to avoid bitrate oscillation stutter.
+        isLowBandwidth && isLikelyLive -> 900_000
+        isLowBandwidth -> 1_800_000
+        else -> 5_000_000
+    }
+    try {
+        val current = player.trackSelectionParameters
+        val updated = current.buildUpon()
+            .setMaxVideoBitrate(maxBitrate)
+            .build()
+        player.trackSelectionParameters = updated
+        Log.i(
+            "AdVideoPerf",
+            "Track cap applied bitrate=${maxBitrate}bps lowBandwidth=$isLowBandwidth live=$isLikelyLive url=${videoUrl.take(120)}"
+        )
+    } catch (e: Exception) {
+        Log.w("AdVideoPerf", "Failed applying adaptive track cap for ${videoUrl.take(120)}: ${e.message}")
+    }
+}
+
+private fun applyFitCenterTransform(
+    textureView: android.view.TextureView?,
+    videoSize: androidx.media3.common.VideoSize
+) {
+    if (textureView == null) return
+    val viewWidth = textureView.width.toFloat()
+    val viewHeight = textureView.height.toFloat()
+    if (viewWidth <= 0f || viewHeight <= 0f) return
+
+    val rawVideoWidth = videoSize.width
+    val rawVideoHeight = videoSize.height
+    if (rawVideoWidth <= 0 || rawVideoHeight <= 0) {
+        textureView.setTransform(null)
+        return
+    }
+
+    val pixelRatio = if (videoSize.pixelWidthHeightRatio > 0f) videoSize.pixelWidthHeightRatio else 1f
+    val videoWidth = rawVideoWidth.toFloat() * pixelRatio
+    val videoHeight = rawVideoHeight.toFloat()
+    if (videoWidth <= 0f || videoHeight <= 0f) {
+        textureView.setTransform(null)
+        return
+    }
+
+    val viewAspect = viewWidth / viewHeight
+    val videoAspect = videoWidth / videoHeight
+    val matrix = Matrix()
+
+    val scaleX: Float
+    val scaleY: Float
+    if (videoAspect > viewAspect) {
+        // Wider than container: fit width, letterbox top/bottom.
+        scaleX = 1f
+        scaleY = viewAspect / videoAspect
+    } else {
+        // Taller than container: fit height, letterbox left/right.
+        scaleX = videoAspect / viewAspect
+        scaleY = 1f
+    }
+
+    matrix.setScale(scaleX, scaleY, viewWidth / 2f, viewHeight / 2f)
+    val current = Matrix()
+    textureView.getTransform(current)
+    if (!matrixAlmostEqual(current, matrix)) {
+        textureView.setTransform(matrix)
+        // Avoid forcing extra redraws every recomposition/layout pass.
+    }
+}
+
+private fun matrixAlmostEqual(a: Matrix, b: Matrix, epsilon: Float = 0.001f): Boolean {
+    val av = FloatArray(9)
+    val bv = FloatArray(9)
+    a.getValues(av)
+    b.getValues(bv)
+    for (i in 0 until 9) {
+        if (kotlin.math.abs(av[i] - bv[i]) > epsilon) return false
+    }
+    return true
 }
 
 private object WebViewWarmup {
@@ -2705,9 +3335,9 @@ object MediaEngine {
         }
 
         val loadControl = DefaultLoadControl.Builder()
-            // Faster ad startup for remote/live links:
-            // Min 3s, Max 15s, start playback at 0.8s, rebuffer at 1.5s.
-            .setBufferDurationsMs(3000, 15000, 800, 1500)
+            // Favor smoother playback over fastest possible start:
+            // Min 8s, Max 40s, start at 1.5s, rebuffer at 3s.
+            .setBufferDurationsMs(8_000, 40_000, 1_500, 3_000)
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
 

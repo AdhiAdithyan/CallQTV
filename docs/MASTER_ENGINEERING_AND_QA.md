@@ -43,6 +43,9 @@ This document reflects the current codebase implementation and validation approa
 - Strict layout clipping (`clipToBounds`) and centered rendering for AdArea.
 - Ad area is display-only (non-focusable and non-clickable); no remote/touch interaction is required.
 - JavaScript bridge + kiosk-mode YouTube playback with autoplay and automatic next-ad transition.
+- YouTube ad playback now pins to the selected video id; if WebView drifts to a different YouTube id, one canonical watch-URL retry is forced.
+- Main-frame YouTube navigations to a different video id are blocked to keep ad-loop integrity.
+- Kiosk-mode CSS/DOM enforcement now forces full-viewport player containers and hides metadata/title overlays that can appear on mobile YouTube pages.
 - Ad loop sequencing is strict round-robin when multiple ads exist (no same-ad repeat).
 - Candidate ad preloading is image-only; YouTube/video use single visible-surface playback for GPU stability.
 - YouTube URL fallback retry (one-shot) on SSL/DNS main-frame failures before skipping.
@@ -67,6 +70,8 @@ From current Gradle files:
    - TTS init dialog separation
    - MQTT reconnect and token announcement path
   - Mixed ad format playback (video/image/gif/webp + YouTube)
+  - Verify YouTube ad stays on the configured video id (no drift to unrelated Shorts/watch video)
+  - Verify YouTube ad area remains full-screen without title/metadata card UI overlays
   - Verify multi-ad loop plays all ads once per cycle without same-ad repetition
   - Verify reconnect badge position (top-center of main content) and Try counter increments
   - Verify per-counter indicator behavior: default RED, GREEN on MQTT activity, and RED after 5-minute inactivity

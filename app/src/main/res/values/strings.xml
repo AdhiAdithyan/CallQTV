@@ -1,9 +1,9 @@
 <resources>
 <!--    <string name="app_name">Manager</string>-->
-    <string name="version">1.0.0</string>
+    <string name="version">1.0.1</string>
 
     <string name="forgot_id">Forgot your ID?</string>
-    <string name="app_version">v1.0.0</string>
+    <string name="app_version">v1.0.1</string>
     <string name="license_valid">License valid until %s</string>
     <string name="license_invalid">License not found</string>
     <string name="enter_customer_id">Welcome...</string>

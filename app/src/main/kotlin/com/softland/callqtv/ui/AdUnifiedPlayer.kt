@@ -7,12 +7,15 @@ import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebViewClient
 import android.webkit.WebView
+import android.view.TextureView
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -33,6 +36,7 @@ fun AdUnifiedPlayer(
     mediaType: AdMediaType,
     allowYoutubeAds: Boolean,
     sharedYoutubeWebView: WebView,
+    sharedVideoTextureView: TextureView? = null,
     activePlayerIdx: Int,
     isWmvUnsupportedVideo: (String) -> Boolean,
     onReady: () -> Unit = {},
@@ -96,6 +100,7 @@ fun AdUnifiedPlayer(
                 AdVideoPlayer(
                     videoUrl = ad.filePath,
                     player = MediaEngine.get(context, activePlayerIdx),
+                    sharedTextureView = sharedVideoTextureView,
                     onVideoEnded = onEnded,
                     onReady = onReady,
                     onError = onError
@@ -121,6 +126,7 @@ fun AdUnifiedPlayer(
                 AdVideoPlayer(
                     videoUrl = ad.filePath,
                     player = MediaEngine.get(context, activePlayerIdx),
+                    sharedTextureView = sharedVideoTextureView,
                     onVideoEnded = onEnded,
                     onReady = onReady,
                     onError = onError
@@ -159,6 +165,41 @@ private fun WebLinkAdPlayer(
     val errorSent = androidx.compose.runtime.remember(url) { AtomicBoolean(false) }
     val reloadedOnce = androidx.compose.runtime.remember(url) { AtomicBoolean(false) }
     val isLowBandwidth = androidx.compose.runtime.remember(url) { isAdLowBandwidthNetwork(context) }
+    val webView = remember(url) {
+        WebView(context).apply {
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            settings.mediaPlaybackRequiresUserGesture = false
+            settings.cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
+            isFocusable = false
+            isFocusableInTouchMode = false
+            setBackgroundColor(android.graphics.Color.BLACK)
+            webChromeClient = object : WebChromeClient() {}
+            webViewClient = object : WebViewClient() {
+                override fun onPageCommitVisible(view: WebView?, pageUrl: String?) {
+                    if (readySent.compareAndSet(false, true)) onReady()
+                }
+
+                override fun onPageFinished(view: WebView?, pageUrl: String?) {
+                    if (readySent.compareAndSet(false, true)) onReady()
+                }
+
+                override fun onReceivedError(
+                    view: WebView?,
+                    request: WebResourceRequest?,
+                    error: WebResourceError?
+                ) {
+                    if (request != null && !request.isForMainFrame) return
+                    if (!reloadedOnce.get() && view != null) {
+                        reloadedOnce.set(true)
+                        view.postDelayed({ view.reload() }, 1200)
+                        return
+                    }
+                    if (errorSent.compareAndSet(false, true)) onError()
+                }
+            }
+        }
+    }
 
     LaunchedEffect(url) {
         val timeoutMs = if (isLowBandwidth) 70_000L else 45_000L
@@ -169,42 +210,22 @@ private fun WebLinkAdPlayer(
         }
     }
 
+    DisposableEffect(webView) {
+        onDispose {
+            try {
+                webView.stopLoading()
+                webView.loadUrl("about:blank")
+                (webView.parent as? android.view.ViewGroup)?.removeView(webView)
+                webView.destroy()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
     AndroidView(
         factory = {
-            WebView(context).apply {
-                settings.javaScriptEnabled = true
-                settings.domStorageEnabled = true
-                settings.mediaPlaybackRequiresUserGesture = false
-                settings.cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
-                isFocusable = false
-                isFocusableInTouchMode = false
-                setBackgroundColor(android.graphics.Color.BLACK)
-                webChromeClient = object : WebChromeClient() {}
-                webViewClient = object : WebViewClient() {
-                    override fun onPageCommitVisible(view: WebView?, pageUrl: String?) {
-                        if (readySent.compareAndSet(false, true)) onReady()
-                    }
-
-                    override fun onPageFinished(view: WebView?, pageUrl: String?) {
-                        if (readySent.compareAndSet(false, true)) onReady()
-                    }
-
-                    override fun onReceivedError(
-                        view: WebView?,
-                        request: WebResourceRequest?,
-                        error: WebResourceError?
-                    ) {
-                        if (request != null && !request.isForMainFrame) return
-                        if (!reloadedOnce.get() && view != null) {
-                            reloadedOnce.set(true)
-                            view.postDelayed({ view.reload() }, 1200)
-                            return
-                        }
-                        if (errorSent.compareAndSet(false, true)) onError()
-                    }
-                }
-                loadUrl(url)
-            }
+            (webView.parent as? android.view.ViewGroup)?.removeView(webView)
+            webView
         },
         update = { view ->
             if (view.url != url) view.loadUrl(url)

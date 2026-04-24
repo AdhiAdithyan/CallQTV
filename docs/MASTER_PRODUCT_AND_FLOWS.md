@@ -30,9 +30,12 @@ CallQTV is an Android TV queue display app with:
 - Ad area is visual-only: it does not accept focus, clicks, or user interaction.
 - **YouTube Automated Looping**:
   - Auto-plays via injected JS (`video.play()`), with periodic re-check for DOM/video replacement.
+  - Autoplay-blocked console events can occur on first attempt; muted retry path re-attempts playback and is treated as non-fatal.
   - Detects completion via JS `ended` event + JS bridge callback (`CallQTVBridge.onAdEnded`).
   - Title fallback (`AD_ENDED`) is retained as a secondary path.
   - Safety auto-advance timeout prevents ad-loop stalls if YouTube callbacks do not fire.
+  - Playback is pinned to the expected YouTube video id; if page navigation drifts to a different id, the player re-forces canonical `watch?v=<id>`.
+  - Kiosk mode hides page chrome and metadata overlays while forcing player containers to fill the full Ad Area.
 - **Ad Sound Control**:
   - A single setting (`enable_ad_sound`) controls ad audio for both ExoPlayer video ads and YouTube ads.
   - When disabled, YouTube playback is forced muted and volume is kept at zero through JS re-application.

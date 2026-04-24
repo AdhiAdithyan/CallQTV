@@ -350,6 +350,7 @@ class MqttClientManager(
     }
 
     fun isConnected(): Boolean = mqttClient?.isConnected == true
+    fun isConnectingNow(): Boolean = isConnecting
 
     companion object {
         private const val TAG = "MqttClientManager"

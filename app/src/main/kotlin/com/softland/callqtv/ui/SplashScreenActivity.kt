@@ -64,6 +64,8 @@ class SplashScreenActivity : AppCompatActivity() {
     private lateinit var licenseCheckViewModel: LicenseCheckViewModel
     private lateinit var authSharedPrefs: SharedPreferences
     private lateinit var loginSharedPrefs: SharedPreferences
+    @Volatile
+    private var hasNavigatedFromSplash = false
 
     private val storagePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -137,13 +139,7 @@ class SplashScreenActivity : AppCompatActivity() {
                     )
                     navigateToDeviceRegistration()
                 } else {
-                    val mainIntent = Intent(this@SplashScreenActivity, CustomerIdActivity::class.java)
-                    startActivity(mainIntent)
-                    overridePendingTransition(
-                        com.softland.callqtv.R.anim.fade_in,
-                        com.softland.callqtv.R.anim.fade_in
-                    )
-                    finish()
+                    navigateToMainDisplay()
                 }
             }
         }
@@ -212,6 +208,8 @@ class SplashScreenActivity : AppCompatActivity() {
     }
 
     private fun navigateToDeviceRegistration() {
+        if (hasNavigatedFromSplash || isFinishing || isDestroyed) return
+        hasNavigatedFromSplash = true
         lifecycleScope.launch {
             with(authSharedPrefs.edit()) {
                 putString("TokenNo", "")
@@ -226,6 +224,20 @@ class SplashScreenActivity : AppCompatActivity() {
             )
             finish()
         }
+    }
+
+    private fun navigateToMainDisplay() {
+        if (hasNavigatedFromSplash || isFinishing || isDestroyed) return
+        hasNavigatedFromSplash = true
+        val mainIntent = Intent(this@SplashScreenActivity, TokenDisplayActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
+        startActivity(mainIntent)
+        overridePendingTransition(
+            com.softland.callqtv.R.anim.fade_in,
+            com.softland.callqtv.R.anim.fade_in
+        )
+        finish()
     }
 }
 

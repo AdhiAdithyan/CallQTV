@@ -19,15 +19,15 @@ android {
         }
     }
 
-    val isLiveApk = false
+    val isLiveApk = true
     var palmAnd = ""
 
     defaultConfig {
         applicationId = "com.softland.callqtv"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         palmAnd = if (isLiveApk) "LIVE_v" else "QA_v"
         buildConfigField("String", "BUILD_TYPE_DEVICE", "\"android_tv\"")

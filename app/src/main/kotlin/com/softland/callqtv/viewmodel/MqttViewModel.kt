@@ -52,6 +52,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     /** Last time *any* payload arrived on the subscribed topic (incl. broker "PING"), per broker URI. */
     private val lastMessageAtByServerUri = ConcurrentHashMap<String, Long>()
     private val staleTrafficStrikeByServerUri = ConcurrentHashMap<String, Int>()
+    private val mqttLogThrottleByKey = ConcurrentHashMap<String, Long>()
 
     private val staleReconnectInFlight =
         Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
@@ -306,7 +307,9 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     // Not connected yet: trigger a new connect attempt and timer
                     startConnectTimer()
-                    existing.connect(username, password)
+                    if (!existing.isConnectingNow()) {
+                        existing.connect(username, password)
+                    }
                 }
                 return
             } else {
@@ -326,9 +329,16 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                     // This prevents false "disconnected" flips when payload is non-business.
                     lastMessageAtByServerUri[serverUri] = System.currentTimeMillis()
                     staleTrafficStrikeByServerUri[serverUri] = 0
+                    val trimmed = message.trim()
+                    android.util.Log.i("MQTT_PAYLOAD_IN", trimmed)
+                    logMqttToFileThrottled(
+                        key = "MQTT_PAYLOAD_IN:$serverUri",
+                        tag = "MQTT_PAYLOAD_IN",
+                        message = trimmed,
+                        minIntervalMs = 0L
+                    )
                     if (isLicenseExpired) return
                     // Enqueue ALL raw payloads first, without any filtering.
-                    val trimmed = message.trim()
                     rawMessageQueue.add(trimmed)
                     // Simple bound to avoid unbounded growth in extreme cases.
                     while (rawMessageQueue.size > 2000) {
@@ -418,7 +428,12 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                     // Log the error to a date-wise file instead of showing it in the UI.
                     val logTag = "MQTT_ERROR"
                     val logMessage = if (code != null) "[$serverUri] $error (Code: $code)" else "[$serverUri] $error"
-                    FileLogger.logError(getApplication(), logTag, logMessage)
+                    logMqttToFileThrottled(
+                        key = "$logTag:$serverUri",
+                        tag = logTag,
+                        message = logMessage,
+                        minIntervalMs = 15_000L
+                    )
 
                     // Stop surfacing specific MQTT errors to the UI per user request.
                     // We keep the LiveData for state if needed, but we clear it or just don't update it.
@@ -574,7 +589,9 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
             // so the UI "Try X" count increments even if Paho is stuck in an internal loop.
             var incremented = false
             connectionDetailsMap.keys.forEach { serverUri ->
-                if (managers[serverUri]?.isConnected() != true) {
+                val manager = managers[serverUri]
+                val isReadyOrInFlight = manager?.isConnected() == true || manager?.isConnectingNow() == true
+                if (!isReadyOrInFlight) {
                     val next = (retryAttempts[serverUri] ?: 0) + 1
                     retryAttempts[serverUri] = next
                     android.util.Log.d("MqttViewModel", "Manual retry trigger: incrementing attempt for $serverUri to $next")
@@ -598,6 +615,10 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
             startConnectTimer()
         }
         connectionDetailsMap.values.forEach { details ->
+            val manager = managers[details.serverUri]
+            if (manager?.isConnected() == true || manager?.isConnectingNow() == true) {
+                return@forEach
+            }
             initAndConnect(
                 details.serverUri,
                 details.clientId,
@@ -678,7 +699,12 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         retryJobs[serverUri] = viewModelScope.launch {
             val logMsg = "Retrying initial connection for $serverUri in ${delayMs / 1000}s (Attempt ${attempt + 1})"
             android.util.Log.d("MqttViewModel", logMsg)
-            FileLogger.logError(getApplication(), "MQTT_RETRY", "[$serverUri] $logMsg")
+            logMqttToFileThrottled(
+                key = "MQTT_RETRY:$serverUri",
+                tag = "MQTT_RETRY",
+                message = "[$serverUri] $logMsg",
+                minIntervalMs = 20_000L
+            )
             
             delay(delayMs)
             
@@ -1112,10 +1138,11 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                     "MqttViewModel",
                     "No MQTT traffic for $serverUri for >${timeoutMs / 1000}s; forcing reconnect"
                 )
-                FileLogger.logError(
-                    getApplication(),
-                    "MqttLiveness",
-                    "No MQTT traffic for $serverUri for >${timeoutMs / 1000}s; forcing reconnect"
+                logMqttToFileThrottled(
+                    key = "MqttLiveness:$serverUri",
+                    tag = "MqttLiveness",
+                    message = "No MQTT traffic for $serverUri for >${timeoutMs / 1000}s; forcing reconnect",
+                    minIntervalMs = 30_000L
                 )
                 incrementMqttRetryAttemptCounter(serverUri)
                 lastMessageAtByServerUri.remove(serverUri)
@@ -1153,6 +1180,36 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun logMqttToFileThrottled(
+        key: String,
+        tag: String,
+        message: String,
+        minIntervalMs: Long
+    ) {
+        val now = System.currentTimeMillis()
+        val last = mqttLogThrottleByKey[key]
+        if (last != null && now - last < minIntervalMs) return
+        mqttLogThrottleByKey[key] = now
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                FileLogger.logError(getApplication(), tag, message)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun buildMqttPayloadPreview(payload: String): String {
+        if (payload.isBlank()) return "<empty>"
+        val singleLine = payload
+            .replace("\r", "\\r")
+            .replace("\n", "\\n")
+        return if (singleLine.length <= MAX_MQTT_LOG_PAYLOAD_CHARS) {
+            singleLine
+        } else {
+            singleLine.take(MAX_MQTT_LOG_PAYLOAD_CHARS) + "...(truncated)"
+        }
+    }
+
     companion object {
         private const val MQTT_MESSAGE_LIVENESS_TIMEOUT_MS = 120_000L
         private const val MQTT_LIVENESS_STALE_STRIKES_BEFORE_RECONNECT = 4
@@ -1160,6 +1217,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         private const val MQTT_LIVENESS_STALE_STRIKES_BEFORE_RECONNECT_LOW_NETWORK = 6
         private const val CONFIG_REFRESH_DEBOUNCE_MS = 15_000L
         private const val INDICATOR_STALE_TIMEOUT_MS = 300_000L
+        private const val MAX_MQTT_LOG_PAYLOAD_CHARS = 220
     }
 
     private fun isLowBandwidthNetwork(): Boolean {

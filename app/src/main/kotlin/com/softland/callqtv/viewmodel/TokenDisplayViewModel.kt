@@ -78,6 +78,12 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
     private var currentConfigLoadJob: Job? = null
     private var lastMqttRefreshHandledAtMs: Long = 0L
     private var lastOfflineSyncedAds: List<AdFileEntity> = emptyList()
+    private data class CachedUiSnapshot(
+        val config: TvConfigEntity?,
+        val counters: List<CounterEntity>,
+        val adFiles: List<AdFileEntity>,
+        val connectedDevices: List<ConnectedDeviceEntity>
+    )
 
     init {
         // Initialize macAddress on a background thread to avoid blocking main thread at startup
@@ -185,17 +191,19 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
             val offlineEnabled = PreferenceHelper.isOfflineAdsEnabled(getApplication())
 
             // Cached-first strategy: render local data immediately while API is in flight.
+            // Fetch all cache pieces in one IO block, then publish together on main.
             val cacheStartMs = System.currentTimeMillis()
-            _config.value = repository.getCachedConfig(_macAddress, customerId)
-            _counters.value = repository.getCounters(_macAddress, customerId)
-            val cachedAds = repository.getAdFiles(_macAddress, customerId)
+            val cachedSnapshot = loadCachedSnapshot(_macAddress, customerId)
+            _config.value = cachedSnapshot.config
+            _counters.value = cachedSnapshot.counters
+            val cachedAds = cachedSnapshot.adFiles
             _adFiles.value = cachedAds
             _localAdFiles.value = buildEffectiveAdList(
                 remoteAds = cachedAds,
                 offlineEnabled = offlineEnabled,
                 syncedAds = lastOfflineSyncedAds
             )
-            _connectedDevices.value = repository.getConnectedDevices(_macAddress, customerId)
+            _connectedDevices.value = cachedSnapshot.connectedDevices
             val hasRenderableCache = _config.value != null
             android.util.Log.i(
                 "TokenDisplayVMPerf",
@@ -248,8 +256,10 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                             FileLogger.logError(getApplication(), "TVConfig", "Error: $msg")
                         }
                     }
-                    _counters.value = repository.getCounters(_macAddress, customerId)
-                    val remoteFiles = repository.getAdFiles(_macAddress, customerId)
+                    // Refresh all DB-backed UI data in one IO snapshot.
+                    val refreshedSnapshot = loadCachedSnapshot(_macAddress, customerId)
+                    _counters.value = refreshedSnapshot.counters
+                    val remoteFiles = refreshedSnapshot.adFiles
                     _adFiles.value = remoteFiles
                     // Resolve what the ad area should play right now based on offline mode.
                     _localAdFiles.value = buildEffectiveAdList(
@@ -289,7 +299,7 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                         lastOfflineSyncedAds = emptyList()
                     }
 
-                    _connectedDevices.value = repository.getConnectedDevices(_macAddress, customerId)
+                    _connectedDevices.value = refreshedSnapshot.connectedDevices
 
                     _config.value?.let { cfg ->
                         // Launch concurrently so loading spinner dismisses immediately
@@ -300,16 +310,17 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                     FileLogger.logError(getApplication(), "TVConfig", "Config API timed out; using cached data")
                 }
             } catch (e: Exception) {
-                _config.value = repository.getCachedConfig(_macAddress, customerId)
-                _counters.value = repository.getCounters(_macAddress, customerId)
-                val cachedAds = repository.getAdFiles(_macAddress, customerId)
+                val fallbackSnapshot = loadCachedSnapshot(_macAddress, customerId)
+                _config.value = fallbackSnapshot.config
+                _counters.value = fallbackSnapshot.counters
+                val cachedAds = fallbackSnapshot.adFiles
                 _adFiles.value = cachedAds
                 _localAdFiles.value = buildEffectiveAdList(
                     remoteAds = cachedAds,
                     offlineEnabled = offlineEnabled,
                     syncedAds = lastOfflineSyncedAds
                 )
-                _connectedDevices.value = repository.getConnectedDevices(_macAddress, customerId)
+                _connectedDevices.value = fallbackSnapshot.connectedDevices
                 val isTimeoutLike = e.message?.contains("timeout", ignoreCase = true) == true ||
                     e.message?.contains("timed out", ignoreCase = true) == true
                 if (_config.value == null) {
@@ -382,6 +393,17 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
     companion object {
         // Prevent UI churn/jank from too-frequent refresh-trigger bursts.
         private const val MQTT_REFRESH_MIN_INTERVAL_MS = 30_000L
+    }
+
+    private suspend fun loadCachedSnapshot(macAddress: String, customerId: String): CachedUiSnapshot {
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            CachedUiSnapshot(
+                config = repository.getCachedConfig(macAddress, customerId),
+                counters = repository.getCounters(macAddress, customerId),
+                adFiles = repository.getAdFiles(macAddress, customerId),
+                connectedDevices = repository.getConnectedDevices(macAddress, customerId)
+            )
+        }
     }
 
     private fun buildEffectiveAdList(

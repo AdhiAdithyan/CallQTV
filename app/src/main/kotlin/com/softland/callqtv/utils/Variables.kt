@@ -12,7 +12,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 object Variables {
-    var IS_LIVE: Boolean = false
+    var IS_LIVE: Boolean = true
     @JvmStatic
     var ServiceCounter: Int = 0
     @JvmStatic

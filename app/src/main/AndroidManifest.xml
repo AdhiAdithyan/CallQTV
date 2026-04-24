@@ -71,6 +71,7 @@
         <activity
             android:name=".ui.TokenDisplayActivity"
             android:exported="false"
+            android:launchMode="singleTask"
             android:screenOrientation="landscape"
             tools:ignore="DiscouragedApi,MissingPrefix" />
         <activity

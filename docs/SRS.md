@@ -21,6 +21,9 @@ CallQTV is a specialized Android TV application designed for queue management an
 - **FR8c**: When more than one ad exists, ad rotation shall be strict round-robin and shall not repeatedly replay the same ad.
 - **FR8d**: Offscreen preloading shall be limited to image ads; YouTube/video ads shall use a single visible surface path for stability.
 - **FR8e**: On YouTube SSL/DNS failures, one fallback URL retry may be attempted before skipping the ad.
+- **FR8f**: YouTube ad playback shall remain pinned to the configured video id; main-frame navigation to a different YouTube video id shall be prevented or corrected.
+- **FR8g**: YouTube Kiosk Mode shall enforce full-Ad-Area video presentation and hide title/metadata/page chrome overlays during ad playback.
+- **FR8h**: Initial YouTube autoplay policy blocks shall be handled via muted retry logic without immediately failing the ad.
 
 ### 2.3 Connectivity & Status
 - **FR9**: The system shall display a "Connecting to BLUCON..." status badge when MQTT connection is lost.

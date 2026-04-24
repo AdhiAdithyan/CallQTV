@@ -69,6 +69,8 @@ class CustomerIdActivity : AppCompatActivity() {
     private lateinit var registrationViewModel: RegistrationViewModel
     private lateinit var downloadViewModel: DownloadViewModel
     private lateinit var networkViewModel: NetworkViewModel
+    @Volatile
+    private var hasNavigatedToMain = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -152,9 +154,7 @@ class CustomerIdActivity : AppCompatActivity() {
         if (custId != 0) {
             if (isLicenseValid(licenseEnd)) {
                 // License is valid for more than 0 days, proceed to main activity
-                val intent = Intent(this, TokenDisplayActivity::class.java)
-                startActivity(intent)
-                finish()
+                navigateToMainIfNeeded()
             } else {
                 // License expired or expiring today, check with server
                 registrationViewModel.startRegistrationFlow()
@@ -346,13 +346,22 @@ class CustomerIdActivity : AppCompatActivity() {
             }
             is RegistrationState.NavigateToMain -> {
                 LaunchedEffect(Unit) {
-                    val intent = Intent(this@CustomerIdActivity, TokenDisplayActivity::class.java)
-                    startActivity(intent)
-                    finish()
+                    navigateToMainIfNeeded()
                 }
             }
             else -> {}
         }
+    }
+
+    private fun navigateToMainIfNeeded() {
+        if (hasNavigatedToMain || isFinishing || isDestroyed) return
+        hasNavigatedToMain = true
+        val intent = Intent(this, TokenDisplayActivity::class.java).apply {
+            // Ensure we re-use an existing TokenDisplayActivity when possible.
+            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
+        startActivity(intent)
+        finish()
     }
 
     private fun observeDownloadStatus() {
