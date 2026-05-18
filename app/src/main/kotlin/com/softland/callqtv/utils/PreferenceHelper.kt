@@ -8,6 +8,7 @@ object PreferenceHelper {
     const val base_url = "base_url"
     const val product_license_end = "product_license_end"
     const val customer_id = "CustomerID"
+    const val customer_id_text = "CustomerIDText"
     const val project_code = "ProjectCode"
     const val TOKEN_VOICE = "token_voice"
     const val OFFLINE_ADS = "offline_ads"

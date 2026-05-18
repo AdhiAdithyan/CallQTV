@@ -1,0 +1,210 @@
+package com.softland.callqtv.data.model;
+
+@kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u0000\"\n\u0002\u0018\u0002\n\u0002\u0010\u0000\n\u0002\b\u0005\n\u0002\u0010\b\n\u0000\n\u0002\u0010\u000e\n\u0002\b\u0006\n\u0002\u0010\u000b\n\u0002\b4\u0018\u00002\u00020\u0001B\u0007\u00a2\u0006\u0004\b\u0002\u0010\u0003B\u0011\b\u0016\u0012\u0006\u0010\u0004\u001a\u00020\u0000\u00a2\u0006\u0004\b\u0002\u0010\u0005B\u009b\u0001\b\u0016\u0012\u0006\u0010\u0006\u001a\u00020\u0007\u0012\b\u0010\b\u001a\u0004\u0018\u00010\t\u0012\u0006\u0010\n\u001a\u00020\u0007\u0012\b\u0010\u000b\u001a\u0004\u0018\u00010\t\u0012\u0006\u0010\f\u001a\u00020\u0007\u0012\b\u0010\r\u001a\u0004\u0018\u00010\t\u0012\u0006\u0010\u000e\u001a\u00020\u0007\u0012\u0006\u0010\u000f\u001a\u00020\u0010\u0012\b\u0010\u0011\u001a\u0004\u0018\u00010\t\u0012\b\u0010\u0012\u001a\u0004\u0018\u00010\t\u0012\b\u0010\u0013\u001a\u0004\u0018\u00010\t\u0012\b\u0010\u0014\u001a\u0004\u0018\u00010\t\u0012\u0006\u0010\u0015\u001a\u00020\u0007\u0012\b\u0010\u0016\u001a\u0004\u0018\u00010\t\u0012\b\u0010\u0017\u001a\u0004\u0018\u00010\t\u0012\u0006\u0010\u0018\u001a\u00020\u0007\u00a2\u0006\u0004\b\u0002\u0010\u0019R\u001e\u0010\u0006\u001a\u00020\u00078\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u001a\u0010\u001b\"\u0004\b\u001c\u0010\u001dR \u0010\b\u001a\u0004\u0018\u00010\t8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u001e\u0010\u001f\"\u0004\b \u0010!R\u001e\u0010\n\u001a\u00020\u00078\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\"\u0010\u001b\"\u0004\b#\u0010\u001dR \u0010\u000b\u001a\u0004\u0018\u00010\t8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b$\u0010\u001f\"\u0004\b%\u0010!R\u001e\u0010\f\u001a\u00020\u00078\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b&\u0010\u001b\"\u0004\b\'\u0010\u001dR \u0010\r\u001a\u0004\u0018\u00010\t8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b(\u0010\u001f\"\u0004\b)\u0010!R\u001e\u0010\u000e\u001a\u00020\u00078\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b*\u0010\u001b\"\u0004\b+\u0010\u001dR\u001e\u0010,\u001a\u00020\u00108\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b,\u0010-\"\u0004\b.\u0010/R \u0010\u0011\u001a\u0004\u0018\u00010\t8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b0\u0010\u001f\"\u0004\b1\u0010!R \u0010\u0012\u001a\u0004\u0018\u00010\t8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b2\u0010\u001f\"\u0004\b3\u0010!R \u0010\u0013\u001a\u0004\u0018\u00010\t8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b4\u0010\u001f\"\u0004\b5\u0010!R \u00106\u001a\u0004\u0018\u00010\t8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b7\u0010\u001f\"\u0004\b8\u0010!R \u0010\u0014\u001a\u0004\u0018\u00010\t8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b9\u0010\u001f\"\u0004\b:\u0010!R\u001e\u0010\u0015\u001a\u00020\u00078\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b;\u0010\u001b\"\u0004\b<\u0010\u001dR\u001e\u0010=\u001a\u00020\u00078\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b>\u0010\u001b\"\u0004\b?\u0010\u001dR \u0010\u0016\u001a\u0004\u0018\u00010\t8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b@\u0010\u001f\"\u0004\bA\u0010!R \u0010\u0017\u001a\u0004\u0018\u00010\t8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\bB\u0010\u001f\"\u0004\bC\u0010!\u00a8\u0006D"}, d2 = {"Lcom/softland/callqtv/data/model/CurrentDayOrder;", "", "<init>", "()V", "other", "(Lcom/softland/callqtv/data/model/CurrentDayOrder;)V", "id", "", "vendorName", "", "managerId", "managerName", "tokenNo", "status", "counterNo", "shownOnTv", "", "notifiedAt", "updatedBy", "createdAt", "updatedAt", "vendorId", "device", "name", "newNotification", "(ILjava/lang/String;ILjava/lang/String;ILjava/lang/String;IZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;I)V", "getId", "()I", "setId", "(I)V", "getVendorName", "()Ljava/lang/String;", "setVendorName", "(Ljava/lang/String;)V", "getManagerId", "setManagerId", "getManagerName", "setManagerName", "getTokenNo", "setTokenNo", "getStatus", "setStatus", "getCounterNo", "setCounterNo", "isShownOnTv", "()Z", "setShownOnTv", "(Z)V", "getNotifiedAt", "setNotifiedAt", "getUpdatedBy", "setUpdatedBy", "getCreatedAt", "setCreatedAt", "createdDate", "getCreatedDate", "setCreatedDate", "getUpdatedAt", "setUpdatedAt", "getVendorId", "setVendorId", "newNotifications", "getNewNotifications", "setNewNotifications", "getDevice", "setDevice", "getName", "setName", "CallQTV_v1.0.1_CallQTVDebug"})
+public final class CurrentDayOrder {
+    @com.google.gson.annotations.SerializedName(value = "id")
+    private int id = 0;
+    @com.google.gson.annotations.SerializedName(value = "vendor_name")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String vendorName;
+    @com.google.gson.annotations.SerializedName(value = "manager_id")
+    private int managerId = 0;
+    @com.google.gson.annotations.SerializedName(value = "manager_name")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String managerName;
+    @com.google.gson.annotations.SerializedName(value = "token_no")
+    private int tokenNo = 0;
+    @com.google.gson.annotations.SerializedName(value = "status")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String status;
+    @com.google.gson.annotations.SerializedName(value = "counter_no")
+    private int counterNo = 0;
+    @com.google.gson.annotations.SerializedName(value = "shown_on_tv")
+    private boolean isShownOnTv = false;
+    @com.google.gson.annotations.SerializedName(value = "notified_at")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String notifiedAt;
+    @com.google.gson.annotations.SerializedName(value = "updated_by")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String updatedBy;
+    @com.google.gson.annotations.SerializedName(value = "created_at")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String createdAt;
+    @com.google.gson.annotations.SerializedName(value = "created_date")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String createdDate;
+    @com.google.gson.annotations.SerializedName(value = "updated_at")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String updatedAt;
+    @com.google.gson.annotations.SerializedName(value = "vendor")
+    private int vendorId = 0;
+    @com.google.gson.annotations.SerializedName(value = "new_notifications")
+    private int newNotifications = 0;
+    @com.google.gson.annotations.SerializedName(value = "device")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String device;
+    @com.google.gson.annotations.SerializedName(value = "name")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String name;
+    
+    public CurrentDayOrder() {
+        super();
+    }
+    
+    public final int getId() {
+        return 0;
+    }
+    
+    public final void setId(int p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getVendorName() {
+        return null;
+    }
+    
+    public final void setVendorName(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    public final int getManagerId() {
+        return 0;
+    }
+    
+    public final void setManagerId(int p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getManagerName() {
+        return null;
+    }
+    
+    public final void setManagerName(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    public final int getTokenNo() {
+        return 0;
+    }
+    
+    public final void setTokenNo(int p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getStatus() {
+        return null;
+    }
+    
+    public final void setStatus(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    public final int getCounterNo() {
+        return 0;
+    }
+    
+    public final void setCounterNo(int p0) {
+    }
+    
+    public final boolean isShownOnTv() {
+        return false;
+    }
+    
+    public final void setShownOnTv(boolean p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getNotifiedAt() {
+        return null;
+    }
+    
+    public final void setNotifiedAt(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getUpdatedBy() {
+        return null;
+    }
+    
+    public final void setUpdatedBy(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getCreatedAt() {
+        return null;
+    }
+    
+    public final void setCreatedAt(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getCreatedDate() {
+        return null;
+    }
+    
+    public final void setCreatedDate(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getUpdatedAt() {
+        return null;
+    }
+    
+    public final void setUpdatedAt(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    public final int getVendorId() {
+        return 0;
+    }
+    
+    public final void setVendorId(int p0) {
+    }
+    
+    public final int getNewNotifications() {
+        return 0;
+    }
+    
+    public final void setNewNotifications(int p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getDevice() {
+        return null;
+    }
+    
+    public final void setDevice(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getName() {
+        return null;
+    }
+    
+    public final void setName(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    public CurrentDayOrder(@org.jetbrains.annotations.NotNull()
+    com.softland.callqtv.data.model.CurrentDayOrder other) {
+        super();
+    }
+    
+    public CurrentDayOrder(int id, @org.jetbrains.annotations.Nullable()
+    java.lang.String vendorName, int managerId, @org.jetbrains.annotations.Nullable()
+    java.lang.String managerName, int tokenNo, @org.jetbrains.annotations.Nullable()
+    java.lang.String status, int counterNo, boolean shownOnTv, @org.jetbrains.annotations.Nullable()
+    java.lang.String notifiedAt, @org.jetbrains.annotations.Nullable()
+    java.lang.String updatedBy, @org.jetbrains.annotations.Nullable()
+    java.lang.String createdAt, @org.jetbrains.annotations.Nullable()
+    java.lang.String updatedAt, int vendorId, @org.jetbrains.annotations.Nullable()
+    java.lang.String device, @org.jetbrains.annotations.Nullable()
+    java.lang.String name, int newNotification) {
+        super();
+    }
+}

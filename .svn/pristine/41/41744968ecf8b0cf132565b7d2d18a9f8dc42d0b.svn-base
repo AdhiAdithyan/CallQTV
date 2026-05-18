@@ -1,0 +1,67 @@
+package com.softland.callqtv.data.repository;
+
+/**
+ * Manages persistence of the last [MAX_HISTORY] tokens per counter.
+ *
+ * The in-memory list is always ordered newest-first (index 0 = latest token).
+ * The DB mirrors this ordering via the `position` column.
+ * Each token is stored with [call_date] (yyyy-MM-dd). On load, tokens from previous days are
+ * cleared so the UI shows only today's called tokens.
+ */
+@kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u00004\n\u0002\u0018\u0002\n\u0002\u0010\u0000\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0003\n\u0002\u0018\u0002\n\u0002\b\u0003\n\u0002\u0010\u0002\n\u0000\n\u0002\u0010\u000e\n\u0002\b\u0003\n\u0002\u0010$\n\u0002\u0010 \n\u0002\b\u0004\u0018\u0000 \u00152\u00020\u0001:\u0001\u0015B\u000f\u0012\u0006\u0010\u0002\u001a\u00020\u0003\u00a2\u0006\u0004\b\u0004\u0010\u0005J\u001e\u0010\n\u001a\u00020\u000b2\u0006\u0010\f\u001a\u00020\r2\u0006\u0010\u000e\u001a\u00020\rH\u0086@\u00a2\u0006\u0002\u0010\u000fJ \u0010\u0010\u001a\u0014\u0012\u0004\u0012\u00020\r\u0012\n\u0012\b\u0012\u0004\u0012\u00020\r0\u00120\u0011H\u0086@\u00a2\u0006\u0002\u0010\u0013J\u000e\u0010\u0014\u001a\u00020\u000bH\u0086@\u00a2\u0006\u0002\u0010\u0013R\u000e\u0010\u0002\u001a\u00020\u0003X\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u0014\u0010\u0006\u001a\u00020\u00078BX\u0082\u0004\u00a2\u0006\u0006\u001a\u0004\b\b\u0010\t\u00a8\u0006\u0016"}, d2 = {"Lcom/softland/callqtv/data/repository/TokenHistoryRepository;", "", "database", "Lcom/softland/callqtv/data/local/AppDatabase;", "<init>", "(Lcom/softland/callqtv/data/local/AppDatabase;)V", "dao", "Lcom/softland/callqtv/data/local/TokenHistoryDao;", "getDao", "()Lcom/softland/callqtv/data/local/TokenHistoryDao;", "saveToken", "", "counterKey", "", "token", "(Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", "loadAll", "", "", "(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", "clearAll", "Companion", "app"})
+public final class TokenHistoryRepository {
+    @org.jetbrains.annotations.NotNull()
+    private final com.softland.callqtv.data.local.AppDatabase database = null;
+    public static final int MAX_HISTORY = 15;
+    @org.jetbrains.annotations.NotNull()
+    public static final com.softland.callqtv.data.repository.TokenHistoryRepository.Companion Companion = null;
+    
+    public TokenHistoryRepository(@org.jetbrains.annotations.NotNull()
+    com.softland.callqtv.data.local.AppDatabase database) {
+        super();
+    }
+    
+    private final com.softland.callqtv.data.local.TokenHistoryDao getDao() {
+        return null;
+    }
+    
+    /**
+     * Persist a new token for [counterKey] with the current date.
+     * The token is inserted at position 0 (newest); existing entries are shifted down.
+     * Entries beyond [MAX_HISTORY] are pruned.
+     */
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Object saveToken(@org.jetbrains.annotations.NotNull()
+    java.lang.String counterKey, @org.jetbrains.annotations.NotNull()
+    java.lang.String token, @org.jetbrains.annotations.NotNull()
+    kotlin.coroutines.Continuation<? super kotlin.Unit> $completion) {
+        return null;
+    }
+    
+    /**
+     * Load all persisted token history as a Map<counterKey, List<token>> (newest-first).
+     * Clears any tokens whose [call_date] is not today so the UI shows only today's tokens.
+     */
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Object loadAll(@org.jetbrains.annotations.NotNull()
+    kotlin.coroutines.Continuation<? super java.util.Map<java.lang.String, ? extends java.util.List<java.lang.String>>> $completion) {
+        return null;
+    }
+    
+    /**
+     * Clear all persisted history (e.g. on device reset).
+     */
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Object clearAll(@org.jetbrains.annotations.NotNull()
+    kotlin.coroutines.Continuation<? super kotlin.Unit> $completion) {
+        return null;
+    }
+    
+    @kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u0000\u0012\n\u0002\u0018\u0002\n\u0002\u0010\u0000\n\u0002\b\u0003\n\u0002\u0010\b\n\u0000\b\u0086\u0003\u0018\u00002\u00020\u0001B\t\b\u0002\u00a2\u0006\u0004\b\u0002\u0010\u0003R\u000e\u0010\u0004\u001a\u00020\u0005X\u0086T\u00a2\u0006\u0002\n\u0000\u00a8\u0006\u0006"}, d2 = {"Lcom/softland/callqtv/data/repository/TokenHistoryRepository$Companion;", "", "<init>", "()V", "MAX_HISTORY", "", "app"})
+    public static final class Companion {
+        
+        private Companion() {
+            super();
+        }
+    }
+}

@@ -1,0 +1,419 @@
+package com.softland.callqtv.data.local;
+
+import androidx.annotation.NonNull;
+import androidx.room.InvalidationTracker;
+import androidx.room.RoomOpenDelegate;
+import androidx.room.migration.AutoMigrationSpec;
+import androidx.room.migration.Migration;
+import androidx.room.util.DBUtil;
+import androidx.room.util.TableInfo;
+import androidx.sqlite.SQLite;
+import androidx.sqlite.SQLiteConnection;
+import java.lang.Class;
+import java.lang.Override;
+import java.lang.String;
+import java.lang.SuppressWarnings;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import javax.annotation.processing.Generated;
+
+@Generated("androidx.room.RoomProcessor")
+@SuppressWarnings({"unchecked", "deprecation", "removal"})
+public final class AppDatabase_Impl extends AppDatabase {
+  private volatile TvConfigDao _tvConfigDao;
+
+  private volatile MappedBrokerDao _mappedBrokerDao;
+
+  private volatile CounterDao _counterDao;
+
+  private volatile AdFileDao _adFileDao;
+
+  private volatile TokenHistoryDao _tokenHistoryDao;
+
+  private volatile ConnectedDeviceDao _connectedDeviceDao;
+
+  private volatile TokenRecordDao _tokenRecordDao;
+
+  @Override
+  @NonNull
+  protected RoomOpenDelegate createOpenDelegate() {
+    final RoomOpenDelegate _openDelegate = new RoomOpenDelegate(15, "99034898f0aab65ef4f9b18c88b0d558", "3983d8e960c9720ad6e13889f92c7fda") {
+      @Override
+      public void createAllTables(@NonNull final SQLiteConnection connection) {
+        SQLite.execSQL(connection, "CREATE TABLE IF NOT EXISTS `tv_config` (`device_id` INTEGER NOT NULL, `serial_number` TEXT NOT NULL, `mac_address` TEXT NOT NULL, `customer_id` TEXT NOT NULL, `company_name` TEXT NOT NULL, `status` TEXT NOT NULL, `message` TEXT, `audio_language` TEXT, `show_ads` TEXT, `ad_interval` INTEGER, `orientation` TEXT, `layout_type` TEXT, `save_audio_external` INTEGER, `enable_counter_announcement` INTEGER, `enable_token_announcement` INTEGER, `enable_counter_prifix` INTEGER, `token_audio_url` TEXT, `token_music_url` TEXT, `display_rows` INTEGER, `display_columns` INTEGER, `counter_text_color` TEXT, `token_text_color` TEXT, `font_size` INTEGER, `token_font_size` INTEGER, `counter_font_size` INTEGER, `current_token_color` TEXT, `previous_token_color` TEXT, `blink_current_token` INTEGER, `token_format` TEXT, `tokens_per_counter` INTEGER, `no_of_counters` INTEGER, `ad_placement` TEXT, `ad_files_json` TEXT, `counters_json` TEXT, `shift_details_json` TEXT, `mapped_broker_json` TEXT, `blink_seconds` INTEGER, `current_profile_json` TEXT, `connected_devices_json` TEXT, `scroll_enabled` TEXT, `no_of_text_fields` INTEGER, `scroll_text_lines_json` TEXT, PRIMARY KEY(`device_id`))");
+        SQLite.execSQL(connection, "CREATE TABLE IF NOT EXISTS `mapped_broker` (`broker_id` INTEGER NOT NULL, `device_id` INTEGER NOT NULL, `mac_address` TEXT NOT NULL, `customer_id` TEXT NOT NULL, `serial_number` TEXT, `device_type` TEXT, `ssid` TEXT, `password` TEXT, `host` TEXT, `port` TEXT, `topic` TEXT, `mapped_broker_json` TEXT, PRIMARY KEY(`broker_id`))");
+        SQLite.execSQL(connection, "CREATE TABLE IF NOT EXISTS `counters` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `device_id` INTEGER NOT NULL, `mac_address` TEXT NOT NULL, `customer_id` TEXT NOT NULL, `counter_id` TEXT, `default_name` TEXT, `default_code` TEXT, `source_device` TEXT, `button_index` INTEGER, `name` TEXT, `code` TEXT, `row_span` INTEGER, `col_span` INTEGER, `is_enabled` INTEGER, `audio_url` TEXT, `audio_name` TEXT, `counter_config_id` INTEGER, `max_token_number` INTEGER, `dispenser_serial_number` TEXT, `dispenser_token_type` TEXT, `dispenser_display_name` TEXT, `raw_json` TEXT)");
+        SQLite.execSQL(connection, "CREATE TABLE IF NOT EXISTS `ad_files` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `device_id` INTEGER NOT NULL, `mac_address` TEXT NOT NULL, `customer_id` TEXT NOT NULL, `position` INTEGER NOT NULL, `file_path` TEXT NOT NULL, `raw_json` TEXT)");
+        SQLite.execSQL(connection, "CREATE TABLE IF NOT EXISTS `token_history` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `counter_key` TEXT NOT NULL, `token` TEXT NOT NULL, `position` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `call_date` TEXT NOT NULL)");
+        SQLite.execSQL(connection, "CREATE UNIQUE INDEX IF NOT EXISTS `index_token_history_counter_key_position` ON `token_history` (`counter_key`, `position`)");
+        SQLite.execSQL(connection, "CREATE TABLE IF NOT EXISTS `connected_devices` (`localId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `device_id` INTEGER NOT NULL, `mac_address` TEXT NOT NULL, `customer_id` TEXT NOT NULL, `remote_device_id` INTEGER, `serial_number` TEXT, `device_type` TEXT, `name` TEXT, `status` TEXT, `is_active` INTEGER, `config_json` TEXT)");
+        SQLite.execSQL(connection, "CREATE TABLE IF NOT EXISTS `token_records` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `mac_address` TEXT NOT NULL, `counter_id` INTEGER NOT NULL, `counter_name` TEXT NOT NULL, `token_number` TEXT NOT NULL, `keypad_serial_number` TEXT NOT NULL, `created_date` TEXT NOT NULL, `created_time` TEXT NOT NULL, `called_time` TEXT NOT NULL, `is_uploaded` INTEGER NOT NULL)");
+        SQLite.execSQL(connection, "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)");
+        SQLite.execSQL(connection, "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '99034898f0aab65ef4f9b18c88b0d558')");
+      }
+
+      @Override
+      public void dropAllTables(@NonNull final SQLiteConnection connection) {
+        SQLite.execSQL(connection, "DROP TABLE IF EXISTS `tv_config`");
+        SQLite.execSQL(connection, "DROP TABLE IF EXISTS `mapped_broker`");
+        SQLite.execSQL(connection, "DROP TABLE IF EXISTS `counters`");
+        SQLite.execSQL(connection, "DROP TABLE IF EXISTS `ad_files`");
+        SQLite.execSQL(connection, "DROP TABLE IF EXISTS `token_history`");
+        SQLite.execSQL(connection, "DROP TABLE IF EXISTS `connected_devices`");
+        SQLite.execSQL(connection, "DROP TABLE IF EXISTS `token_records`");
+      }
+
+      @Override
+      public void onCreate(@NonNull final SQLiteConnection connection) {
+      }
+
+      @Override
+      public void onOpen(@NonNull final SQLiteConnection connection) {
+        internalInitInvalidationTracker(connection);
+      }
+
+      @Override
+      public void onPreMigrate(@NonNull final SQLiteConnection connection) {
+        DBUtil.dropFtsSyncTriggers(connection);
+      }
+
+      @Override
+      public void onPostMigrate(@NonNull final SQLiteConnection connection) {
+      }
+
+      @Override
+      @NonNull
+      public RoomOpenDelegate.ValidationResult onValidateSchema(
+          @NonNull final SQLiteConnection connection) {
+        final Map<String, TableInfo.Column> _columnsTvConfig = new HashMap<String, TableInfo.Column>(42);
+        _columnsTvConfig.put("device_id", new TableInfo.Column("device_id", "INTEGER", true, 1, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("serial_number", new TableInfo.Column("serial_number", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("mac_address", new TableInfo.Column("mac_address", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("customer_id", new TableInfo.Column("customer_id", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("company_name", new TableInfo.Column("company_name", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("status", new TableInfo.Column("status", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("message", new TableInfo.Column("message", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("audio_language", new TableInfo.Column("audio_language", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("show_ads", new TableInfo.Column("show_ads", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("ad_interval", new TableInfo.Column("ad_interval", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("orientation", new TableInfo.Column("orientation", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("layout_type", new TableInfo.Column("layout_type", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("save_audio_external", new TableInfo.Column("save_audio_external", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("enable_counter_announcement", new TableInfo.Column("enable_counter_announcement", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("enable_token_announcement", new TableInfo.Column("enable_token_announcement", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("enable_counter_prifix", new TableInfo.Column("enable_counter_prifix", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("token_audio_url", new TableInfo.Column("token_audio_url", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("token_music_url", new TableInfo.Column("token_music_url", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("display_rows", new TableInfo.Column("display_rows", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("display_columns", new TableInfo.Column("display_columns", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("counter_text_color", new TableInfo.Column("counter_text_color", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("token_text_color", new TableInfo.Column("token_text_color", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("font_size", new TableInfo.Column("font_size", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("token_font_size", new TableInfo.Column("token_font_size", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("counter_font_size", new TableInfo.Column("counter_font_size", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("current_token_color", new TableInfo.Column("current_token_color", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("previous_token_color", new TableInfo.Column("previous_token_color", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("blink_current_token", new TableInfo.Column("blink_current_token", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("token_format", new TableInfo.Column("token_format", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("tokens_per_counter", new TableInfo.Column("tokens_per_counter", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("no_of_counters", new TableInfo.Column("no_of_counters", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("ad_placement", new TableInfo.Column("ad_placement", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("ad_files_json", new TableInfo.Column("ad_files_json", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("counters_json", new TableInfo.Column("counters_json", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("shift_details_json", new TableInfo.Column("shift_details_json", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("mapped_broker_json", new TableInfo.Column("mapped_broker_json", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("blink_seconds", new TableInfo.Column("blink_seconds", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("current_profile_json", new TableInfo.Column("current_profile_json", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("connected_devices_json", new TableInfo.Column("connected_devices_json", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("scroll_enabled", new TableInfo.Column("scroll_enabled", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("no_of_text_fields", new TableInfo.Column("no_of_text_fields", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTvConfig.put("scroll_text_lines_json", new TableInfo.Column("scroll_text_lines_json", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        final Set<TableInfo.ForeignKey> _foreignKeysTvConfig = new HashSet<TableInfo.ForeignKey>(0);
+        final Set<TableInfo.Index> _indicesTvConfig = new HashSet<TableInfo.Index>(0);
+        final TableInfo _infoTvConfig = new TableInfo("tv_config", _columnsTvConfig, _foreignKeysTvConfig, _indicesTvConfig);
+        final TableInfo _existingTvConfig = TableInfo.read(connection, "tv_config");
+        if (!_infoTvConfig.equals(_existingTvConfig)) {
+          return new RoomOpenDelegate.ValidationResult(false, "tv_config(com.softland.callqtv.data.local.TvConfigEntity).\n"
+                  + " Expected:\n" + _infoTvConfig + "\n"
+                  + " Found:\n" + _existingTvConfig);
+        }
+        final Map<String, TableInfo.Column> _columnsMappedBroker = new HashMap<String, TableInfo.Column>(12);
+        _columnsMappedBroker.put("broker_id", new TableInfo.Column("broker_id", "INTEGER", true, 1, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsMappedBroker.put("device_id", new TableInfo.Column("device_id", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsMappedBroker.put("mac_address", new TableInfo.Column("mac_address", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsMappedBroker.put("customer_id", new TableInfo.Column("customer_id", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsMappedBroker.put("serial_number", new TableInfo.Column("serial_number", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsMappedBroker.put("device_type", new TableInfo.Column("device_type", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsMappedBroker.put("ssid", new TableInfo.Column("ssid", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsMappedBroker.put("password", new TableInfo.Column("password", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsMappedBroker.put("host", new TableInfo.Column("host", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsMappedBroker.put("port", new TableInfo.Column("port", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsMappedBroker.put("topic", new TableInfo.Column("topic", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsMappedBroker.put("mapped_broker_json", new TableInfo.Column("mapped_broker_json", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        final Set<TableInfo.ForeignKey> _foreignKeysMappedBroker = new HashSet<TableInfo.ForeignKey>(0);
+        final Set<TableInfo.Index> _indicesMappedBroker = new HashSet<TableInfo.Index>(0);
+        final TableInfo _infoMappedBroker = new TableInfo("mapped_broker", _columnsMappedBroker, _foreignKeysMappedBroker, _indicesMappedBroker);
+        final TableInfo _existingMappedBroker = TableInfo.read(connection, "mapped_broker");
+        if (!_infoMappedBroker.equals(_existingMappedBroker)) {
+          return new RoomOpenDelegate.ValidationResult(false, "mapped_broker(com.softland.callqtv.data.local.MappedBrokerEntity).\n"
+                  + " Expected:\n" + _infoMappedBroker + "\n"
+                  + " Found:\n" + _existingMappedBroker);
+        }
+        final Map<String, TableInfo.Column> _columnsCounters = new HashMap<String, TableInfo.Column>(22);
+        _columnsCounters.put("id", new TableInfo.Column("id", "INTEGER", true, 1, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsCounters.put("device_id", new TableInfo.Column("device_id", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsCounters.put("mac_address", new TableInfo.Column("mac_address", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsCounters.put("customer_id", new TableInfo.Column("customer_id", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsCounters.put("counter_id", new TableInfo.Column("counter_id", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsCounters.put("default_name", new TableInfo.Column("default_name", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsCounters.put("default_code", new TableInfo.Column("default_code", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsCounters.put("source_device", new TableInfo.Column("source_device", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsCounters.put("button_index", new TableInfo.Column("button_index", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsCounters.put("name", new TableInfo.Column("name", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsCounters.put("code", new TableInfo.Column("code", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsCounters.put("row_span", new TableInfo.Column("row_span", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsCounters.put("col_span", new TableInfo.Column("col_span", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsCounters.put("is_enabled", new TableInfo.Column("is_enabled", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsCounters.put("audio_url", new TableInfo.Column("audio_url", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsCounters.put("audio_name", new TableInfo.Column("audio_name", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsCounters.put("counter_config_id", new TableInfo.Column("counter_config_id", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsCounters.put("max_token_number", new TableInfo.Column("max_token_number", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsCounters.put("dispenser_serial_number", new TableInfo.Column("dispenser_serial_number", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsCounters.put("dispenser_token_type", new TableInfo.Column("dispenser_token_type", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsCounters.put("dispenser_display_name", new TableInfo.Column("dispenser_display_name", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsCounters.put("raw_json", new TableInfo.Column("raw_json", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        final Set<TableInfo.ForeignKey> _foreignKeysCounters = new HashSet<TableInfo.ForeignKey>(0);
+        final Set<TableInfo.Index> _indicesCounters = new HashSet<TableInfo.Index>(0);
+        final TableInfo _infoCounters = new TableInfo("counters", _columnsCounters, _foreignKeysCounters, _indicesCounters);
+        final TableInfo _existingCounters = TableInfo.read(connection, "counters");
+        if (!_infoCounters.equals(_existingCounters)) {
+          return new RoomOpenDelegate.ValidationResult(false, "counters(com.softland.callqtv.data.local.CounterEntity).\n"
+                  + " Expected:\n" + _infoCounters + "\n"
+                  + " Found:\n" + _existingCounters);
+        }
+        final Map<String, TableInfo.Column> _columnsAdFiles = new HashMap<String, TableInfo.Column>(7);
+        _columnsAdFiles.put("id", new TableInfo.Column("id", "INTEGER", true, 1, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsAdFiles.put("device_id", new TableInfo.Column("device_id", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsAdFiles.put("mac_address", new TableInfo.Column("mac_address", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsAdFiles.put("customer_id", new TableInfo.Column("customer_id", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsAdFiles.put("position", new TableInfo.Column("position", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsAdFiles.put("file_path", new TableInfo.Column("file_path", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsAdFiles.put("raw_json", new TableInfo.Column("raw_json", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        final Set<TableInfo.ForeignKey> _foreignKeysAdFiles = new HashSet<TableInfo.ForeignKey>(0);
+        final Set<TableInfo.Index> _indicesAdFiles = new HashSet<TableInfo.Index>(0);
+        final TableInfo _infoAdFiles = new TableInfo("ad_files", _columnsAdFiles, _foreignKeysAdFiles, _indicesAdFiles);
+        final TableInfo _existingAdFiles = TableInfo.read(connection, "ad_files");
+        if (!_infoAdFiles.equals(_existingAdFiles)) {
+          return new RoomOpenDelegate.ValidationResult(false, "ad_files(com.softland.callqtv.data.local.AdFileEntity).\n"
+                  + " Expected:\n" + _infoAdFiles + "\n"
+                  + " Found:\n" + _existingAdFiles);
+        }
+        final Map<String, TableInfo.Column> _columnsTokenHistory = new HashMap<String, TableInfo.Column>(6);
+        _columnsTokenHistory.put("id", new TableInfo.Column("id", "INTEGER", true, 1, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTokenHistory.put("counter_key", new TableInfo.Column("counter_key", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTokenHistory.put("token", new TableInfo.Column("token", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTokenHistory.put("position", new TableInfo.Column("position", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTokenHistory.put("updated_at", new TableInfo.Column("updated_at", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTokenHistory.put("call_date", new TableInfo.Column("call_date", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        final Set<TableInfo.ForeignKey> _foreignKeysTokenHistory = new HashSet<TableInfo.ForeignKey>(0);
+        final Set<TableInfo.Index> _indicesTokenHistory = new HashSet<TableInfo.Index>(1);
+        _indicesTokenHistory.add(new TableInfo.Index("index_token_history_counter_key_position", true, Arrays.asList("counter_key", "position"), Arrays.asList("ASC", "ASC")));
+        final TableInfo _infoTokenHistory = new TableInfo("token_history", _columnsTokenHistory, _foreignKeysTokenHistory, _indicesTokenHistory);
+        final TableInfo _existingTokenHistory = TableInfo.read(connection, "token_history");
+        if (!_infoTokenHistory.equals(_existingTokenHistory)) {
+          return new RoomOpenDelegate.ValidationResult(false, "token_history(com.softland.callqtv.data.local.TokenHistoryEntity).\n"
+                  + " Expected:\n" + _infoTokenHistory + "\n"
+                  + " Found:\n" + _existingTokenHistory);
+        }
+        final Map<String, TableInfo.Column> _columnsConnectedDevices = new HashMap<String, TableInfo.Column>(11);
+        _columnsConnectedDevices.put("localId", new TableInfo.Column("localId", "INTEGER", true, 1, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsConnectedDevices.put("device_id", new TableInfo.Column("device_id", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsConnectedDevices.put("mac_address", new TableInfo.Column("mac_address", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsConnectedDevices.put("customer_id", new TableInfo.Column("customer_id", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsConnectedDevices.put("remote_device_id", new TableInfo.Column("remote_device_id", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsConnectedDevices.put("serial_number", new TableInfo.Column("serial_number", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsConnectedDevices.put("device_type", new TableInfo.Column("device_type", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsConnectedDevices.put("name", new TableInfo.Column("name", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsConnectedDevices.put("status", new TableInfo.Column("status", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsConnectedDevices.put("is_active", new TableInfo.Column("is_active", "INTEGER", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsConnectedDevices.put("config_json", new TableInfo.Column("config_json", "TEXT", false, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        final Set<TableInfo.ForeignKey> _foreignKeysConnectedDevices = new HashSet<TableInfo.ForeignKey>(0);
+        final Set<TableInfo.Index> _indicesConnectedDevices = new HashSet<TableInfo.Index>(0);
+        final TableInfo _infoConnectedDevices = new TableInfo("connected_devices", _columnsConnectedDevices, _foreignKeysConnectedDevices, _indicesConnectedDevices);
+        final TableInfo _existingConnectedDevices = TableInfo.read(connection, "connected_devices");
+        if (!_infoConnectedDevices.equals(_existingConnectedDevices)) {
+          return new RoomOpenDelegate.ValidationResult(false, "connected_devices(com.softland.callqtv.data.local.ConnectedDeviceEntity).\n"
+                  + " Expected:\n" + _infoConnectedDevices + "\n"
+                  + " Found:\n" + _existingConnectedDevices);
+        }
+        final Map<String, TableInfo.Column> _columnsTokenRecords = new HashMap<String, TableInfo.Column>(10);
+        _columnsTokenRecords.put("id", new TableInfo.Column("id", "INTEGER", true, 1, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTokenRecords.put("mac_address", new TableInfo.Column("mac_address", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTokenRecords.put("counter_id", new TableInfo.Column("counter_id", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTokenRecords.put("counter_name", new TableInfo.Column("counter_name", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTokenRecords.put("token_number", new TableInfo.Column("token_number", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTokenRecords.put("keypad_serial_number", new TableInfo.Column("keypad_serial_number", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTokenRecords.put("created_date", new TableInfo.Column("created_date", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTokenRecords.put("created_time", new TableInfo.Column("created_time", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTokenRecords.put("called_time", new TableInfo.Column("called_time", "TEXT", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        _columnsTokenRecords.put("is_uploaded", new TableInfo.Column("is_uploaded", "INTEGER", true, 0, null, TableInfo.CREATED_FROM_ENTITY));
+        final Set<TableInfo.ForeignKey> _foreignKeysTokenRecords = new HashSet<TableInfo.ForeignKey>(0);
+        final Set<TableInfo.Index> _indicesTokenRecords = new HashSet<TableInfo.Index>(0);
+        final TableInfo _infoTokenRecords = new TableInfo("token_records", _columnsTokenRecords, _foreignKeysTokenRecords, _indicesTokenRecords);
+        final TableInfo _existingTokenRecords = TableInfo.read(connection, "token_records");
+        if (!_infoTokenRecords.equals(_existingTokenRecords)) {
+          return new RoomOpenDelegate.ValidationResult(false, "token_records(com.softland.callqtv.data.local.TokenRecordEntity).\n"
+                  + " Expected:\n" + _infoTokenRecords + "\n"
+                  + " Found:\n" + _existingTokenRecords);
+        }
+        return new RoomOpenDelegate.ValidationResult(true, null);
+      }
+    };
+    return _openDelegate;
+  }
+
+  @Override
+  @NonNull
+  protected InvalidationTracker createInvalidationTracker() {
+    final Map<String, String> _shadowTablesMap = new HashMap<String, String>(0);
+    final Map<String, Set<String>> _viewTables = new HashMap<String, Set<String>>(0);
+    return new InvalidationTracker(this, _shadowTablesMap, _viewTables, "tv_config", "mapped_broker", "counters", "ad_files", "token_history", "connected_devices", "token_records");
+  }
+
+  @Override
+  public void clearAllTables() {
+    super.performClear(false, "tv_config", "mapped_broker", "counters", "ad_files", "token_history", "connected_devices", "token_records");
+  }
+
+  @Override
+  @NonNull
+  protected Map<Class<?>, List<Class<?>>> getRequiredTypeConverters() {
+    final Map<Class<?>, List<Class<?>>> _typeConvertersMap = new HashMap<Class<?>, List<Class<?>>>();
+    _typeConvertersMap.put(TvConfigDao.class, TvConfigDao_Impl.getRequiredConverters());
+    _typeConvertersMap.put(MappedBrokerDao.class, MappedBrokerDao_Impl.getRequiredConverters());
+    _typeConvertersMap.put(CounterDao.class, CounterDao_Impl.getRequiredConverters());
+    _typeConvertersMap.put(AdFileDao.class, AdFileDao_Impl.getRequiredConverters());
+    _typeConvertersMap.put(TokenHistoryDao.class, TokenHistoryDao_Impl.getRequiredConverters());
+    _typeConvertersMap.put(ConnectedDeviceDao.class, ConnectedDeviceDao_Impl.getRequiredConverters());
+    _typeConvertersMap.put(TokenRecordDao.class, TokenRecordDao_Impl.getRequiredConverters());
+    return _typeConvertersMap;
+  }
+
+  @Override
+  @NonNull
+  public Set<Class<? extends AutoMigrationSpec>> getRequiredAutoMigrationSpecs() {
+    final Set<Class<? extends AutoMigrationSpec>> _autoMigrationSpecsSet = new HashSet<Class<? extends AutoMigrationSpec>>();
+    return _autoMigrationSpecsSet;
+  }
+
+  @Override
+  @NonNull
+  public List<Migration> getAutoMigrations(
+      @NonNull final Map<Class<? extends AutoMigrationSpec>, AutoMigrationSpec> autoMigrationSpecs) {
+    final List<Migration> _autoMigrations = new ArrayList<Migration>();
+    return _autoMigrations;
+  }
+
+  @Override
+  public TvConfigDao tvConfigDao() {
+    if (_tvConfigDao != null) {
+      return _tvConfigDao;
+    } else {
+      synchronized(this) {
+        if(_tvConfigDao == null) {
+          _tvConfigDao = new TvConfigDao_Impl(this);
+        }
+        return _tvConfigDao;
+      }
+    }
+  }
+
+  @Override
+  public MappedBrokerDao mappedBrokerDao() {
+    if (_mappedBrokerDao != null) {
+      return _mappedBrokerDao;
+    } else {
+      synchronized(this) {
+        if(_mappedBrokerDao == null) {
+          _mappedBrokerDao = new MappedBrokerDao_Impl(this);
+        }
+        return _mappedBrokerDao;
+      }
+    }
+  }
+
+  @Override
+  public CounterDao counterDao() {
+    if (_counterDao != null) {
+      return _counterDao;
+    } else {
+      synchronized(this) {
+        if(_counterDao == null) {
+          _counterDao = new CounterDao_Impl(this);
+        }
+        return _counterDao;
+      }
+    }
+  }
+
+  @Override
+  public AdFileDao adFileDao() {
+    if (_adFileDao != null) {
+      return _adFileDao;
+    } else {
+      synchronized(this) {
+        if(_adFileDao == null) {
+          _adFileDao = new AdFileDao_Impl(this);
+        }
+        return _adFileDao;
+      }
+    }
+  }
+
+  @Override
+  public TokenHistoryDao tokenHistoryDao() {
+    if (_tokenHistoryDao != null) {
+      return _tokenHistoryDao;
+    } else {
+      synchronized(this) {
+        if(_tokenHistoryDao == null) {
+          _tokenHistoryDao = new TokenHistoryDao_Impl(this);
+        }
+        return _tokenHistoryDao;
+      }
+    }
+  }
+
+  @Override
+  public ConnectedDeviceDao connectedDeviceDao() {
+    if (_connectedDeviceDao != null) {
+      return _connectedDeviceDao;
+    } else {
+      synchronized(this) {
+        if(_connectedDeviceDao == null) {
+          _connectedDeviceDao = new ConnectedDeviceDao_Impl(this);
+        }
+        return _connectedDeviceDao;
+      }
+    }
+  }
+
+  @Override
+  public TokenRecordDao tokenRecordDao() {
+    if (_tokenRecordDao != null) {
+      return _tokenRecordDao;
+    } else {
+      synchronized(this) {
+        if(_tokenRecordDao == null) {
+          _tokenRecordDao = new TokenRecordDao_Impl(this);
+        }
+        return _tokenRecordDao;
+      }
+    }
+  }
+}

@@ -1,6 +1,7 @@
 package com.softland.callqtv.data.model
 
 import com.google.gson.JsonElement
+import com.google.gson.annotations.JsonAdapter
 import com.google.gson.annotations.SerializedName
 
 /**
@@ -27,6 +28,7 @@ data class TvConfigResponse(
     @SerializedName("mapped_broker") val mappedBroker: MappedBroker? = null,
     @SerializedName("connected_devices") val connectedDevices: List<ConnectedDevice>? = null,
     @SerializedName("counters") val counters: List<CounterConfig>? = null,
+    @SerializedName("keypads") val keypads: List<KeypadConfig>? = null,
     @SerializedName("shift_details") val shiftDetails: JsonElement? = null,
     @SerializedName("scroll_config") val scrollConfig: ScrollConfig? = null,
     @SerializedName("error") val error: String? = null,
@@ -63,7 +65,15 @@ data class ConnectedDevice(
 data class CounterConfig(
     @SerializedName("counter_id") val counterId: String? = null,
     @SerializedName("default_code") val defaultCode: String? = null,
+    @SerializedName("keypad_index") val keypadIndex: String? = null,
+    @JsonAdapter(FlexibleIntDeserializer::class)
+    @SerializedName("dispenser_index") val dispenserIndex: Int? = null,
+    @JsonAdapter(FlexibleIntDeserializer::class)
     @SerializedName("button_index") val buttonIndex: Int? = null,
+    @JsonAdapter(FlexibleIntDeserializer::class)
+    @SerializedName("dispenser_button_index") val dispenserButtonIndex: Int? = null,
+    @JsonAdapter(FlexibleIntDeserializer::class)
+    @SerializedName("dispenser_button_number") val dispenserButtonNumber: Int? = null,
     @SerializedName("name") val name: String? = null,
     @SerializedName("code") val code: String? = null,
     @SerializedName("row_span") val rowSpan: Int? = null,
@@ -71,6 +81,7 @@ data class CounterConfig(
     @SerializedName("is_enabled") val isEnabled: Boolean? = null,
     @SerializedName("counter_config_id") val counterConfigId: Int? = null,
     @SerializedName("max_token_number") val maxTokenNumber: Int? = null,
+    @SerializedName("dispenser_sn") val dispenserSn: String? = null,
     @SerializedName("dispenser_serial_number") val dispenserSerialNumber: String? = null,
     @SerializedName("dispenser_token_type") val dispenserTokenType: String? = null,
     @SerializedName("dispenser_display_name") val dispenserDisplayName: String? = null,
@@ -78,6 +89,20 @@ data class CounterConfig(
     @SerializedName("default_name") val defaultName: String? = null,
     @SerializedName("audio_url") val audioUrl: String? = null,
     @SerializedName("audio_name") val audioName: String? = null
+)
+
+data class KeypadConfig(
+    @SerializedName("keypad_sn") val keypadSn: String? = null,
+    @SerializedName("keypad_display_name") val keypadDisplayName: String? = null,
+    @SerializedName("keypad_index") val keypadIndex: String? = null,
+    @SerializedName("dispenser_sn") val dispenserSn: String? = null,
+    @SerializedName("button_strings") val buttonStrings: List<ButtonStringItem>? = null,
+    @SerializedName("counters") val counters: List<CounterConfig>? = null
+)
+
+data class ButtonStringItem(
+    @SerializedName("id") val id: String? = null,
+    @SerializedName("value") val value: String? = null
 )
 
 data class TvConfigPayload(
@@ -94,6 +119,7 @@ data class TvConfigPayload(
     @SerializedName("display_columns") val displayColumns: Int? = null,
     @SerializedName("counter_text_color") val counterTextColor: String? = null,
     @SerializedName("token_text_color") val tokenTextColor: String? = null,
+    @SerializedName("scroll_text_color") val scrollTextColor: String? = null,
     @SerializedName("token_font_size") val tokenFontSize: Int? = null,
     @SerializedName("counter_font_size") val counterFontSize: Int? = null,
     @SerializedName("tokens_per_counter") val tokensPerCounter: Int? = null,
@@ -116,5 +142,6 @@ data class TvConfigPayload(
 data class ScrollConfig(
     @SerializedName("scroll_enabled") val scrollEnabled: String? = null,
     @SerializedName("no_of_text_fields") val noOfTextFields: Int? = null,
-    @SerializedName("scroll_text_lines") val scrollTextLines: List<String>? = null
+    @SerializedName("scroll_text_lines") val scrollTextLines: List<String>? = null,
+    @SerializedName("scroll_text_color") val scrollTextColor: String? = null
 )

@@ -1,0 +1,51 @@
+package com.softland.callqtv.data.local;
+
+@kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u00002\n\u0002\u0018\u0002\n\u0002\u0018\u0002\n\u0002\b\u0003\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0002\b\'\u0018\u0000 \u00102\u00020\u0001:\u0001\u0010B\u0007\u00a2\u0006\u0004\b\u0002\u0010\u0003J\b\u0010\u0004\u001a\u00020\u0005H&J\b\u0010\u0006\u001a\u00020\u0007H&J\b\u0010\b\u001a\u00020\tH&J\b\u0010\n\u001a\u00020\u000bH&J\b\u0010\f\u001a\u00020\rH&J\b\u0010\u000e\u001a\u00020\u000fH&\u00a8\u0006\u0011"}, d2 = {"Lcom/softland/callqtv/data/local/AppDatabase;", "Landroidx/room/RoomDatabase;", "<init>", "()V", "tvConfigDao", "Lcom/softland/callqtv/data/local/TvConfigDao;", "mappedBrokerDao", "Lcom/softland/callqtv/data/local/MappedBrokerDao;", "counterDao", "Lcom/softland/callqtv/data/local/CounterDao;", "adFileDao", "Lcom/softland/callqtv/data/local/AdFileDao;", "tokenHistoryDao", "Lcom/softland/callqtv/data/local/TokenHistoryDao;", "connectedDeviceDao", "Lcom/softland/callqtv/data/local/ConnectedDeviceDao;", "Companion", "CallQTV_v1.0.0_CallQTVDebug"})
+@androidx.room.Database(entities = {com.softland.callqtv.data.local.TvConfigEntity.class, com.softland.callqtv.data.local.MappedBrokerEntity.class, com.softland.callqtv.data.local.CounterEntity.class, com.softland.callqtv.data.local.AdFileEntity.class, com.softland.callqtv.data.local.TokenHistoryEntity.class, com.softland.callqtv.data.local.ConnectedDeviceEntity.class}, version = 14, exportSchema = false)
+public abstract class AppDatabase extends androidx.room.RoomDatabase {
+    @kotlin.jvm.Volatile()
+    @org.jetbrains.annotations.Nullable()
+    private static volatile com.softland.callqtv.data.local.AppDatabase INSTANCE;
+    @org.jetbrains.annotations.NotNull()
+    private static final androidx.room.migration.Migration MIGRATION_10_11 = null;
+    @org.jetbrains.annotations.NotNull()
+    private static final androidx.room.migration.Migration MIGRATION_13_14 = null;
+    @org.jetbrains.annotations.NotNull()
+    public static final com.softland.callqtv.data.local.AppDatabase.Companion Companion = null;
+    
+    public AppDatabase() {
+        super();
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public abstract com.softland.callqtv.data.local.TvConfigDao tvConfigDao();
+    
+    @org.jetbrains.annotations.NotNull()
+    public abstract com.softland.callqtv.data.local.MappedBrokerDao mappedBrokerDao();
+    
+    @org.jetbrains.annotations.NotNull()
+    public abstract com.softland.callqtv.data.local.CounterDao counterDao();
+    
+    @org.jetbrains.annotations.NotNull()
+    public abstract com.softland.callqtv.data.local.AdFileDao adFileDao();
+    
+    @org.jetbrains.annotations.NotNull()
+    public abstract com.softland.callqtv.data.local.TokenHistoryDao tokenHistoryDao();
+    
+    @org.jetbrains.annotations.NotNull()
+    public abstract com.softland.callqtv.data.local.ConnectedDeviceDao connectedDeviceDao();
+    
+    @kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u0000 \n\u0002\u0018\u0002\n\u0002\u0010\u0000\n\u0002\b\u0003\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0004\n\u0002\u0018\u0002\n\u0000\b\u0086\u0003\u0018\u00002\u00020\u0001B\t\b\u0002\u00a2\u0006\u0004\b\u0002\u0010\u0003J\u000e\u0010\n\u001a\u00020\u00052\u0006\u0010\u000b\u001a\u00020\fR\u0010\u0010\u0004\u001a\u0004\u0018\u00010\u0005X\u0082\u000e\u00a2\u0006\u0002\n\u0000R\u0010\u0010\u0006\u001a\u00020\u0007X\u0082\u0004\u00a2\u0006\u0004\n\u0002\u0010\bR\u0010\u0010\t\u001a\u00020\u0007X\u0082\u0004\u00a2\u0006\u0004\n\u0002\u0010\b\u00a8\u0006\r"}, d2 = {"Lcom/softland/callqtv/data/local/AppDatabase$Companion;", "", "<init>", "()V", "INSTANCE", "Lcom/softland/callqtv/data/local/AppDatabase;", "MIGRATION_10_11", "Landroidx/room/migration/Migration;", "Landroidx/room/migration/Migration;", "MIGRATION_13_14", "getInstance", "context", "Landroid/content/Context;", "CallQTV_v1.0.0_CallQTVDebug"})
+    public static final class Companion {
+        
+        private Companion() {
+            super();
+        }
+        
+        @org.jetbrains.annotations.NotNull()
+        public final com.softland.callqtv.data.local.AppDatabase getInstance(@org.jetbrains.annotations.NotNull()
+        android.content.Context context) {
+            return null;
+        }
+    }
+}

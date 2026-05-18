@@ -1,0 +1,656 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AndroidLayouts">
+    <shared>
+      <config>
+        <device id="pixel_4" />
+        <device id="pixel_5" />
+        <device id="pixel_6" />
+        <device id="_device_class_phone" />
+        <device id="_device_class_tablet" />
+      </config>
+    </shared>
+    <layouts>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable-v24/ic_launcher_foreground.xml">
+        <config>
+          <theme>@style/Theme.CallQTV</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/app_bg.xml">
+        <config>
+          <theme>@style/Theme.CallQTV</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/app_bg2.xml">
+        <config>
+          <theme>@style/Theme.CallQTV</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/app_bg_vector.xml">
+        <config>
+          <theme>@style/Theme.CallQTV</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/bg_layout.xml">
+        <config>
+          <theme>@style/Theme.CallQTV</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/circle_bg.xml">
+        <config>
+          <theme>@style/Theme.CallQTV</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/circle_bg1.xml">
+        <config>
+          <theme>@style/Theme.CallQTV</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/circle_bg2.xml">
+        <config>
+          <theme>@style/Theme.CallQTV</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/ic_logout.xml">
+        <config>
+          <theme>@style/Theme.CallQTV</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/ic_network_available.xml">
+        <config>
+          <theme>@style/Theme.CallQTV</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/ic_network_unavailable.xml">
+        <config>
+          <theme>@style/Theme.CallQTV</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/placeholder_ad.xml">
+        <config>
+          <theme>@style/Theme.CallQTV</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/predefined_button_bg.xml">
+        <config>
+          <theme>@style/Theme.CallQTV</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/rectangle_2.xml">
+        <config>
+          <theme>@style/Theme.CallQTV</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/drawable/warning_24.xml">
+        <config>
+          <theme>@style/Theme.CallQTV</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml">
+        <config>
+          <theme>@style/Theme.CallQTV</theme>
+        </config>
+      </layout>
+      <layout url="file://$PROJECT_DIR$/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml">
+        <config>
+          <theme>@style/Theme.CallQTV</theme>
+        </config>
+      </layout>
+    </layouts>
+  </component>
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="NONE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="ad8c1af2-5f74-4132-88bc-600d98a9f3e4" name="Changes" comment="-&gt;Latest updated code&#10;-&gt;Version_1.0.1" />
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ClangdSettings">
+    <option name="formatViaClangd" value="false" />
+  </component>
+  <component name="CopilotPersistence">
+    <persistenceIdMap>
+      <entry key="_F:/I Drive/Adithyan/CallQTV" value="2zqvFDDSxOLveWQDZvsdFLY1kAS" />
+    </persistenceIdMap>
+  </component>
+  <component name="ExecutionTargetManager" SELECTED_TARGET="device_and_snapshot_combo_box_target[PhysicalDevice::serial=XO95IBCEYTOFAU9H]" />
+  <component name="ExternalProjectsData">
+    <projectState path="$PROJECT_DIR$">
+      <ProjectState />
+    </projectState>
+  </component>
+  <component name="ExternalProjectsManager">
+    <system id="GRADLE">
+      <state>
+        <task path="$PROJECT_DIR$/app">
+          <activation />
+        </task>
+        <projects_view>
+          <tree_state>
+            <expand>
+              <path>
+                <item name="" type="6a2764b6:ExternalProjectsStructure$RootNode" />
+                <item name="FoodFlashLite" type="f1a62948:ProjectNode" />
+              </path>
+              <path>
+                <item name="" type="6a2764b6:ExternalProjectsStructure$RootNode" />
+                <item name="FoodFlashLite" type="f1a62948:ProjectNode" />
+                <item name="app" type="2d1252cf:ModuleNode" />
+              </path>
+              <path>
+                <item name="" type="6a2764b6:ExternalProjectsStructure$RootNode" />
+                <item name="FoodFlashLite" type="f1a62948:ProjectNode" />
+                <item name="app" type="2d1252cf:ModuleNode" />
+                <item name="Tasks" type="e4a08cd1:TasksNode" />
+              </path>
+              <path>
+                <item name="" type="6a2764b6:ExternalProjectsStructure$RootNode" />
+                <item name="FoodFlashLite" type="f1a62948:ProjectNode" />
+                <item name="app" type="2d1252cf:ModuleNode" />
+                <item name="Tasks" type="e4a08cd1:TasksNode" />
+                <item name="other" type="c8890929:TasksNode$1" />
+              </path>
+            </expand>
+            <select />
+          </tree_state>
+        </projects_view>
+      </state>
+    </system>
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Interface" />
+        <option value="valueResourceFile" />
+        <option value="resourceFile" />
+        <option value="layoutResourceFile" />
+        <option value="Class" />
+      </list>
+    </option>
+  </component>
+  <component name="GenerateSignedApkSettings">
+    <option name="KEY_STORE_PATH" value="F:\I Drive\Adithyan\Android_keystore\limar.keystore" />
+    <option name="KEY_ALIAS" value="androiddebugkey" />
+    <option name="REMEMBER_PASSWORDS" value="true" />
+    <option name="BUILD_TARGET_KEY" value="apk" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;Anusree-Pavithran&quot;
+  }
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/AdhiAdithyan/CallQTV.git&quot;,
+    &quot;accountId&quot;: &quot;ce294ca6-4cbc-4849-aba5-28d7c3285a3f&quot;
+  }
+}</component>
+  <component name="GradleScriptDefinitionsStorage" workingDir="$PROJECT_DIR$" gradleHome="F:\gradle-home\wrapper\dists\gradle-9.4.0-bin\lcvyxq3t37f6mx9miaydrrgs\gradle-9.4.0" javaHome="C:\Program Files\Java\jdk-17" gradleVersion="9.4.0" />
+  <component name="MarkdownSettingsMigration">
+    <option name="stateVersion" value="1" />
+  </component>
+  <component name="ProblemsViewState">
+    <option name="selectedTabId" value="CurrentFile" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;customColor&quot;: &quot;&quot;,
+  &quot;associatedIndex&quot;: 0
+}</component>
+  <component name="ProjectId" id="2zqvFDDSxOLveWQDZvsdFLY1kAS" />
+  <component name="ProjectViewState">
+    <option name="compactDirectories" value="true" />
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Android App.app.executor&quot;: &quot;Run&quot;,
+    &quot;ApkExportedModule&quot;: &quot;CallQTV.app&quot;,
+    &quot;ExportApk.ApkPathForCallQTV.app&quot;: &quot;F:\\&quot;,
+    &quot;ExportApk.ApkPathForFoodFlashLite.app&quot;: &quot;C:\\Users\\FM\\Desktop\\ManagerApplication\\Version1.0.4&quot;,
+    &quot;PROJECT_TRUSTED_KEY&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.cidr.known.project.marker&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.readMode.enableVisualFormatting&quot;: &quot;true&quot;,
+    &quot;cf.first.check.clang-format&quot;: &quot;false&quot;,
+    &quot;cidr.known.project.marker&quot;: &quot;true&quot;,
+    &quot;com.google.services.firebase.aqiPopupShown&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
+    &quot;last_directory_selection&quot;: &quot;D:/IDrive/Adithyan_Android/FoodFlashLite/app/src/main/res/drawable-v24&quot;,
+    &quot;last_opened_file_path&quot;: &quot;F:/I Drive/Adithyan/CallQTV&quot;,
+    &quot;project.structure.last.edited&quot;: &quot;SDK Location&quot;,
+    &quot;project.structure.proportion&quot;: &quot;0.17&quot;,
+    &quot;project.structure.side.proportion&quot;: &quot;0.2&quot;,
+    &quot;recommended.upgrade.last.time.stamp&quot;: &quot;1771419331216&quot;,
+    &quot;run.code.analysis.last.selected.profile&quot;: &quot;pProject Default&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;AndroidSdkUpdater&quot;,
+    &quot;show.do.not.copy.http.proxy.settings.to.gradle&quot;: &quot;true&quot;
+  },
+  &quot;keyToStringList&quot;: {
+    &quot;ExportApk.BuildVariants&quot;: [
+      &quot;CallQTVRelease&quot;
+    ]
+  }
+}</component>
+  <component name="PsdUISettings">
+    <option name="LAST_EDITED_BUILD_TYPE" value="release" />
+  </component>
+  <component name="RecentsManager">
+    <key name="android.template.-1916013822">
+      <recent name="com.softland.dineflash.Activities" />
+    </key>
+    <key name="android.template.-1521469786">
+      <recent name="com.softland.foodflashlite" />
+    </key>
+    <key name="android.template.-1374533873">
+      <recent name="com.softland.foodflashlite.Activities" />
+    </key>
+    <key name="android.template.1085345903">
+      <recent name="com.softland.foodflashlite.Activities" />
+    </key>
+    <key name="android.template.-536504232">
+      <recent name="com.softland.airlineflash.Activities" />
+    </key>
+    <key name="CopyClassDialog.RECENTS_KEY">
+      <recent name="com.softland.airlineflash.repository" />
+      <recent name="com.softland.airlineflash.model" />
+      <recent name="com.softland.airlineflash.viewmodel" />
+      <recent name="com.softland.airlineflash.adapter" />
+      <recent name="com.softland.airlineflash.util" />
+    </key>
+    <key name="android.template.788115169">
+      <recent name="com.softland.dineflash.Activities" />
+    </key>
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="F:\I Drive\Adithyan\CallQTV\app" />
+      <recent name="E:\I Drive\Adithyan\CallQTV\app\src\main\res\drawable" />
+      <recent name="D:\IDrive\Adithyan_Android\FoodFlashLite\app\src\DineFlash\res\drawable" />
+      <recent name="D:\IDrive\Adithyan_Android\FoodFlashLite\app\src\DineFlash\res\values" />
+      <recent name="D:\IDrive\Adithyan_Android\FoodFlashLite\app\src\DineFlash\res\layout" />
+    </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="D:\IDrive\Adithyan_Android\FoodFlashLite\app" />
+    </key>
+    <key name="android.template.421817654">
+      <recent name="com.softland.airlineflash.Activities" />
+    </key>
+    <key name="android.template.-135667084">
+      <recent name="com.softland.foodflashlite.Activities" />
+    </key>
+    <key name="android.template.-496269993">
+      <recent name="com.softland.foodflashlite.Activities" />
+    </key>
+    <key name="android.template.-462329834">
+      <recent name="com.softland.airlineflash.Activities" />
+    </key>
+    <key name="android.template.-79805976">
+      <recent name="com.softland.airlineflash.Activities" />
+    </key>
+    <key name="android.template.369992657">
+      <recent name="com.softland.foodflashlite.Activities" />
+    </key>
+  </component>
+  <component name="RunManager">
+    <configuration name="app" type="AndroidRunConfigurationType" factoryName="Android App" activateToolWindowBeforeRun="false">
+      <module name="CallQTV.app" />
+      <option name="ANDROID_RUN_CONFIGURATION_SCHEMA_VERSION" value="1" />
+      <option name="DEPLOY" value="true" />
+      <option name="DEPLOY_APK_FROM_BUNDLE" value="false" />
+      <option name="DEPLOY_AS_INSTANT" value="false" />
+      <option name="ARTIFACT_NAME" value="" />
+      <option name="PM_INSTALL_OPTIONS" value="" />
+      <option name="ALL_USERS" value="false" />
+      <option name="ALWAYS_INSTALL_WITH_PM" value="false" />
+      <option name="ALLOW_ASSUME_VERIFIED" value="false" />
+      <option name="CLEAR_APP_STORAGE" value="false" />
+      <option name="DYNAMIC_FEATURES_DISABLED_LIST" value="" />
+      <option name="ACTIVITY_EXTRA_FLAGS" value="" />
+      <option name="MODE" value="default_activity" />
+      <option name="RESTORE_ENABLED" value="false" />
+      <option name="RESTORE_FILE" value="" />
+      <option name="RESTORE_FRESH_INSTALL_ONLY" value="false" />
+      <option name="CLEAR_LOGCAT" value="false" />
+      <option name="SHOW_LOGCAT_AUTOMATICALLY" value="false" />
+      <option name="TARGET_SELECTION_MODE" value="DEVICE_AND_SNAPSHOT_COMBO_BOX" />
+      <option name="SELECTED_CLOUD_MATRIX_CONFIGURATION_ID" value="-1" />
+      <option name="SELECTED_CLOUD_MATRIX_PROJECT_ID" value="" />
+      <option name="DEBUGGER_TYPE" value="Auto" />
+      <Auto>
+        <option name="USE_JAVA_AWARE_DEBUGGER" value="false" />
+        <option name="SHOW_STATIC_VARS" value="true" />
+        <option name="WORKING_DIR" value="" />
+        <option name="TARGET_LOGGING_CHANNELS" value="lldb process:gdb-remote packets" />
+        <option name="SHOW_OPTIMIZED_WARNING" value="true" />
+        <option name="ATTACH_ON_WAIT_FOR_DEBUGGER" value="false" />
+        <option name="DEBUG_SANDBOX_SDK" value="false" />
+      </Auto>
+      <Hybrid>
+        <option name="USE_JAVA_AWARE_DEBUGGER" value="false" />
+        <option name="SHOW_STATIC_VARS" value="true" />
+        <option name="WORKING_DIR" value="" />
+        <option name="TARGET_LOGGING_CHANNELS" value="lldb process:gdb-remote packets" />
+        <option name="SHOW_OPTIMIZED_WARNING" value="true" />
+        <option name="ATTACH_ON_WAIT_FOR_DEBUGGER" value="false" />
+        <option name="DEBUG_SANDBOX_SDK" value="false" />
+      </Hybrid>
+      <Java>
+        <option name="ATTACH_ON_WAIT_FOR_DEBUGGER" value="false" />
+        <option name="DEBUG_SANDBOX_SDK" value="false" />
+      </Java>
+      <Native>
+        <option name="USE_JAVA_AWARE_DEBUGGER" value="false" />
+        <option name="SHOW_STATIC_VARS" value="true" />
+        <option name="WORKING_DIR" value="" />
+        <option name="TARGET_LOGGING_CHANNELS" value="lldb process:gdb-remote packets" />
+        <option name="SHOW_OPTIMIZED_WARNING" value="true" />
+        <option name="ATTACH_ON_WAIT_FOR_DEBUGGER" value="false" />
+        <option name="DEBUG_SANDBOX_SDK" value="false" />
+      </Native>
+      <Profilers>
+        <option name="ADVANCED_PROFILING_ENABLED" value="false" />
+        <option name="STARTUP_PROFILING_ENABLED" value="false" />
+        <option name="STARTUP_CPU_PROFILING_ENABLED" value="false" />
+        <option name="STARTUP_CPU_PROFILING_CONFIGURATION_NAME" value="Java/Kotlin Method Sample (legacy)" />
+        <option name="STARTUP_NATIVE_MEMORY_PROFILING_ENABLED" value="false" />
+        <option name="NATIVE_MEMORY_SAMPLE_RATE_BYTES" value="2048" />
+      </Profilers>
+      <option name="DEEP_LINK" value="" />
+      <option name="ACTIVITY" value="" />
+      <option name="ACTIVITY_CLASS" value="" />
+      <option name="SEARCH_ACTIVITY_IN_GLOBAL_SCOPE" value="false" />
+      <option name="SKIP_ACTIVITY_VALIDATION" value="false" />
+      <method v="2">
+        <option name="Android.Gradle.BeforeRunTask" enabled="true" />
+      </method>
+    </configuration>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="SvnConfiguration">
+    <configuration>C:\Users\FM\AppData\Roaming\Subversion</configuration>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="ad8c1af2-5f74-4132-88bc-600d98a9f3e4" name="Changes" comment="" />
+      <created>1752471311736</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1752471311736</updated>
+    </task>
+    <task id="LOCAL-00001" summary="Application for order notification handling.">
+      <created>1753255586566</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1753255586566</updated>
+    </task>
+    <task id="LOCAL-00002" summary="-&gt;Added broker retry section.&#10;-&gt;Added a condition to block the tokens contains &quot;CAL&quot; keywork form showing on the UI.">
+      <option name="closed" value="true" />
+      <created>1772432399011</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1772432399011</updated>
+    </task>
+    <task id="LOCAL-00003" summary="-&gt;Fixed the orientation related issues">
+      <option name="closed" value="true" />
+      <created>1773135734594</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1773135734594</updated>
+    </task>
+    <task id="LOCAL-00004" summary="-&gt;Fixed the orientation related issues">
+      <option name="closed" value="true" />
+      <created>1773135822006</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1773135822006</updated>
+    </task>
+    <task id="LOCAL-00005" summary="-&gt;Fixed the orientation related issues">
+      <option name="closed" value="true" />
+      <created>1773145561873</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1773145561873</updated>
+    </task>
+    <task id="LOCAL-00006" summary="-&gt;added solution for the broker connection issues.&#10;-&gt;Modified the announcement section code">
+      <option name="closed" value="true" />
+      <created>1773218146878</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1773218146878</updated>
+    </task>
+    <task id="LOCAL-00007" summary="-&gt;Updated the MQTT connection and payload itration section">
+      <option name="closed" value="true" />
+      <created>1773318934691</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1773318934691</updated>
+    </task>
+    <task id="LOCAL-00008" summary="-&gt;Updated the MQTT connection section&#10;-&gt;Added Mqtt publish to a fixed topic &quot;fr/status&quot;">
+      <option name="closed" value="true" />
+      <created>1773839626975</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1773839626975</updated>
+    </task>
+    <task id="LOCAL-00009" summary="-&gt;Updated the MQTT timeout section.&#10;-&gt;Added company logo.&#10;-&gt;Added error log file writing.">
+      <option name="closed" value="true" />
+      <created>1773904738581</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1773904738581</updated>
+    </task>
+    <task id="LOCAL-00010" summary="-&gt;Added to database table for storing all the tokens received from the mqtt according to the filters added and duplicate tokens are also saved here with the time they are called.&#10;-&gt;Need to add a service for sending these details to web so that the user can track the tokens and their token status using these details.">
+      <option name="closed" value="true" />
+      <created>1774239150809</created>
+      <option name="number" value="00010" />
+      <option name="presentableId" value="LOCAL-00010" />
+      <option name="project" value="LOCAL" />
+      <updated>1774239150809</updated>
+    </task>
+    <task id="LOCAL-00011" summary="-&gt;Added youtube integration for playing youtube videos">
+      <option name="closed" value="true" />
+      <created>1774246388879</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1774246388879</updated>
+    </task>
+    <task id="LOCAL-00012" summary="-&gt;Updated the setting's UI&#10;-&gt;Modified the code for writing config files,offline adv storing section etc">
+      <option name="closed" value="true" />
+      <created>1774270616490</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1774270616490</updated>
+    </task>
+    <task id="LOCAL-00013" summary="-&gt;Latest updated code">
+      <option name="closed" value="true" />
+      <created>1774352337955</created>
+      <option name="number" value="00013" />
+      <option name="presentableId" value="LOCAL-00013" />
+      <option name="project" value="LOCAL" />
+      <updated>1774352337955</updated>
+    </task>
+    <task id="LOCAL-00014" summary="-&gt;Latest updated code">
+      <option name="closed" value="true" />
+      <created>1774356748441</created>
+      <option name="number" value="00014" />
+      <option name="presentableId" value="LOCAL-00014" />
+      <option name="project" value="LOCAL" />
+      <updated>1774356748441</updated>
+    </task>
+    <task id="LOCAL-00015" summary="-&gt;Latest updated code">
+      <option name="closed" value="true" />
+      <created>1774357772819</created>
+      <option name="number" value="00015" />
+      <option name="presentableId" value="LOCAL-00015" />
+      <option name="project" value="LOCAL" />
+      <updated>1774357772819</updated>
+    </task>
+    <task id="LOCAL-00016" summary="-&gt;Latest updated code">
+      <option name="closed" value="true" />
+      <created>1774420533290</created>
+      <option name="number" value="00016" />
+      <option name="presentableId" value="LOCAL-00016" />
+      <option name="project" value="LOCAL" />
+      <updated>1774420533290</updated>
+    </task>
+    <task id="LOCAL-00017" summary="-&gt;Latest updated code&#10;-&gt;Added refresh with mqtt response when the response contain &quot;CLR&quot;">
+      <option name="closed" value="true" />
+      <created>1774523191530</created>
+      <option name="number" value="00017" />
+      <option name="presentableId" value="LOCAL-00017" />
+      <option name="project" value="LOCAL" />
+      <updated>1774523191530</updated>
+    </task>
+    <task id="LOCAL-00018" summary="-&gt;Latest updated code&#10;-&gt;Modified the footer text scroll section">
+      <option name="closed" value="true" />
+      <created>1774587244460</created>
+      <option name="number" value="00018" />
+      <option name="presentableId" value="LOCAL-00018" />
+      <option name="project" value="LOCAL" />
+      <updated>1774587244460</updated>
+    </task>
+    <task id="LOCAL-00019" summary="-&gt;Latest updated code with proper ad playing">
+      <option name="closed" value="true" />
+      <created>1774597058417</created>
+      <option name="number" value="00019" />
+      <option name="presentableId" value="LOCAL-00019" />
+      <option name="project" value="LOCAL" />
+      <updated>1774597058417</updated>
+    </task>
+    <task id="LOCAL-00020" summary="-&gt;Latest updated code">
+      <option name="closed" value="true" />
+      <created>1774614675300</created>
+      <option name="number" value="00020" />
+      <option name="presentableId" value="LOCAL-00020" />
+      <option name="project" value="LOCAL" />
+      <updated>1774614675300</updated>
+    </task>
+    <task id="LOCAL-00021" summary="-&gt;Latest updated code">
+      <option name="closed" value="true" />
+      <created>1775561831090</created>
+      <option name="number" value="00021" />
+      <option name="presentableId" value="LOCAL-00021" />
+      <option name="project" value="LOCAL" />
+      <updated>1775561831090</updated>
+    </task>
+    <task id="LOCAL-00022" summary="-&gt;Latest updated code&#10;-&gt;Version_1.0.1">
+      <option name="closed" value="true" />
+      <created>1777006451545</created>
+      <option name="number" value="00022" />
+      <option name="presentableId" value="LOCAL-00022" />
+      <option name="project" value="LOCAL" />
+      <updated>1777006451545</updated>
+    </task>
+    <option name="localTasksCounter" value="23" />
+    <servers />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="RECENT_FILTERS">
+      <map>
+        <entry key="User">
+          <value>
+            <list>
+              <RecentGroup>
+                <option name="FILTER_VALUES">
+                  <option value="*" />
+                </option>
+              </RecentGroup>
+            </list>
+          </value>
+        </entry>
+      </map>
+    </option>
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="Application for order notification handling." />
+    <MESSAGE value="-&gt;Added broker retry section.&#10;-&gt;Added a condition to block the tokens contains &quot;CAL&quot; keywork form showing on the UI." />
+    <MESSAGE value="-&gt;Fixed the orientation related issues" />
+    <MESSAGE value="-&gt;added solution for the broker connection issues.&#10;-&gt;Modified the announcement section code" />
+    <MESSAGE value="-&gt;Updated the MQTT connection and payload itration section" />
+    <MESSAGE value="-&gt;Updated the MQTT connection section&#10;-&gt;Added Mqtt publish to a fixed topic &quot;fr/status&quot;" />
+    <MESSAGE value="-&gt;Updated the MQTT timeout section.&#10;-&gt;Added company logo.&#10;-&gt;Added error log file writing." />
+    <MESSAGE value="-&gt;Added to database table for storing all the tokens received from the mqtt according to the filters added and duplicate tokens are also saved here with the time they are called.&#10;-&gt;Need to add a service for sending these details to web so that the user can track the tokens and their token status using these details." />
+    <MESSAGE value="-&gt;Added youtube integration for playing youtube videos" />
+    <MESSAGE value="-&gt;Updated the setting's UI&#10;-&gt;Modified the code for writing config files,offline adv storing section etc" />
+    <MESSAGE value="-&gt;Latest updated code&#10;-&gt;Added refresh with mqtt response when the response contain &quot;CLR&quot;" />
+    <MESSAGE value="-&gt;Latest updated code&#10;-&gt;Modified the footer text scroll section" />
+    <MESSAGE value="-&gt;Latest updated code with proper ad playing" />
+    <MESSAGE value="-&gt;Latest updated code" />
+    <MESSAGE value="-&gt;Latest updated code&#10;-&gt;Version_1.0.1" />
+    <option name="LAST_COMMIT_MESSAGE" value="-&gt;Latest updated code&#10;-&gt;Version_1.0.1" />
+  </component>
+  <component name="github-copilot-workspace">
+    <instructionFileLocations>
+      <option value=".github/instructions" />
+    </instructionFileLocations>
+    <promptFileLocations>
+      <option value=".github/prompts" />
+    </promptFileLocations>
+  </component>
+  <component name="play_dynamic_filters_status">
+    <option name="appIdToCheckInfo">
+      <map>
+        <entry key="com.softland.airlineflash">
+          <value>
+            <CheckInfo lastCheckTimestamp="1769493617877" />
+          </value>
+        </entry>
+        <entry key="com.softland.airlineflash.test">
+          <value>
+            <CheckInfo lastCheckTimestamp="1769493617857" />
+          </value>
+        </entry>
+        <entry key="com.softland.callqtv">
+          <value>
+            <CheckInfo lastCheckTimestamp="1776944705899" />
+          </value>
+        </entry>
+        <entry key="com.softland.callqtv.test">
+          <value>
+            <CheckInfo lastCheckTimestamp="1776944705902" />
+          </value>
+        </entry>
+        <entry key="com.softland.dineflash">
+          <value>
+            <CheckInfo lastCheckTimestamp="1769493617857" />
+          </value>
+        </entry>
+        <entry key="com.softland.dineflash.test">
+          <value>
+            <CheckInfo lastCheckTimestamp="1769493617857" />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>

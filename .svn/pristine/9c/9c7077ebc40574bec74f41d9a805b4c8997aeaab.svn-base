@@ -1,0 +1,368 @@
+package com.softland.callqtv.viewmodel;
+
+@kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u0000\u00a4\u0001\n\u0002\u0018\u0002\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0003\n\u0002\u0010%\n\u0002\u0010\u000e\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0010\b\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0002\n\u0002\u0018\u0002\n\u0002\b\u0005\n\u0002\u0018\u0002\n\u0002\b\u0004\n\u0002\u0010#\n\u0000\n\u0002\u0010\u000b\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0003\n\u0002\u0010$\n\u0002\b\u000b\n\u0002\u0010\u0002\n\u0002\b\b\n\u0002\u0018\u0002\n\u0002\u0018\u0002\n\u0002\b\u0003\n\u0002\u0010 \n\u0002\b\u0002\n\u0002\u0018\u0002\n\u0000\n\u0002\u0010\t\n\u0002\b\u000f\n\u0002\u0018\u0002\n\u0002\b\u001a\u0018\u00002\u00020\u0001:\u0001sB\u000f\u0012\u0006\u0010\u0002\u001a\u00020\u0003\u00a2\u0006\u0004\b\u0004\u0010\u0005J\f\u0010&\u001a\b\u0012\u0004\u0012\u00020\b0\'J\f\u0010)\u001a\b\u0012\u0004\u0012\u00020\b0\'J\u0018\u0010,\u001a\u0014\u0012\u0010\u0012\u000e\u0012\u0004\u0012\u00020\b\u0012\u0004\u0012\u00020#0+0\'J\f\u0010.\u001a\b\u0012\u0004\u0012\u00020#0\'J\f\u00100\u001a\b\u0012\u0004\u0012\u00020\b0\'J\f\u00102\u001a\b\u0012\u0004\u0012\u00020#0\'J\f\u00104\u001a\b\u0012\u0004\u0012\u00020\u00110\'J\b\u00106\u001a\u000207H\u0002J\b\u00108\u001a\u000207H\u0002J\f\u0010:\u001a\b\u0012\u0004\u0012\u00020#0\'J\f\u0010<\u001a\b\u0012\u0004\u0012\u00020\u00110\'J\f\u0010>\u001a\b\u0012\u0004\u0012\u00020#0\'J\u001e\u0010F\u001a\u001a\u0012\u0016\u0012\u0014\u0012\u0004\u0012\u00020\b\u0012\n\u0012\b\u0012\u0004\u0012\u00020\b0E0+0\'J\u0016\u0010L\u001a\u00020#2\u0006\u0010M\u001a\u00020\b2\u0006\u0010N\u001a\u00020\bJ\u0016\u0010O\u001a\u0002072\u0006\u0010M\u001a\u00020\b2\u0006\u0010N\u001a\u00020\bJ\u0006\u0010P\u001a\u000207J\u0006\u0010Q\u001a\u000207JB\u0010R\u001a\u0002072\u0006\u0010S\u001a\u00020\b2\u0006\u0010T\u001a\u00020\b2\b\u0010U\u001a\u0004\u0018\u00010\b2\b\u0010V\u001a\u0004\u0018\u00010\b2\u0006\u0010W\u001a\u00020\b2\u0006\u0010X\u001a\u00020\u00112\u0006\u0010Y\u001a\u00020ZJ\u0012\u0010[\u001a\u0004\u0018\u00010\b2\u0006\u0010\\\u001a\u00020\bH\u0002J\u0016\u0010]\u001a\u00020#2\u0006\u0010\\\u001a\u00020\bH\u0082@\u00a2\u0006\u0002\u0010^J\u000e\u0010_\u001a\u000207H\u0082@\u00a2\u0006\u0002\u0010`J\u0006\u0010a\u001a\u000207J\u0006\u0010b\u001a\u000207J\u0018\u0010c\u001a\u0002072\u0006\u0010S\u001a\u00020\b2\u0006\u0010d\u001a\u00020#H\u0002J\u0010\u0010e\u001a\u0002072\u0006\u0010S\u001a\u00020\bH\u0002J\u0010\u0010f\u001a\u0002072\u0006\u0010S\u001a\u00020\bH\u0002J\u0010\u0010g\u001a\u0002072\u0006\u0010S\u001a\u00020\bH\u0002J\u001e\u0010h\u001a\u00020#2\u0006\u0010i\u001a\u00020\b2\u0006\u0010N\u001a\u00020\bH\u0086@\u00a2\u0006\u0002\u0010jJ(\u0010k\u001a\u00020#2\u0006\u0010l\u001a\u00020\b2\u0006\u0010N\u001a\u00020\b2\b\u0010m\u001a\u0004\u0018\u00010\bH\u0086@\u00a2\u0006\u0002\u0010nJ\u0018\u0010o\u001a\u0002072\u0006\u0010p\u001a\u00020\b2\u0006\u0010N\u001a\u00020\bH\u0002J\u001e\u0010q\u001a\u0002072\u0006\u0010W\u001a\u00020\b2\u0006\u0010\\\u001a\u00020\bH\u0082@\u00a2\u0006\u0002\u0010jJ\b\u0010r\u001a\u000207H\u0014R\u001a\u0010\u0006\u001a\u000e\u0012\u0004\u0012\u00020\b\u0012\u0004\u0012\u00020\t0\u0007X\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u001a\u0010\n\u001a\u000e\u0012\u0004\u0012\u00020\b\u0012\u0004\u0012\u00020\u000b0\u0007X\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u000e\u0010\f\u001a\u00020\rX\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u000e\u0010\u000e\u001a\u00020\u000fX\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u001a\u0010\u0010\u001a\u000e\u0012\u0004\u0012\u00020\b\u0012\u0004\u0012\u00020\u00110\u0007X\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u001a\u0010\u0012\u001a\u000e\u0012\u0004\u0012\u00020\b\u0012\u0004\u0012\u00020\u00130\u0007X\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u001a\u0010\u0014\u001a\u000e\u0012\u0004\u0012\u00020\b\u0012\u0004\u0012\u00020\u00130\u0007X\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u001b\u0010\u0015\u001a\u00020\u00168BX\u0082\u0084\u0002\u00a2\u0006\f\n\u0004\b\u0019\u0010\u001a\u001a\u0004\b\u0017\u0010\u0018R\u001b\u0010\u001b\u001a\u00020\u001c8BX\u0082\u0084\u0002\u00a2\u0006\f\n\u0004\b\u001f\u0010\u001a\u001a\u0004\b\u001d\u0010\u001eR\u0014\u0010 \u001a\b\u0012\u0004\u0012\u00020\b0!X\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u000e\u0010\"\u001a\u00020#X\u0082\u000e\u00a2\u0006\u0002\n\u0000R\u0014\u0010$\u001a\b\u0012\u0004\u0012\u00020\b0%X\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u0014\u0010(\u001a\b\u0012\u0004\u0012\u00020\b0%X\u0082\u0004\u00a2\u0006\u0002\n\u0000R \u0010*\u001a\u0014\u0012\u0010\u0012\u000e\u0012\u0004\u0012\u00020\b\u0012\u0004\u0012\u00020#0+0%X\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u0014\u0010-\u001a\b\u0012\u0004\u0012\u00020#0%X\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u0014\u0010/\u001a\b\u0012\u0004\u0012\u00020\b0%X\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u0014\u00101\u001a\b\u0012\u0004\u0012\u00020#0%X\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u0014\u00103\u001a\b\u0012\u0004\u0012\u00020\u00110%X\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u0010\u00105\u001a\u0004\u0018\u00010\u0013X\u0082\u000e\u00a2\u0006\u0002\n\u0000R\u0014\u00109\u001a\b\u0012\u0004\u0012\u00020#0%X\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u0014\u0010;\u001a\b\u0012\u0004\u0012\u00020\u00110%X\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u0014\u0010=\u001a\b\u0012\u0004\u0012\u00020#0%X\u0082\u0004\u00a2\u0006\u0002\n\u0000R#\u0010?\u001a\u0014\u0012\u0010\u0012\u000e\u0012\u0004\u0012\u00020\b\u0012\u0004\u0012\u00020\b0A0@\u00a2\u0006\b\n\u0000\u001a\u0004\bB\u0010CR&\u0010D\u001a\u001a\u0012\u0016\u0012\u0014\u0012\u0004\u0012\u00020\b\u0012\n\u0012\b\u0012\u0004\u0012\u00020\b0E0+0%X\u0082\u0004\u00a2\u0006\u0002\n\u0000R \u0010G\u001a\u0014\u0012\u0004\u0012\u00020\b\u0012\n\u0012\b\u0012\u0004\u0012\u00020\b0E0HX\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u001a\u0010I\u001a\u000e\u0012\u0004\u0012\u00020\b\u0012\u0004\u0012\u00020J0HX\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u000e\u0010K\u001a\u00020#X\u0082\u000e\u00a2\u0006\u0002\n\u0000\u00a8\u0006t"}, d2 = {"Lcom/softland/callqtv/viewmodel/MqttViewModel;", "Landroidx/lifecycle/AndroidViewModel;", "application", "Landroid/app/Application;", "<init>", "(Landroid/app/Application;)V", "managers", "", "", "Lcom/softland/callqtv/data/repository/MqttClientManager;", "connectionDetailsMap", "Lcom/softland/callqtv/viewmodel/MqttViewModel$MqttConnectionDetails;", "stateMutex", "Lkotlinx/coroutines/sync/Mutex;", "gson", "Lcom/google/gson/Gson;", "retryAttempts", "", "retryJobs", "Lkotlinx/coroutines/Job;", "reachabilityJobs", "tokenHistoryRepo", "Lcom/softland/callqtv/data/repository/TokenHistoryRepository;", "getTokenHistoryRepo", "()Lcom/softland/callqtv/data/repository/TokenHistoryRepository;", "tokenHistoryRepo$delegate", "Lkotlin/Lazy;", "connectedDeviceDao", "Lcom/softland/callqtv/data/local/ConnectedDeviceDao;", "getConnectedDeviceDao", "()Lcom/softland/callqtv/data/local/ConnectedDeviceDao;", "connectedDeviceDao$delegate", "keypadSerials", "", "keypadSerialsLoaded", "", "_receivedMessage", "Landroidx/lifecycle/MutableLiveData;", "getReceivedMessage", "Landroidx/lifecycle/LiveData;", "_lastPayload", "getLastPayload", "_connectionStatusMap", "", "getConnectionStatusMap", "_connectionStatus", "getConnectionStatus", "_errorMessage", "getErrorMessage", "_isConnectingToMqtt", "isConnectingToMqtt", "_connectTimer", "getConnectTimer", "timerJob", "startConnectTimer", "", "stopConnectTimer", "_isAutoRetryExhausted", "isAutoRetryExhausted", "_mqttRetryAttempt", "getMqttRetryAttempt", "_isBrokerReachable", "isBrokerReachable", "tokenUpdateChannel", "Lkotlinx/coroutines/channels/Channel;", "Lkotlin/Pair;", "getTokenUpdateChannel", "()Lkotlinx/coroutines/channels/Channel;", "_tokensPerCounter", "", "getTokensPerCounter", "internalTokenMap", "Ljava/util/concurrent/ConcurrentHashMap;", "announcedTokenTimestamps", "", "isHistoryLoaded", "isAlreadyAnnounced", "counterKey", "token", "markAsAnnounced", "loadPersistedHistory", "clearTokenHistory", "initAndConnect", "serverUri", "clientId", "username", "password", "topic", "qos", "context", "Landroid/content/Context;", "extractKeypadSerial", "message", "isValidKeypadMessage", "(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", "ensureKeypadSerialCache", "(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", "invalidateKeypadSerialCache", "retryConnect", "updateStatus", "isConnected", "scheduleInitialRetry", "startReachabilityMonitor", "removeManager", "processTokenUpdate", "counter", "(Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", "processTokenUpdateForKeys", "primaryKey", "fallbackKey", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", "persistToken", "key", "parseMqttMessage", "onCleared", "MqttConnectionDetails", "CallQTV_v1.0.0_CallQTVRelease"})
+public final class MqttViewModel extends androidx.lifecycle.AndroidViewModel {
+    @org.jetbrains.annotations.NotNull()
+    private final java.util.Map<java.lang.String, com.softland.callqtv.data.repository.MqttClientManager> managers = null;
+    @org.jetbrains.annotations.NotNull()
+    private final java.util.Map<java.lang.String, com.softland.callqtv.viewmodel.MqttViewModel.MqttConnectionDetails> connectionDetailsMap = null;
+    @org.jetbrains.annotations.NotNull()
+    private final kotlinx.coroutines.sync.Mutex stateMutex = null;
+    @org.jetbrains.annotations.NotNull()
+    private final com.google.gson.Gson gson = null;
+    @org.jetbrains.annotations.NotNull()
+    private final java.util.Map<java.lang.String, java.lang.Integer> retryAttempts = null;
+    @org.jetbrains.annotations.NotNull()
+    private final java.util.Map<java.lang.String, kotlinx.coroutines.Job> retryJobs = null;
+    @org.jetbrains.annotations.NotNull()
+    private final java.util.Map<java.lang.String, kotlinx.coroutines.Job> reachabilityJobs = null;
+    @org.jetbrains.annotations.NotNull()
+    private final kotlin.Lazy tokenHistoryRepo$delegate = null;
+    @org.jetbrains.annotations.NotNull()
+    private final kotlin.Lazy connectedDeviceDao$delegate = null;
+    @org.jetbrains.annotations.NotNull()
+    private final java.util.Set<java.lang.String> keypadSerials = null;
+    @kotlin.jvm.Volatile()
+    private volatile boolean keypadSerialsLoaded = false;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.MutableLiveData<java.lang.String> _receivedMessage = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.MutableLiveData<java.lang.String> _lastPayload = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.MutableLiveData<java.util.Map<java.lang.String, java.lang.Boolean>> _connectionStatusMap = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.MutableLiveData<java.lang.Boolean> _connectionStatus = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.MutableLiveData<java.lang.String> _errorMessage = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.MutableLiveData<java.lang.Boolean> _isConnectingToMqtt = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.MutableLiveData<java.lang.Integer> _connectTimer = null;
+    @org.jetbrains.annotations.Nullable()
+    private kotlinx.coroutines.Job timerJob;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.MutableLiveData<java.lang.Boolean> _isAutoRetryExhausted = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.MutableLiveData<java.lang.Integer> _mqttRetryAttempt = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.MutableLiveData<java.lang.Boolean> _isBrokerReachable = null;
+    @org.jetbrains.annotations.NotNull()
+    private final kotlinx.coroutines.channels.Channel<kotlin.Pair<java.lang.String, java.lang.String>> tokenUpdateChannel = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.MutableLiveData<java.util.Map<java.lang.String, java.util.List<java.lang.String>>> _tokensPerCounter = null;
+    @org.jetbrains.annotations.NotNull()
+    private final java.util.concurrent.ConcurrentHashMap<java.lang.String, java.util.List<java.lang.String>> internalTokenMap = null;
+    @org.jetbrains.annotations.NotNull()
+    private final java.util.concurrent.ConcurrentHashMap<java.lang.String, java.lang.Long> announcedTokenTimestamps = null;
+    @kotlin.jvm.Volatile()
+    private volatile boolean isHistoryLoaded = false;
+    
+    public MqttViewModel(@org.jetbrains.annotations.NotNull()
+    android.app.Application application) {
+        super(null);
+    }
+    
+    private final com.softland.callqtv.data.repository.TokenHistoryRepository getTokenHistoryRepo() {
+        return null;
+    }
+    
+    private final com.softland.callqtv.data.local.ConnectedDeviceDao getConnectedDeviceDao() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final androidx.lifecycle.LiveData<java.lang.String> getReceivedMessage() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final androidx.lifecycle.LiveData<java.lang.String> getLastPayload() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final androidx.lifecycle.LiveData<java.util.Map<java.lang.String, java.lang.Boolean>> getConnectionStatusMap() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final androidx.lifecycle.LiveData<java.lang.Boolean> getConnectionStatus() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final androidx.lifecycle.LiveData<java.lang.String> getErrorMessage() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final androidx.lifecycle.LiveData<java.lang.Boolean> isConnectingToMqtt() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final androidx.lifecycle.LiveData<java.lang.Integer> getConnectTimer() {
+        return null;
+    }
+    
+    private final void startConnectTimer() {
+    }
+    
+    private final void stopConnectTimer() {
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final androidx.lifecycle.LiveData<java.lang.Boolean> isAutoRetryExhausted() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final androidx.lifecycle.LiveData<java.lang.Integer> getMqttRetryAttempt() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final androidx.lifecycle.LiveData<java.lang.Boolean> isBrokerReachable() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final kotlinx.coroutines.channels.Channel<kotlin.Pair<java.lang.String, java.lang.String>> getTokenUpdateChannel() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final androidx.lifecycle.LiveData<java.util.Map<java.lang.String, java.util.List<java.lang.String>>> getTokensPerCounter() {
+        return null;
+    }
+    
+    /**
+     * Deduplicate rapid MQTT messages. Returns true if announced within the last 2 seconds.
+     */
+    public final boolean isAlreadyAnnounced(@org.jetbrains.annotations.NotNull()
+    java.lang.String counterKey, @org.jetbrains.annotations.NotNull()
+    java.lang.String token) {
+        return false;
+    }
+    
+    public final void markAsAnnounced(@org.jetbrains.annotations.NotNull()
+    java.lang.String counterKey, @org.jetbrains.annotations.NotNull()
+    java.lang.String token) {
+    }
+    
+    public final void loadPersistedHistory() {
+    }
+    
+    public final void clearTokenHistory() {
+    }
+    
+    public final void initAndConnect(@org.jetbrains.annotations.NotNull()
+    java.lang.String serverUri, @org.jetbrains.annotations.NotNull()
+    java.lang.String clientId, @org.jetbrains.annotations.Nullable()
+    java.lang.String username, @org.jetbrains.annotations.Nullable()
+    java.lang.String password, @org.jetbrains.annotations.NotNull()
+    java.lang.String topic, int qos, @org.jetbrains.annotations.NotNull()
+    android.content.Context context) {
+    }
+    
+    /**
+     * Extracts the keypad serial number from a raw MQTT message.
+     *
+     * Expected format (example): "$02026bCAL0K00071100030*"
+     * After removing '$' and '*', we get: "02026bCAL0K00071100030"
+     * The actual serial is characters 1..15 (Kotlin endIndex exclusive): "2026bCAL0K0007"
+     */
+    private final java.lang.String extractKeypadSerial(java.lang.String message) {
+        return null;
+    }
+    
+    /**
+     * Checks if the serial extracted from the keypad message matches a connected device
+     * of type "KEYPAD" for the current MAC and customer, using an in-memory cache to
+     * avoid DB lookups on every MQTT message.
+     */
+    private final java.lang.Object isValidKeypadMessage(java.lang.String message, kotlin.coroutines.Continuation<? super java.lang.Boolean> $completion) {
+        return null;
+    }
+    
+    /**
+     * Populates the in-memory keypad serial cache from the connected_devices table.
+     * Called on-demand from the IO dispatcher; safe to call repeatedly.
+     */
+    private final java.lang.Object ensureKeypadSerialCache(kotlin.coroutines.Continuation<? super kotlin.Unit> $completion) {
+        return null;
+    }
+    
+    /**
+     * Allows other parts of the app (e.g., after TV config refresh) to invalidate the
+     * keypad serial cache so it will be rebuilt on the next keypad message.
+     */
+    public final void invalidateKeypadSerialCache() {
+    }
+    
+    public final void retryConnect() {
+    }
+    
+    private final void updateStatus(java.lang.String serverUri, boolean isConnected) {
+    }
+    
+    private final void scheduleInitialRetry(java.lang.String serverUri) {
+    }
+    
+    /**
+     * Periodically TCP-pings the MQTT broker host/port derived from serverUri.
+     * Updates isBrokerReachable so the UI can show when the broker device is unreachable
+     * even if the MQTT client still considers the session connected.
+     */
+    private final void startReachabilityMonitor(java.lang.String serverUri) {
+    }
+    
+    private final void removeManager(java.lang.String serverUri) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Object processTokenUpdate(@org.jetbrains.annotations.NotNull()
+    java.lang.String counter, @org.jetbrains.annotations.NotNull()
+    java.lang.String token, @org.jetbrains.annotations.NotNull()
+    kotlin.coroutines.Continuation<? super java.lang.Boolean> $completion) {
+        return null;
+    }
+    
+    /**
+     * Atomically add token to both primary and fallback keys in one map update.
+     * Prevents race where two processTokenUpdate calls overwrite each other.
+     * Returns true if the token was new or moved for the primary key (should announce).
+     */
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Object processTokenUpdateForKeys(@org.jetbrains.annotations.NotNull()
+    java.lang.String primaryKey, @org.jetbrains.annotations.NotNull()
+    java.lang.String token, @org.jetbrains.annotations.Nullable()
+    java.lang.String fallbackKey, @org.jetbrains.annotations.NotNull()
+    kotlin.coroutines.Continuation<? super java.lang.Boolean> $completion) {
+        return null;
+    }
+    
+    private final void persistToken(java.lang.String key, java.lang.String token) {
+    }
+    
+    /**
+     * Parses a verified MQTT message and enqueues token updates for processing.
+     * Runs on a background dispatcher (caller responsibility).
+     */
+    private final java.lang.Object parseMqttMessage(java.lang.String topic, java.lang.String message, kotlin.coroutines.Continuation<? super kotlin.Unit> $completion) {
+        return null;
+    }
+    
+    @java.lang.Override()
+    protected void onCleared() {
+    }
+    
+    @kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u0000\"\n\u0002\u0018\u0002\n\u0002\u0010\u0000\n\u0000\n\u0002\u0010\u000e\n\u0002\b\u0005\n\u0002\u0010\b\n\u0002\b\u0012\n\u0002\u0010\u000b\n\u0002\b\u0004\b\u0082\b\u0018\u00002\u00020\u0001B;\u0012\u0006\u0010\u0002\u001a\u00020\u0003\u0012\u0006\u0010\u0004\u001a\u00020\u0003\u0012\b\u0010\u0005\u001a\u0004\u0018\u00010\u0003\u0012\b\u0010\u0006\u001a\u0004\u0018\u00010\u0003\u0012\u0006\u0010\u0007\u001a\u00020\u0003\u0012\u0006\u0010\b\u001a\u00020\t\u00a2\u0006\u0004\b\n\u0010\u000bJ\t\u0010\u0014\u001a\u00020\u0003H\u00c6\u0003J\t\u0010\u0015\u001a\u00020\u0003H\u00c6\u0003J\u000b\u0010\u0016\u001a\u0004\u0018\u00010\u0003H\u00c6\u0003J\u000b\u0010\u0017\u001a\u0004\u0018\u00010\u0003H\u00c6\u0003J\t\u0010\u0018\u001a\u00020\u0003H\u00c6\u0003J\t\u0010\u0019\u001a\u00020\tH\u00c6\u0003JI\u0010\u001a\u001a\u00020\u00002\b\b\u0002\u0010\u0002\u001a\u00020\u00032\b\b\u0002\u0010\u0004\u001a\u00020\u00032\n\b\u0002\u0010\u0005\u001a\u0004\u0018\u00010\u00032\n\b\u0002\u0010\u0006\u001a\u0004\u0018\u00010\u00032\b\b\u0002\u0010\u0007\u001a\u00020\u00032\b\b\u0002\u0010\b\u001a\u00020\tH\u00c6\u0001J\u0013\u0010\u001b\u001a\u00020\u001c2\b\u0010\u001d\u001a\u0004\u0018\u00010\u0001H\u00d6\u0003J\t\u0010\u001e\u001a\u00020\tH\u00d6\u0001J\t\u0010\u001f\u001a\u00020\u0003H\u00d6\u0001R\u0011\u0010\u0002\u001a\u00020\u0003\u00a2\u0006\b\n\u0000\u001a\u0004\b\f\u0010\rR\u0011\u0010\u0004\u001a\u00020\u0003\u00a2\u0006\b\n\u0000\u001a\u0004\b\u000e\u0010\rR\u0013\u0010\u0005\u001a\u0004\u0018\u00010\u0003\u00a2\u0006\b\n\u0000\u001a\u0004\b\u000f\u0010\rR\u0013\u0010\u0006\u001a\u0004\u0018\u00010\u0003\u00a2\u0006\b\n\u0000\u001a\u0004\b\u0010\u0010\rR\u0011\u0010\u0007\u001a\u00020\u0003\u00a2\u0006\b\n\u0000\u001a\u0004\b\u0011\u0010\rR\u0011\u0010\b\u001a\u00020\t\u00a2\u0006\b\n\u0000\u001a\u0004\b\u0012\u0010\u0013\u00a8\u0006 "}, d2 = {"Lcom/softland/callqtv/viewmodel/MqttViewModel$MqttConnectionDetails;", "", "serverUri", "", "clientId", "username", "password", "topic", "qos", "", "<init>", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)V", "getServerUri", "()Ljava/lang/String;", "getClientId", "getUsername", "getPassword", "getTopic", "getQos", "()I", "component1", "component2", "component3", "component4", "component5", "component6", "copy", "equals", "", "other", "hashCode", "toString", "CallQTV_v1.0.0_CallQTVRelease"})
+    static final class MqttConnectionDetails {
+        @org.jetbrains.annotations.NotNull()
+        private final java.lang.String serverUri = null;
+        @org.jetbrains.annotations.NotNull()
+        private final java.lang.String clientId = null;
+        @org.jetbrains.annotations.Nullable()
+        private final java.lang.String username = null;
+        @org.jetbrains.annotations.Nullable()
+        private final java.lang.String password = null;
+        @org.jetbrains.annotations.NotNull()
+        private final java.lang.String topic = null;
+        private final int qos = 0;
+        
+        public MqttConnectionDetails(@org.jetbrains.annotations.NotNull()
+        java.lang.String serverUri, @org.jetbrains.annotations.NotNull()
+        java.lang.String clientId, @org.jetbrains.annotations.Nullable()
+        java.lang.String username, @org.jetbrains.annotations.Nullable()
+        java.lang.String password, @org.jetbrains.annotations.NotNull()
+        java.lang.String topic, int qos) {
+            super();
+        }
+        
+        @org.jetbrains.annotations.NotNull()
+        public final java.lang.String getServerUri() {
+            return null;
+        }
+        
+        @org.jetbrains.annotations.NotNull()
+        public final java.lang.String getClientId() {
+            return null;
+        }
+        
+        @org.jetbrains.annotations.Nullable()
+        public final java.lang.String getUsername() {
+            return null;
+        }
+        
+        @org.jetbrains.annotations.Nullable()
+        public final java.lang.String getPassword() {
+            return null;
+        }
+        
+        @org.jetbrains.annotations.NotNull()
+        public final java.lang.String getTopic() {
+            return null;
+        }
+        
+        public final int getQos() {
+            return 0;
+        }
+        
+        @org.jetbrains.annotations.NotNull()
+        public final java.lang.String component1() {
+            return null;
+        }
+        
+        @org.jetbrains.annotations.NotNull()
+        public final java.lang.String component2() {
+            return null;
+        }
+        
+        @org.jetbrains.annotations.Nullable()
+        public final java.lang.String component3() {
+            return null;
+        }
+        
+        @org.jetbrains.annotations.Nullable()
+        public final java.lang.String component4() {
+            return null;
+        }
+        
+        @org.jetbrains.annotations.NotNull()
+        public final java.lang.String component5() {
+            return null;
+        }
+        
+        public final int component6() {
+            return 0;
+        }
+        
+        @org.jetbrains.annotations.NotNull()
+        public final com.softland.callqtv.viewmodel.MqttViewModel.MqttConnectionDetails copy(@org.jetbrains.annotations.NotNull()
+        java.lang.String serverUri, @org.jetbrains.annotations.NotNull()
+        java.lang.String clientId, @org.jetbrains.annotations.Nullable()
+        java.lang.String username, @org.jetbrains.annotations.Nullable()
+        java.lang.String password, @org.jetbrains.annotations.NotNull()
+        java.lang.String topic, int qos) {
+            return null;
+        }
+        
+        @java.lang.Override()
+        public boolean equals(@org.jetbrains.annotations.Nullable()
+        java.lang.Object other) {
+            return false;
+        }
+        
+        @java.lang.Override()
+        public int hashCode() {
+            return 0;
+        }
+        
+        @java.lang.Override()
+        @org.jetbrains.annotations.NotNull()
+        public java.lang.String toString() {
+            return null;
+        }
+    }
+}

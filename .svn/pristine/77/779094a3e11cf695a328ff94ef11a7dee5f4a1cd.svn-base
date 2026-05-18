@@ -1,0 +1,90 @@
+package com.softland.callqtv.data.repository;
+
+@kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u0000<\n\u0002\u0018\u0002\n\u0002\u0010\u0000\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0010\u000e\n\u0002\b\u0007\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0010\u000b\n\u0002\b\u0002\n\u0002\u0010\b\n\u0002\b\u0002\n\u0002\u0010\u0002\n\u0002\b\u000e\u0018\u0000 $2\u00020\u0001:\u0002#$B\u001f\u0012\u0006\u0010\u0002\u001a\u00020\u0003\u0012\u0006\u0010\u0004\u001a\u00020\u0005\u0012\u0006\u0010\u0006\u001a\u00020\u0005\u00a2\u0006\u0004\b\u0007\u0010\bJ\u000e\u0010\u0016\u001a\u00020\u00172\u0006\u0010\u0018\u001a\u00020\u000fJ\b\u0010\u0019\u001a\u00020\u0017H\u0002J\u001a\u0010\u001a\u001a\u00020\u00172\b\u0010\u001b\u001a\u0004\u0018\u00010\u00052\b\u0010\u001c\u001a\u0004\u0018\u00010\u0005J\u0016\u0010\u001d\u001a\u00020\u00172\u0006\u0010\u001e\u001a\u00020\u00052\u0006\u0010\u001f\u001a\u00020\u0014J\u0006\u0010 \u001a\u00020\u0017J\u0006\u0010!\u001a\u00020\u0017J\u0006\u0010\"\u001a\u00020\u0011R\u000e\u0010\u0002\u001a\u00020\u0003X\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u0011\u0010\u0004\u001a\u00020\u0005\u00a2\u0006\b\n\u0000\u001a\u0004\b\t\u0010\nR\u0011\u0010\u0006\u001a\u00020\u0005\u00a2\u0006\b\n\u0000\u001a\u0004\b\u000b\u0010\nR\u0010\u0010\f\u001a\u0004\u0018\u00010\rX\u0082\u000e\u00a2\u0006\u0002\n\u0000R\u0010\u0010\u000e\u001a\u0004\u0018\u00010\u000fX\u0082\u000e\u00a2\u0006\u0002\n\u0000R\u000e\u0010\u0010\u001a\u00020\u0011X\u0082\u000e\u00a2\u0006\u0002\n\u0000R\u0010\u0010\u0012\u001a\u0004\u0018\u00010\u0005X\u0082\u000e\u00a2\u0006\u0002\n\u0000R\u000e\u0010\u0013\u001a\u00020\u0014X\u0082\u000e\u00a2\u0006\u0002\n\u0000R\u000e\u0010\u0015\u001a\u00020\u0011X\u0082\u000e\u00a2\u0006\u0002\n\u0000\u00a8\u0006%"}, d2 = {"Lcom/softland/callqtv/data/repository/MqttClientManager;", "", "context", "Landroid/content/Context;", "serverUri", "", "clientId", "<init>", "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;)V", "getServerUri", "()Ljava/lang/String;", "getClientId", "mqttClient", "Lorg/eclipse/paho/client/mqttv3/MqttAsyncClient;", "mqttListener", "Lcom/softland/callqtv/data/repository/MqttClientManager$MqttListener;", "isConnecting", "", "topicsToSubscribe", "qosToSubscribe", "", "isInitialized", "setMqttListener", "", "listener", "initializeMqttClient", "connect", "username", "password", "subscribe", "topic", "qos", "disconnect", "close", "isConnected", "MqttListener", "Companion", "app"})
+public final class MqttClientManager {
+    @org.jetbrains.annotations.NotNull()
+    private final android.content.Context context = null;
+    @org.jetbrains.annotations.NotNull()
+    private final java.lang.String serverUri = null;
+    @org.jetbrains.annotations.NotNull()
+    private final java.lang.String clientId = null;
+    @org.jetbrains.annotations.Nullable()
+    private org.eclipse.paho.client.mqttv3.MqttAsyncClient mqttClient;
+    @org.jetbrains.annotations.Nullable()
+    private com.softland.callqtv.data.repository.MqttClientManager.MqttListener mqttListener;
+    private boolean isConnecting = false;
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String topicsToSubscribe;
+    private int qosToSubscribe = 1;
+    private boolean isInitialized = false;
+    @org.jetbrains.annotations.NotNull()
+    private static final java.lang.String TAG = "MqttClientManager";
+    @org.jetbrains.annotations.NotNull()
+    public static final com.softland.callqtv.data.repository.MqttClientManager.Companion Companion = null;
+    
+    public MqttClientManager(@org.jetbrains.annotations.NotNull()
+    android.content.Context context, @org.jetbrains.annotations.NotNull()
+    java.lang.String serverUri, @org.jetbrains.annotations.NotNull()
+    java.lang.String clientId) {
+        super();
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getServerUri() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getClientId() {
+        return null;
+    }
+    
+    public final void setMqttListener(@org.jetbrains.annotations.NotNull()
+    com.softland.callqtv.data.repository.MqttClientManager.MqttListener listener) {
+    }
+    
+    private final void initializeMqttClient() {
+    }
+    
+    public final void connect(@org.jetbrains.annotations.Nullable()
+    java.lang.String username, @org.jetbrains.annotations.Nullable()
+    java.lang.String password) {
+    }
+    
+    public final void subscribe(@org.jetbrains.annotations.NotNull()
+    java.lang.String topic, int qos) {
+    }
+    
+    public final void disconnect() {
+    }
+    
+    public final void close() {
+    }
+    
+    public final boolean isConnected() {
+        return false;
+    }
+    
+    @kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u0000\u0012\n\u0002\u0018\u0002\n\u0002\u0010\u0000\n\u0002\b\u0003\n\u0002\u0010\u000e\n\u0000\b\u0086\u0003\u0018\u00002\u00020\u0001B\t\b\u0002\u00a2\u0006\u0004\b\u0002\u0010\u0003R\u000e\u0010\u0004\u001a\u00020\u0005X\u0082T\u00a2\u0006\u0002\n\u0000\u00a8\u0006\u0006"}, d2 = {"Lcom/softland/callqtv/data/repository/MqttClientManager$Companion;", "", "<init>", "()V", "TAG", "", "app"})
+    public static final class Companion {
+        
+        private Companion() {
+            super();
+        }
+    }
+    
+    @kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u0000 \n\u0002\u0018\u0002\n\u0002\u0010\u0000\n\u0000\n\u0002\u0010\u0002\n\u0000\n\u0002\u0010\u000e\n\u0002\b\u0003\n\u0002\u0010\u000b\n\u0002\b\u0004\bf\u0018\u00002\u00020\u0001J\u0018\u0010\u0002\u001a\u00020\u00032\u0006\u0010\u0004\u001a\u00020\u00052\u0006\u0010\u0006\u001a\u00020\u0005H&J\u0010\u0010\u0007\u001a\u00020\u00032\u0006\u0010\b\u001a\u00020\tH&J\u0010\u0010\n\u001a\u00020\u00032\u0006\u0010\u000b\u001a\u00020\u0005H&J\b\u0010\f\u001a\u00020\u0003H&\u00a8\u0006\r\u00c0\u0006\u0003"}, d2 = {"Lcom/softland/callqtv/data/repository/MqttClientManager$MqttListener;", "", "onMessageReceived", "", "topic", "", "message", "onConnectionStatus", "isConnected", "", "onError", "error", "onAutoRetryExhausted", "app"})
+    public static abstract interface MqttListener {
+        
+        public abstract void onMessageReceived(@org.jetbrains.annotations.NotNull()
+        java.lang.String topic, @org.jetbrains.annotations.NotNull()
+        java.lang.String message);
+        
+        public abstract void onConnectionStatus(boolean isConnected);
+        
+        public abstract void onError(@org.jetbrains.annotations.NotNull()
+        java.lang.String error);
+        
+        public abstract void onAutoRetryExhausted();
+    }
+}

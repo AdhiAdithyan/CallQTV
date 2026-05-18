@@ -34,6 +34,8 @@ class MqttClientManager(
     private var qosToSubscribe: Int = 1
     private var isInitialized = false
     private var hasConnectedOnce = false
+    /** First connect after process start uses a clean session so the broker is not blocked by a stale session. */
+    private var useCleanSessionOnNextConnect = true
 
     init {
         Log.d(TAG, "Initializing MQTT Client: serverUri=$serverUri, clientId=$clientId")
@@ -49,6 +51,7 @@ class MqttClientManager(
             mqttClient = MqttAsyncClient(serverUri, clientId, MemoryPersistence()).apply {
                 setCallback(object : MqttCallbackExtended {
                     override fun connectionLost(cause: Throwable?) {
+                        isConnecting = false
                         val errorMsg = cause?.message ?: "Unknown reason"
                         Log.w(TAG, "MQTT connection lost (will rely on auto-reconnect). Reason: $errorMsg", cause)
                         mqttListener?.let {
@@ -81,6 +84,7 @@ class MqttClientManager(
                     override fun connectComplete(reconnect: Boolean, serverURI: String?) {
                         Log.i(TAG, "==> MQTT CONNECT COMPLETE (Extended) <== Reconnect: $reconnect, URI: $serverURI")
                         isConnecting = false
+                        useCleanSessionOnNextConnect = false
                         mqttListener?.onConnectionStatus(true)
                         
                         val topics = topicsToSubscribe
@@ -125,15 +129,16 @@ class MqttClientManager(
         isConnecting = true
         
         val options = MqttConnectOptions().apply {
-            isCleanSession = false // Enable persistent session to receive missed messages on reconnect
+            // After app restart the broker may still hold the old session; clean once avoids
+            // multi-minute waits until the broker drops the ghost client.
+            isCleanSession = useCleanSessionOnNextConnect
             isAutomaticReconnect = true
-            // Use a faster initial timeout so unreachable brokers fail quickly and retry sooner.
-            // This improves first-boot connect latency on unstable LAN/Wi-Fi.
-            connectionTimeout = 10
-            maxReconnectDelay = 8
-            // Very short keep-alive so PINGREQ is sent about every 120 seconds.
-            // Note: this increases network chatter and sensitivity to brief hiccups.
-            keepAliveInterval = 120
+            // Fail fast on unreachable brokers so the next attempt (Paho + app scheduler) runs sooner.
+            connectionTimeout = 5
+            // Cap Paho exponential backoff (ms). Lower value = faster reconnect after drops.
+            maxReconnectDelay = 5_000
+            // Shorter keep-alive helps detect dead sockets sooner (broker-dependent).
+            keepAliveInterval = 60
             mqttVersion = MqttConnectOptions.MQTT_VERSION_3_1_1
             if (!username.isNullOrEmpty() && !password.isNullOrEmpty()) {
                 userName = username
@@ -146,6 +151,7 @@ class MqttClientManager(
                 override fun onSuccess(asyncActionToken: IMqttToken?) {
                     isConnecting = false
                     hasConnectedOnce = true
+                    useCleanSessionOnNextConnect = false
                     Log.i(TAG, "==> INITIAL MQTT CONNECTION SUCCESS <== Server: $serverUri")
                     
                     mqttListener?.onConnectionStatus(true)

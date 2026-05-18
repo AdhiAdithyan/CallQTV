@@ -6,11 +6,13 @@ import com.softland.callqtv.data.model.DeviceMappingRequest
 import com.softland.callqtv.data.model.DeviceMappingResponse
 import com.softland.callqtv.data.model.DeviceRegistrationRequest
 import com.softland.callqtv.data.model.DeviceRegistrationResponse
+import com.softland.callqtv.data.model.GenericApiResponse
 import com.softland.callqtv.data.model.LoginRequest
 import com.softland.callqtv.data.model.LoginResponse
 import com.softland.callqtv.data.model.ProductAuthenticationReq
 import com.softland.callqtv.data.model.ProductAuthenticationRes
 import com.softland.callqtv.data.model.ServiceUrlResponse
+import com.softland.callqtv.data.model.TokenReportRequest
 import com.softland.callqtv.data.model.TvConfigRequest
 import com.softland.callqtv.data.model.TvConfigResponse
 import retrofit2.Call
@@ -66,4 +68,10 @@ interface ApiService {
         @Url url: String,
         @Body request: TvConfigRequest
     ): TvConfigResponse
+
+    @POST
+    suspend fun uploadMqttPayloadLogs(
+        @Url url: String,
+        @Body request: TokenReportRequest
+    ): GenericApiResponse
 }

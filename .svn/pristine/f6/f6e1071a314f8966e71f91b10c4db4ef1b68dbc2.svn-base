@@ -1,0 +1,419 @@
+package com.softland.callqtv.data.local;
+
+import androidx.annotation.NonNull;
+import androidx.room.EntityInsertAdapter;
+import androidx.room.RoomDatabase;
+import androidx.room.util.DBUtil;
+import androidx.room.util.SQLiteStatementUtil;
+import androidx.sqlite.SQLiteStatement;
+import java.lang.Class;
+import java.lang.NullPointerException;
+import java.lang.Override;
+import java.lang.String;
+import java.lang.SuppressWarnings;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import javax.annotation.processing.Generated;
+
+@Generated("androidx.room.RoomProcessor")
+@SuppressWarnings({"unchecked", "deprecation", "removal"})
+public final class MappedBrokerDao_Impl implements MappedBrokerDao {
+  private final RoomDatabase __db;
+
+  private final EntityInsertAdapter<MappedBrokerEntity> __insertAdapterOfMappedBrokerEntity;
+
+  public MappedBrokerDao_Impl(@NonNull final RoomDatabase __db) {
+    this.__db = __db;
+    this.__insertAdapterOfMappedBrokerEntity = new EntityInsertAdapter<MappedBrokerEntity>() {
+      @Override
+      @NonNull
+      protected String createQuery() {
+        return "INSERT OR REPLACE INTO `mapped_broker` (`broker_id`,`device_id`,`mac_address`,`customer_id`,`serial_number`,`device_type`,`ssid`,`password`,`host`,`port`,`topic`,`mapped_broker_json`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)";
+      }
+
+      @Override
+      protected void bind(@NonNull final SQLiteStatement statement,
+          @NonNull final MappedBrokerEntity entity) {
+        statement.bindLong(1, entity.getBrokerId());
+        statement.bindLong(2, entity.getDeviceId());
+        if (entity.getMacAddress() == null) {
+          statement.bindNull(3);
+        } else {
+          statement.bindText(3, entity.getMacAddress());
+        }
+        if (entity.getCustomerId() == null) {
+          statement.bindNull(4);
+        } else {
+          statement.bindText(4, entity.getCustomerId());
+        }
+        if (entity.getSerialNumber() == null) {
+          statement.bindNull(5);
+        } else {
+          statement.bindText(5, entity.getSerialNumber());
+        }
+        if (entity.getDeviceType() == null) {
+          statement.bindNull(6);
+        } else {
+          statement.bindText(6, entity.getDeviceType());
+        }
+        if (entity.getSsid() == null) {
+          statement.bindNull(7);
+        } else {
+          statement.bindText(7, entity.getSsid());
+        }
+        if (entity.getPassword() == null) {
+          statement.bindNull(8);
+        } else {
+          statement.bindText(8, entity.getPassword());
+        }
+        if (entity.getHost() == null) {
+          statement.bindNull(9);
+        } else {
+          statement.bindText(9, entity.getHost());
+        }
+        if (entity.getPort() == null) {
+          statement.bindNull(10);
+        } else {
+          statement.bindText(10, entity.getPort());
+        }
+        if (entity.getTopic() == null) {
+          statement.bindNull(11);
+        } else {
+          statement.bindText(11, entity.getTopic());
+        }
+        if (entity.getMappedBrokerJson() == null) {
+          statement.bindNull(12);
+        } else {
+          statement.bindText(12, entity.getMappedBrokerJson());
+        }
+      }
+    };
+  }
+
+  @Override
+  public void upsert(final MappedBrokerEntity entity) {
+    if (entity == null) throw new NullPointerException();
+    DBUtil.performBlocking(__db, false, true, (_connection) -> {
+      __insertAdapterOfMappedBrokerEntity.insert(_connection, entity);
+      return null;
+    });
+  }
+
+  @Override
+  public List<MappedBrokerEntity> getByDeviceId(final int deviceId) {
+    final String _sql = "SELECT * FROM mapped_broker WHERE device_id = ?";
+    return DBUtil.performBlocking(__db, true, false, (_connection) -> {
+      final SQLiteStatement _stmt = _connection.prepare(_sql);
+      try {
+        int _argIndex = 1;
+        _stmt.bindLong(_argIndex, deviceId);
+        final int _cursorIndexOfBrokerId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "broker_id");
+        final int _cursorIndexOfDeviceId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "device_id");
+        final int _cursorIndexOfMacAddress = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "mac_address");
+        final int _cursorIndexOfCustomerId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "customer_id");
+        final int _cursorIndexOfSerialNumber = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "serial_number");
+        final int _cursorIndexOfDeviceType = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "device_type");
+        final int _cursorIndexOfSsid = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "ssid");
+        final int _cursorIndexOfPassword = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "password");
+        final int _cursorIndexOfHost = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "host");
+        final int _cursorIndexOfPort = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "port");
+        final int _cursorIndexOfTopic = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "topic");
+        final int _cursorIndexOfMappedBrokerJson = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "mapped_broker_json");
+        final List<MappedBrokerEntity> _result = new ArrayList<MappedBrokerEntity>();
+        while (_stmt.step()) {
+          final MappedBrokerEntity _item;
+          final int _tmpBrokerId;
+          _tmpBrokerId = (int) (_stmt.getLong(_cursorIndexOfBrokerId));
+          final int _tmpDeviceId;
+          _tmpDeviceId = (int) (_stmt.getLong(_cursorIndexOfDeviceId));
+          final String _tmpMacAddress;
+          if (_stmt.isNull(_cursorIndexOfMacAddress)) {
+            _tmpMacAddress = null;
+          } else {
+            _tmpMacAddress = _stmt.getText(_cursorIndexOfMacAddress);
+          }
+          final String _tmpCustomerId;
+          if (_stmt.isNull(_cursorIndexOfCustomerId)) {
+            _tmpCustomerId = null;
+          } else {
+            _tmpCustomerId = _stmt.getText(_cursorIndexOfCustomerId);
+          }
+          final String _tmpSerialNumber;
+          if (_stmt.isNull(_cursorIndexOfSerialNumber)) {
+            _tmpSerialNumber = null;
+          } else {
+            _tmpSerialNumber = _stmt.getText(_cursorIndexOfSerialNumber);
+          }
+          final String _tmpDeviceType;
+          if (_stmt.isNull(_cursorIndexOfDeviceType)) {
+            _tmpDeviceType = null;
+          } else {
+            _tmpDeviceType = _stmt.getText(_cursorIndexOfDeviceType);
+          }
+          final String _tmpSsid;
+          if (_stmt.isNull(_cursorIndexOfSsid)) {
+            _tmpSsid = null;
+          } else {
+            _tmpSsid = _stmt.getText(_cursorIndexOfSsid);
+          }
+          final String _tmpPassword;
+          if (_stmt.isNull(_cursorIndexOfPassword)) {
+            _tmpPassword = null;
+          } else {
+            _tmpPassword = _stmt.getText(_cursorIndexOfPassword);
+          }
+          final String _tmpHost;
+          if (_stmt.isNull(_cursorIndexOfHost)) {
+            _tmpHost = null;
+          } else {
+            _tmpHost = _stmt.getText(_cursorIndexOfHost);
+          }
+          final String _tmpPort;
+          if (_stmt.isNull(_cursorIndexOfPort)) {
+            _tmpPort = null;
+          } else {
+            _tmpPort = _stmt.getText(_cursorIndexOfPort);
+          }
+          final String _tmpTopic;
+          if (_stmt.isNull(_cursorIndexOfTopic)) {
+            _tmpTopic = null;
+          } else {
+            _tmpTopic = _stmt.getText(_cursorIndexOfTopic);
+          }
+          final String _tmpMappedBrokerJson;
+          if (_stmt.isNull(_cursorIndexOfMappedBrokerJson)) {
+            _tmpMappedBrokerJson = null;
+          } else {
+            _tmpMappedBrokerJson = _stmt.getText(_cursorIndexOfMappedBrokerJson);
+          }
+          _item = new MappedBrokerEntity(_tmpBrokerId,_tmpDeviceId,_tmpMacAddress,_tmpCustomerId,_tmpSerialNumber,_tmpDeviceType,_tmpSsid,_tmpPassword,_tmpHost,_tmpPort,_tmpTopic,_tmpMappedBrokerJson);
+          _result.add(_item);
+        }
+        return _result;
+      } finally {
+        _stmt.close();
+      }
+    });
+  }
+
+  @Override
+  public List<MappedBrokerEntity> getAllByMacAndCustomer(final String macAddress,
+      final String customerId) {
+    final String _sql = "SELECT * FROM mapped_broker WHERE mac_address = ? AND customer_id = ?";
+    return DBUtil.performBlocking(__db, true, false, (_connection) -> {
+      final SQLiteStatement _stmt = _connection.prepare(_sql);
+      try {
+        int _argIndex = 1;
+        if (macAddress == null) {
+          _stmt.bindNull(_argIndex);
+        } else {
+          _stmt.bindText(_argIndex, macAddress);
+        }
+        _argIndex = 2;
+        if (customerId == null) {
+          _stmt.bindNull(_argIndex);
+        } else {
+          _stmt.bindText(_argIndex, customerId);
+        }
+        final int _cursorIndexOfBrokerId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "broker_id");
+        final int _cursorIndexOfDeviceId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "device_id");
+        final int _cursorIndexOfMacAddress = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "mac_address");
+        final int _cursorIndexOfCustomerId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "customer_id");
+        final int _cursorIndexOfSerialNumber = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "serial_number");
+        final int _cursorIndexOfDeviceType = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "device_type");
+        final int _cursorIndexOfSsid = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "ssid");
+        final int _cursorIndexOfPassword = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "password");
+        final int _cursorIndexOfHost = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "host");
+        final int _cursorIndexOfPort = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "port");
+        final int _cursorIndexOfTopic = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "topic");
+        final int _cursorIndexOfMappedBrokerJson = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "mapped_broker_json");
+        final List<MappedBrokerEntity> _result = new ArrayList<MappedBrokerEntity>();
+        while (_stmt.step()) {
+          final MappedBrokerEntity _item;
+          final int _tmpBrokerId;
+          _tmpBrokerId = (int) (_stmt.getLong(_cursorIndexOfBrokerId));
+          final int _tmpDeviceId;
+          _tmpDeviceId = (int) (_stmt.getLong(_cursorIndexOfDeviceId));
+          final String _tmpMacAddress;
+          if (_stmt.isNull(_cursorIndexOfMacAddress)) {
+            _tmpMacAddress = null;
+          } else {
+            _tmpMacAddress = _stmt.getText(_cursorIndexOfMacAddress);
+          }
+          final String _tmpCustomerId;
+          if (_stmt.isNull(_cursorIndexOfCustomerId)) {
+            _tmpCustomerId = null;
+          } else {
+            _tmpCustomerId = _stmt.getText(_cursorIndexOfCustomerId);
+          }
+          final String _tmpSerialNumber;
+          if (_stmt.isNull(_cursorIndexOfSerialNumber)) {
+            _tmpSerialNumber = null;
+          } else {
+            _tmpSerialNumber = _stmt.getText(_cursorIndexOfSerialNumber);
+          }
+          final String _tmpDeviceType;
+          if (_stmt.isNull(_cursorIndexOfDeviceType)) {
+            _tmpDeviceType = null;
+          } else {
+            _tmpDeviceType = _stmt.getText(_cursorIndexOfDeviceType);
+          }
+          final String _tmpSsid;
+          if (_stmt.isNull(_cursorIndexOfSsid)) {
+            _tmpSsid = null;
+          } else {
+            _tmpSsid = _stmt.getText(_cursorIndexOfSsid);
+          }
+          final String _tmpPassword;
+          if (_stmt.isNull(_cursorIndexOfPassword)) {
+            _tmpPassword = null;
+          } else {
+            _tmpPassword = _stmt.getText(_cursorIndexOfPassword);
+          }
+          final String _tmpHost;
+          if (_stmt.isNull(_cursorIndexOfHost)) {
+            _tmpHost = null;
+          } else {
+            _tmpHost = _stmt.getText(_cursorIndexOfHost);
+          }
+          final String _tmpPort;
+          if (_stmt.isNull(_cursorIndexOfPort)) {
+            _tmpPort = null;
+          } else {
+            _tmpPort = _stmt.getText(_cursorIndexOfPort);
+          }
+          final String _tmpTopic;
+          if (_stmt.isNull(_cursorIndexOfTopic)) {
+            _tmpTopic = null;
+          } else {
+            _tmpTopic = _stmt.getText(_cursorIndexOfTopic);
+          }
+          final String _tmpMappedBrokerJson;
+          if (_stmt.isNull(_cursorIndexOfMappedBrokerJson)) {
+            _tmpMappedBrokerJson = null;
+          } else {
+            _tmpMappedBrokerJson = _stmt.getText(_cursorIndexOfMappedBrokerJson);
+          }
+          _item = new MappedBrokerEntity(_tmpBrokerId,_tmpDeviceId,_tmpMacAddress,_tmpCustomerId,_tmpSerialNumber,_tmpDeviceType,_tmpSsid,_tmpPassword,_tmpHost,_tmpPort,_tmpTopic,_tmpMappedBrokerJson);
+          _result.add(_item);
+        }
+        return _result;
+      } finally {
+        _stmt.close();
+      }
+    });
+  }
+
+  @Override
+  public MappedBrokerEntity getByMacAndCustomer(final String macAddress, final String customerId) {
+    final String _sql = "SELECT * FROM mapped_broker WHERE mac_address = ? AND customer_id = ? LIMIT 1";
+    return DBUtil.performBlocking(__db, true, false, (_connection) -> {
+      final SQLiteStatement _stmt = _connection.prepare(_sql);
+      try {
+        int _argIndex = 1;
+        if (macAddress == null) {
+          _stmt.bindNull(_argIndex);
+        } else {
+          _stmt.bindText(_argIndex, macAddress);
+        }
+        _argIndex = 2;
+        if (customerId == null) {
+          _stmt.bindNull(_argIndex);
+        } else {
+          _stmt.bindText(_argIndex, customerId);
+        }
+        final int _cursorIndexOfBrokerId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "broker_id");
+        final int _cursorIndexOfDeviceId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "device_id");
+        final int _cursorIndexOfMacAddress = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "mac_address");
+        final int _cursorIndexOfCustomerId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "customer_id");
+        final int _cursorIndexOfSerialNumber = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "serial_number");
+        final int _cursorIndexOfDeviceType = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "device_type");
+        final int _cursorIndexOfSsid = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "ssid");
+        final int _cursorIndexOfPassword = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "password");
+        final int _cursorIndexOfHost = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "host");
+        final int _cursorIndexOfPort = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "port");
+        final int _cursorIndexOfTopic = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "topic");
+        final int _cursorIndexOfMappedBrokerJson = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "mapped_broker_json");
+        final MappedBrokerEntity _result;
+        if (_stmt.step()) {
+          final int _tmpBrokerId;
+          _tmpBrokerId = (int) (_stmt.getLong(_cursorIndexOfBrokerId));
+          final int _tmpDeviceId;
+          _tmpDeviceId = (int) (_stmt.getLong(_cursorIndexOfDeviceId));
+          final String _tmpMacAddress;
+          if (_stmt.isNull(_cursorIndexOfMacAddress)) {
+            _tmpMacAddress = null;
+          } else {
+            _tmpMacAddress = _stmt.getText(_cursorIndexOfMacAddress);
+          }
+          final String _tmpCustomerId;
+          if (_stmt.isNull(_cursorIndexOfCustomerId)) {
+            _tmpCustomerId = null;
+          } else {
+            _tmpCustomerId = _stmt.getText(_cursorIndexOfCustomerId);
+          }
+          final String _tmpSerialNumber;
+          if (_stmt.isNull(_cursorIndexOfSerialNumber)) {
+            _tmpSerialNumber = null;
+          } else {
+            _tmpSerialNumber = _stmt.getText(_cursorIndexOfSerialNumber);
+          }
+          final String _tmpDeviceType;
+          if (_stmt.isNull(_cursorIndexOfDeviceType)) {
+            _tmpDeviceType = null;
+          } else {
+            _tmpDeviceType = _stmt.getText(_cursorIndexOfDeviceType);
+          }
+          final String _tmpSsid;
+          if (_stmt.isNull(_cursorIndexOfSsid)) {
+            _tmpSsid = null;
+          } else {
+            _tmpSsid = _stmt.getText(_cursorIndexOfSsid);
+          }
+          final String _tmpPassword;
+          if (_stmt.isNull(_cursorIndexOfPassword)) {
+            _tmpPassword = null;
+          } else {
+            _tmpPassword = _stmt.getText(_cursorIndexOfPassword);
+          }
+          final String _tmpHost;
+          if (_stmt.isNull(_cursorIndexOfHost)) {
+            _tmpHost = null;
+          } else {
+            _tmpHost = _stmt.getText(_cursorIndexOfHost);
+          }
+          final String _tmpPort;
+          if (_stmt.isNull(_cursorIndexOfPort)) {
+            _tmpPort = null;
+          } else {
+            _tmpPort = _stmt.getText(_cursorIndexOfPort);
+          }
+          final String _tmpTopic;
+          if (_stmt.isNull(_cursorIndexOfTopic)) {
+            _tmpTopic = null;
+          } else {
+            _tmpTopic = _stmt.getText(_cursorIndexOfTopic);
+          }
+          final String _tmpMappedBrokerJson;
+          if (_stmt.isNull(_cursorIndexOfMappedBrokerJson)) {
+            _tmpMappedBrokerJson = null;
+          } else {
+            _tmpMappedBrokerJson = _stmt.getText(_cursorIndexOfMappedBrokerJson);
+          }
+          _result = new MappedBrokerEntity(_tmpBrokerId,_tmpDeviceId,_tmpMacAddress,_tmpCustomerId,_tmpSerialNumber,_tmpDeviceType,_tmpSsid,_tmpPassword,_tmpHost,_tmpPort,_tmpTopic,_tmpMappedBrokerJson);
+        } else {
+          _result = null;
+        }
+        return _result;
+      } finally {
+        _stmt.close();
+      }
+    });
+  }
+
+  @NonNull
+  public static List<Class<?>> getRequiredConverters() {
+    return Collections.emptyList();
+  }
+}

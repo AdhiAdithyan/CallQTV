@@ -86,4 +86,14 @@ class TokenHistoryRepository(private val database: AppDatabase, private val cont
 
     /** Clear all persisted history (e.g. on device reset). */
     suspend fun clearAll() = dao.clearAll()
+
+    /** Clear persisted history only for the provided counter keys. */
+    suspend fun clearCounterKeys(counterKeys: Collection<String>) {
+        val normalized = counterKeys
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+        if (normalized.isEmpty()) return
+        dao.clearByCounterKeys(normalized)
+    }
 }

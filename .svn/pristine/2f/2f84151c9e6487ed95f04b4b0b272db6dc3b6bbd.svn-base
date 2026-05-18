@@ -1,0 +1,270 @@
+package com.softland.callqtv.ui;
+
+@kotlin.Metadata(mv = {2, 2, 0}, k = 2, xi = 48, d1 = {"\u0000\u00c6\u0001\n\u0000\n\u0002\u0010\u0002\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0010\u000e\n\u0002\b\n\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0003\n\u0002\u0018\u0002\n\u0002\b\u0004\n\u0002\u0010\b\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0002\n\u0002\u0010\u000b\n\u0002\b\u0006\n\u0002\u0018\u0002\n\u0002\b\u0002\n\u0002\u0018\u0002\n\u0002\b\u0006\n\u0002\u0010 \n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0010$\n\u0002\b\u0004\n\u0002\u0010\t\n\u0002\b\b\n\u0002\u0010\u0007\n\u0002\b\u0004\n\u0002\u0018\u0002\n\u0002\b\u001b\n\u0002\u0018\u0002\n\u0002\b\u0005\n\u0002\u0018\u0002\n\u0002\b\u0017\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0006\n\u0002\u0018\u0002\n\u0002\b\u0002\n\u0002\u0018\u0002\n\u0002\b\r\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\b$\n\u0002\u0018\u0002\n\u0002\b\u000e\u001a6\u0010\u0000\u001a\u00020\u00012\u0006\u0010\u0002\u001a\u00020\u00032\u0006\u0010\u0004\u001a\u00020\u00052\n\b\u0002\u0010\u0006\u001a\u0004\u0018\u00010\u00052\n\b\u0002\u0010\u0007\u001a\u0004\u0018\u00010\u0005H\u0086@\u00a2\u0006\u0002\u0010\b\u001a\u001e\u0010\t\u001a\u00020\u00012\u0006\u0010\u0002\u001a\u00020\u00032\u0006\u0010\n\u001a\u00020\u0005H\u0082@\u00a2\u0006\u0002\u0010\u000b\u001a\u0016\u0010\f\u001a\u00020\u00012\u0006\u0010\u0004\u001a\u00020\u0005H\u0082@\u00a2\u0006\u0002\u0010\r\u001ad\u0010\u000e\u001a\u00020\u00012\u0006\u0010\u000f\u001a\u00020\u00102\u0006\u0010\u0011\u001a\u00020\u00122\u0006\u0010\u0013\u001a\u00020\u00052\u0006\u0010\u0014\u001a\u00020\u00052\u0012\u0010\u0015\u001a\u000e\u0012\u0004\u0012\u00020\u0005\u0012\u0004\u0012\u00020\u00010\u00162\u0012\u0010\u0017\u001a\u000e\u0012\u0004\u0012\u00020\u0005\u0012\u0004\u0012\u00020\u00010\u00162\u0012\u0010\u0018\u001a\u000e\u0012\u0004\u0012\u00020\u0005\u0012\u0004\u0012\u00020\u00010\u0016H\u0007\u001a\u001a\u0010\u0019\u001a\u00020\u00012\u0006\u0010\u001a\u001a\u00020\u001b2\b\b\u0002\u0010\u001c\u001a\u00020\u001dH\u0003\u001a*\u0010\u001e\u001a\u00020\u00012\u0006\u0010\u001f\u001a\u00020 2\u0006\u0010!\u001a\u00020\u001b2\u0006\u0010\"\u001a\u00020\u001b2\b\b\u0002\u0010\u001c\u001a\u00020\u001dH\u0003\u001a.\u0010#\u001a\u00020\u00012\u0006\u0010$\u001a\u00020\u00052\u0006\u0010%\u001a\u00020 2\u0006\u0010!\u001a\u00020\u001b2\f\u0010&\u001a\b\u0012\u0004\u0012\u00020\u00010\'H\u0007\u001a\u0095\u0002\u0010(\u001a\u00020\u00012\u0006\u0010)\u001a\u00020*2\u0006\u0010+\u001a\u00020\u001b2\u0006\u0010,\u001a\u00020\u00052\u0006\u0010-\u001a\u00020\u00052\u0006\u0010.\u001a\u00020 2\u0006\u0010/\u001a\u00020 2\f\u00100\u001a\b\u0012\u0004\u0012\u000202012\f\u00103\u001a\b\u0012\u0004\u0012\u000204012\u0018\u00105\u001a\u0014\u0012\u0004\u0012\u00020\u0005\u0012\n\u0012\b\u0012\u0004\u0012\u00020\u000501062\n\b\u0002\u00107\u001a\u0004\u0018\u00010\u001b2\u0006\u00108\u001a\u00020\u00052\u0006\u0010\u0013\u001a\u00020\u00052\u0006\u0010\u0014\u001a\u00020\u00052\u0012\u0010\u0015\u001a\u000e\u0012\u0004\u0012\u00020\u0005\u0012\u0004\u0012\u00020\u00010\u00162\u0012\u0010\u0017\u001a\u000e\u0012\u0004\u0012\u00020\u0005\u0012\u0004\u0012\u00020\u00010\u00162\u0012\u0010\u0018\u001a\u000e\u0012\u0004\u0012\u00020\u0005\u0012\u0004\u0012\u00020\u00010\u00162\f\u00109\u001a\b\u0012\u0004\u0012\u00020\u00010\'2\u0012\u0010:\u001a\u000e\u0012\u0004\u0012\u00020\u0005\u0012\u0004\u0012\u00020;062\u0006\u0010<\u001a\u00020 2\u0006\u0010=\u001a\u00020\u001b2\u0006\u0010\"\u001a\u00020\u001b2\u0006\u0010\u001a\u001a\u00020\u001bH\u0003\u00a2\u0006\u0002\u0010>\u001a\u00ba\u0001\u0010?\u001a\u00020\u00012\u0006\u0010\u001c\u001a\u00020\u001d2\u0006\u0010)\u001a\u00020*2\u0006\u0010+\u001a\u00020\u001b2\f\u00103\u001a\b\u0012\u0004\u0012\u000204012\f\u0010@\u001a\b\u0012\u0004\u0012\u000202012\u0018\u00105\u001a\u0014\u0012\u0004\u0012\u00020\u0005\u0012\n\u0012\b\u0012\u0004\u0012\u00020\u000501062\u0006\u0010A\u001a\u00020\u001b2\u0006\u0010B\u001a\u00020\u001b2\u0006\u0010C\u001a\u00020D2\u0006\u0010\u0013\u001a\u00020\u00052\u0006\u0010\u0014\u001a\u00020\u00052\u0006\u0010E\u001a\u00020 2\u0006\u0010F\u001a\u00020\u00052\u0012\u0010:\u001a\u000e\u0012\u0004\u0012\u00020\u0005\u0012\u0004\u0012\u00020;062\u0006\u0010<\u001a\u00020 2\u0006\u0010=\u001a\u00020\u001b2\u0006\u0010\"\u001a\u00020\u001bH\u0003\u001a/\u0010G\u001a\u00020\u00012\u0006\u0010)\u001a\u00020*2\u0006\u0010H\u001a\u00020I2\u0006\u0010C\u001a\u00020D2\u0006\u0010J\u001a\u00020 H\u0003\u00a2\u0006\u0004\bK\u0010L\u001a\u00d7\u0001\u0010M\u001a\u00020\u00012\u0006\u0010N\u001a\u00020\u00052\u0006\u00108\u001a\u00020\u00052\u0006\u0010.\u001a\u00020 2\u0006\u0010/\u001a\u00020 2\u0006\u0010O\u001a\u00020 2\u0006\u0010C\u001a\u00020D2\u0006\u0010H\u001a\u00020I2\u0012\u0010\u0015\u001a\u000e\u0012\u0004\u0012\u00020\u0005\u0012\u0004\u0012\u00020\u00010\u00162\u0012\u0010\u0017\u001a\u000e\u0012\u0004\u0012\u00020\u0005\u0012\u0004\u0012\u00020\u00010\u00162\u0012\u0010\u0018\u001a\u000e\u0012\u0004\u0012\u00020\u0005\u0012\u0004\u0012\u00020\u00010\u00162\u0006\u0010,\u001a\u00020\u00052\u0006\u0010-\u001a\u00020\u00052\b\u0010P\u001a\u0004\u0018\u00010\u001b2\b\u0010Q\u001a\u0004\u0018\u00010 2\b\u0010R\u001a\u0004\u0018\u00010 2\b\u0010S\u001a\u0004\u0018\u00010 2\f\u00109\u001a\b\u0012\u0004\u0012\u00020\u00010\'2\f\u0010T\u001a\b\u0012\u0004\u0012\u00020\u00010\'H\u0007\u00a2\u0006\u0004\bU\u0010V\u001a \u0010W\u001a\u00020\u00012\u0006\u0010X\u001a\u00020 2\u0006\u0010O\u001a\u00020 2\u0006\u0010C\u001a\u00020DH\u0007\u001a \u0010Y\u001a\u00020\u00012\u0006\u0010X\u001a\u00020 2\u0006\u0010O\u001a\u00020 2\u0006\u0010C\u001a\u00020DH\u0007\u001a\u001e\u0010Z\u001a\u00020\u00012\f\u00103\u001a\b\u0012\u0004\u0012\u000204012\u0006\u0010)\u001a\u00020*H\u0007\u001a\u0010\u0010[\u001a\u00020 2\u0006\u0010\\\u001a\u00020\u0005H\u0002\u001a\u0010\u0010]\u001a\u00020 2\u0006\u0010\\\u001a\u00020\u0005H\u0002\u001a\u0018\u0010d\u001a\u00020e2\u0006\u0010\\\u001a\u00020\u00052\u0006\u0010\u0002\u001a\u00020\u0003H\u0002\u001a\u001a\u0010f\u001a\u0004\u0018\u00010\u00052\u0006\u0010\\\u001a\u00020\u00052\u0006\u0010\u0002\u001a\u00020\u0003H\u0002\u001a\u0010\u0010g\u001a\u00020 2\u0006\u0010h\u001a\u00020\u0005H\u0002\u001aJ\u0010i\u001a\u00020\u00012\u0006\u0010\n\u001a\u00020\u00052\n\b\u0002\u0010j\u001a\u0004\u0018\u00010k2\f\u0010l\u001a\b\u0012\u0004\u0012\u00020\u00010\'2\u000e\b\u0002\u0010m\u001a\b\u0012\u0004\u0012\u00020\u00010\'2\u000e\b\u0002\u0010n\u001a\b\u0012\u0004\u0012\u00020\u00010\'H\u0007\u001a\u0010\u0010o\u001a\u00020k2\u0006\u0010\u0002\u001a\u00020\u0003H\u0002\u001a\u0018\u0010p\u001a\u00020\u00012\u0006\u0010q\u001a\u00020k2\u0006\u0010r\u001a\u00020 H\u0002\u001a\u0018\u0010s\u001a\u00020\u00012\u0006\u0010q\u001a\u00020k2\u0006\u0010t\u001a\u00020 H\u0002\u001a\u0012\u0010u\u001a\u0004\u0018\u00010\u00052\u0006\u0010v\u001a\u00020\u0005H\u0002\u001a\u0012\u0010w\u001a\u0004\u0018\u00010\u00052\u0006\u0010\n\u001a\u00020\u0005H\u0002\u001a\u0012\u0010x\u001a\u0004\u0018\u00010\u00052\u0006\u0010v\u001a\u00020\u0005H\u0002\u001a\u0012\u0010y\u001a\u0004\u0018\u00010\u00052\u0006\u0010v\u001a\u00020\u0005H\u0002\u001a\u0010\u0010z\u001a\u00020\u00052\u0006\u0010\n\u001a\u00020\u0005H\u0002\u001a\u0012\u0010{\u001a\u0004\u0018\u00010\u00052\u0006\u0010\n\u001a\u00020\u0005H\u0002\u001a\u0018\u0010|\u001a\u00020\u00012\u0006\u0010q\u001a\u00020k2\u0006\u0010\n\u001a\u00020\u0005H\u0002\u001a\u0018\u0010}\u001a\u00020 2\u0006\u0010q\u001a\u00020k2\u0006\u0010~\u001a\u00020\u0005H\u0002\u001a\u0010\u0010\u007f\u001a\u00020 2\u0006\u0010\u0002\u001a\u00020\u0003H\u0000\u001aX\u0010\u0080\u0001\u001a\u00020\u00012\u0007\u0010\u0081\u0001\u001a\u00020\u00052\b\u0010\u0082\u0001\u001a\u00030\u0083\u00012\f\b\u0002\u0010\u0084\u0001\u001a\u0005\u0018\u00010\u0085\u00012\f\u0010l\u001a\b\u0012\u0004\u0012\u00020\u00010\'2\u000e\b\u0002\u0010m\u001a\b\u0012\u0004\u0012\u00020\u00010\'2\u000e\b\u0002\u0010n\u001a\b\u0012\u0004\u0012\u00020\u00010\'H\u0007\u001a\u0012\u0010\u0086\u0001\u001a\u00030\u0085\u00012\u0006\u0010\u0002\u001a\u00020\u0003H\u0002\u001a%\u0010\u0087\u0001\u001a\u00020\u00012\b\u0010\u0082\u0001\u001a\u00030\u0083\u00012\u0007\u0010\u0081\u0001\u001a\u00020\u00052\u0007\u0010\u0088\u0001\u001a\u00020 H\u0002\u001a\u001f\u0010\u0089\u0001\u001a\u00020\u00012\n\u0010\u008a\u0001\u001a\u0005\u0018\u00010\u0085\u00012\b\u0010\u008b\u0001\u001a\u00030\u008c\u0001H\u0002\u001a(\u0010\u008d\u0001\u001a\u00020 2\b\u0010\u008e\u0001\u001a\u00030\u008f\u00012\b\u0010\u0090\u0001\u001a\u00030\u008f\u00012\t\b\u0002\u0010\u0091\u0001\u001a\u00020DH\u0002\u001a\u0095\u0001\u0010\u0092\u0001\u001a\u00020\u00012\f\u00100\u001a\b\u0012\u0004\u0012\u000202012\u0018\u00105\u001a\u0014\u0012\u0004\u0012\u00020\u0005\u0012\n\u0012\b\u0012\u0004\u0012\u00020\u000501062\u0006\u0010)\u001a\u00020*2\u0006\u0010A\u001a\u00020\u001b2\u0006\u0010B\u001a\u00020\u001b2\u0007\u0010\u0093\u0001\u001a\u00020\u00052\u0006\u0010C\u001a\u00020D2\u0006\u0010\u0013\u001a\u00020\u00052\u0006\u0010\u0014\u001a\u00020\u00052\b\b\u0002\u0010O\u001a\u00020 2\t\b\u0002\u0010\u0094\u0001\u001a\u00020 2\u0014\b\u0002\u0010:\u001a\u000e\u0012\u0004\u0012\u00020\u0005\u0012\u0004\u0012\u00020;06H\u0007\u001a\u0080\u0001\u0010\u0095\u0001\u001a\u00020\u00012\u0007\u0010\u0096\u0001\u001a\u0002022\r\u0010\u0097\u0001\u001a\b\u0012\u0004\u0012\u00020\u0005012\u0006\u0010)\u001a\u00020*2\u0006\u0010A\u001a\u00020\u001b2\u0006\u0010B\u001a\u00020\u001b2\u0006\u0010\u001c\u001a\u00020\u001d2\u0006\u0010C\u001a\u00020D2\u0006\u0010\u0013\u001a\u00020\u00052\u0006\u0010\u0014\u001a\u00020\u00052\u0006\u0010O\u001a\u00020 2\u0007\u0010\u0094\u0001\u001a\u00020 2\t\b\u0002\u0010\u0098\u0001\u001a\u00020;2\t\b\u0002\u0010\u0093\u0001\u001a\u00020\u0005H\u0007\u001aV\u0010\u0099\u0001\u001a\u00020\u00012\t\u0010\u009a\u0001\u001a\u0004\u0018\u00010\u00052\u0007\u0010\u009b\u0001\u001a\u00020 2\u0006\u0010C\u001a\u00020D2\b\u0010\u009c\u0001\u001a\u00030\u009d\u00012\b\u0010\u009e\u0001\u001a\u00030\u009f\u00012\u0007\u0010\u00a0\u0001\u001a\u00020D2\t\b\u0002\u0010\u00a1\u0001\u001a\u00020 H\u0007\u00a2\u0006\u0006\b\u00a2\u0001\u0010\u00a3\u0001\u001aF\u0010\u00a4\u0001\u001a\u00020\u00012\u0006\u0010,\u001a\u00020\u00052\u0006\u0010-\u001a\u00020\u00052\t\u0010\u00a5\u0001\u001a\u0004\u0018\u00010\u001b2\u0007\u0010\u00a6\u0001\u001a\u00020I2\u0006\u0010O\u001a\u00020 2\u0006\u0010C\u001a\u00020DH\u0007\u00a2\u0006\u0006\b\u00a7\u0001\u0010\u00a8\u0001\u001a(\u0010\u00a9\u0001\u001a\u00030\u009d\u00012\t\u0010\u00aa\u0001\u001a\u0004\u0018\u00010\u00052\b\u0010\u00ab\u0001\u001a\u00030\u009d\u0001H\u0002\u00a2\u0006\u0006\b\u00ac\u0001\u0010\u00ad\u0001\u001a\u00b1\u0001\u0010\u00ae\u0001\u001a\u00020\u00012\u0006\u0010\u0002\u001a\u00020\u00032\r\u0010\u00af\u0001\u001a\b\u0012\u0004\u0012\u00020\u00010\'2\u0013\u0010\u00b0\u0001\u001a\u000e\u0012\u0004\u0012\u00020\u0005\u0012\u0004\u0012\u00020\u00010\u00162\u0012\u0010\u0017\u001a\u000e\u0012\u0004\u0012\u00020\u0005\u0012\u0004\u0012\u00020\u00010\u00162\u0012\u0010\u0018\u001a\u000e\u0012\u0004\u0012\u00020\u0005\u0012\u0004\u0012\u00020\u00010\u00162\f\u0010T\u001a\b\u0012\u0004\u0012\u00020\u00010\'2\u0006\u0010,\u001a\u00020\u00052\u0006\u0010-\u001a\u00020\u00052\b\u0010P\u001a\u0004\u0018\u00010\u001b2\b\u0010Q\u001a\u0004\u0018\u00010 2\b\u0010R\u001a\u0004\u0018\u00010 2\b\u0010S\u001a\u0004\u0018\u00010 2\u0006\u0010N\u001a\u00020\u0005H\u0007\u00a2\u0006\u0003\u0010\u00b1\u0001\u001a0\u0010\u00b2\u0001\u001a\u00020\u00012\u0007\u0010\u00b3\u0001\u001a\u00020\u00052\u0007\u0010\u00b4\u0001\u001a\u00020\u00052\n\b\u0002\u0010\u00b5\u0001\u001a\u00030\u009d\u0001H\u0007\u00a2\u0006\u0006\b\u00b6\u0001\u0010\u00b7\u0001\u001a*\u0010\u00b8\u0001\u001a\u00020\u00012\u0006\u0010,\u001a\u00020\u00052\t\u0010\u00b9\u0001\u001a\u0004\u0018\u00010\u00052\f\u00109\u001a\b\u0012\u0004\u0012\u00020\u00010\'H\u0007\u001a4\u0010\u00ba\u0001\u001a\u00020\u00012\u0007\u0010\u00b3\u0001\u001a\u00020\u00052\u0007\u0010\u00bb\u0001\u001a\u00020\u00052\r\u0010\u00bc\u0001\u001a\b\u0012\u0004\u0012\u00020\u00010\'2\b\b\u0002\u0010\u001c\u001a\u00020\u001dH\u0007\u001at\u0010\u00bd\u0001\u001a\u00020\u00012\u0007\u0010\u00be\u0001\u001a\u00020\u00052\u0011\b\u0002\u0010\u00bc\u0001\u001a\n\u0012\u0004\u0012\u00020\u0001\u0018\u00010\'2\u000b\b\u0002\u0010\u00bf\u0001\u001a\u0004\u0018\u00010\u00052\n\b\u0002\u0010\u00c0\u0001\u001a\u00030\u009d\u00012\n\b\u0002\u0010\u00c1\u0001\u001a\u00030\u009d\u00012\n\b\u0002\u0010\u00c2\u0001\u001a\u00030\u009d\u00012\u0013\u0010\u00c3\u0001\u001a\u000e\u0012\u0004\u0012\u00020\u00010\'\u00a2\u0006\u0003\b\u00c4\u0001H\u0007\u00a2\u0006\u0006\b\u00c5\u0001\u0010\u00c6\u0001\u001a6\u0010\u00c7\u0001\u001a\u00020\u00012\u0007\u0010\u00be\u0001\u001a\u00020\u00052\u0013\u0010\u00c8\u0001\u001a\u000e\u0012\u0004\u0012\u00020\u0005\u0012\u0004\u0012\u00020\u00010\u00162\r\u0010\u00af\u0001\u001a\b\u0012\u0004\u0012\u00020\u00010\'H\u0007\u001a?\u0010\u00c9\u0001\u001a\u00020\u00012\u0007\u0010\u00be\u0001\u001a\u00020\u00052\u0007\u0010\u00ca\u0001\u001a\u00020\u00052\u0013\u0010\u00cb\u0001\u001a\u000e\u0012\u0004\u0012\u00020\u0005\u0012\u0004\u0012\u00020\u00010\u00162\r\u0010\u00af\u0001\u001a\b\u0012\u0004\u0012\u00020\u00010\'H\u0007\u001a6\u0010\u00cc\u0001\u001a\u00020\u00012\u0007\u0010\u00be\u0001\u001a\u00020\u00052\u0013\u0010\u00c8\u0001\u001a\u000e\u0012\u0004\u0012\u00020\u0005\u0012\u0004\u0012\u00020\u00010\u00162\r\u0010\u00af\u0001\u001a\b\u0012\u0004\u0012\u00020\u00010\'H\u0007\u001a(\u0010\u00cd\u0001\u001a\u00020\u00012\r\u0010\u00ce\u0001\u001a\b\u0012\u0004\u0012\u00020\u0005012\u0006\u0010C\u001a\u00020D2\u0006\u0010O\u001a\u00020 H\u0007\u001a2\u0010\u00cf\u0001\u001a\b\u0012\u0004\u0012\u00020\u0005012\u0007\u0010\u0096\u0001\u001a\u0002022\u0018\u00105\u001a\u0014\u0012\u0004\u0012\u00020\u0005\u0012\n\u0012\b\u0012\u0004\u0012\u00020\u00050106H\u0002\u001a!\u0010\u00d0\u0001\u001a\u0004\u0018\u00010\u00052\t\u0010\u009a\u0001\u001a\u0004\u0018\u00010\u00052\t\u0010\u00d1\u0001\u001a\u0004\u0018\u00010\u0005H\u0002\"\u000e\u0010^\u001a\u00020\u0005X\u0082T\u00a2\u0006\u0002\n\u0000\"\u000e\u0010_\u001a\u00020\u0005X\u0082T\u00a2\u0006\u0002\n\u0000\"\u000e\u0010`\u001a\u00020\u0005X\u0082T\u00a2\u0006\u0002\n\u0000\"\u000e\u0010a\u001a\u00020\u001bX\u0082T\u00a2\u0006\u0002\n\u0000\"\u000e\u0010b\u001a\u00020;X\u0082T\u00a2\u0006\u0002\n\u0000\"\u0014\u0010c\u001a\b\u0012\u0004\u0012\u00020\u001b01X\u0082\u0004\u00a2\u0006\u0002\n\u0000\u00a8\u0006\u00d2\u0001"}, d2 = {"playTokenChime", "", "context", "Landroid/content/Context;", "soundKey", "", "tokenAudioUrl", "counterAudioUrl", "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", "playMediaUrl", "url", "(Landroid/content/Context;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", "playSystemTone", "(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", "TokenDisplayScreen", "viewModel", "Lcom/softland/callqtv/viewmodel/TokenDisplayViewModel;", "mqttViewModel", "Lcom/softland/callqtv/viewmodel/MqttViewModel;", "counterBgHex", "tokenBgHex", "onThemeChange", "Lkotlin/Function1;", "onCounterBgChange", "onTokenBgChange", "PendingCallsBadge", "pendingCallCount", "", "modifier", "Landroidx/compose/ui/Modifier;", "ReconnectStatusBadge", "visible", "", "retryAttempt", "reconnectUiSeconds", "MqttErrorBar", "error", "exhausted", "onRetry", "Lkotlin/Function0;", "TokenDisplayContent", "config", "Lcom/softland/callqtv/data/local/TvConfigEntity;", "adAreaReloadToken", "macAddress", "appVersion", "isMqttConnected", "isNetworkAvailable", "counters", "", "Lcom/softland/callqtv/data/local/CounterEntity;", "adFiles", "Lcom/softland/callqtv/data/local/AdFileEntity;", "tokensPerCounter", "", "daysUntilLicenseExpiry", "dateTime", "onRefresh", "blinkTriggers", "", "showReconnectBadge", "reconnectRetryAttempt", "(Lcom/softland/callqtv/data/local/TvConfigEntity;ILjava/lang/String;Ljava/lang/String;ZZLjava/util/List;Ljava/util/List;Ljava/util/Map;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function0;Ljava/util/Map;ZIII)V", "TokenDisplayBody", "countersToDisplay", "rows", "columns", "scale", "", "usePortraitLayout", "adPlacement", "TokenDisplayFooter", "responsivePadding", "Landroidx/compose/ui/unit/Dp;", "deviceIsPortrait", "TokenDisplayFooter-ziNgDLE", "(Lcom/softland/callqtv/data/local/TvConfigEntity;FFZ)V", "HeaderArea", "companyName", "isPortrait", "daysUntilExpiry", "isTokenAnnouncementEnabled", "isCounterAnnouncementEnabled", "isCounterPrefixEnabled", "onClearTokenHistoryAndRefresh", "HeaderArea-AlbwjTQ", "(Ljava/lang/String;Ljava/lang/String;ZZZFFLkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Boolean;Ljava/lang/Boolean;Ljava/lang/Boolean;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;)V", "BluconStatusIndicator", "isOnline", "NetworkStatusIndicator", "AdArea", "isAdVideo", "path", "isAdImage", "PREF_YOUTUBE_AD_MAX_SECONDS", "PREF_YOUTUBE_STRICT_AUTOPLAY", "PREF_YOUTUBE_PLAY_UNTIL_ENDED", "DEFAULT_YOUTUBE_AD_MAX_SECONDS", "MIN_TRUSTED_YOUTUBE_DURATION_MS", "YOUTUBE_AD_MAX_OPTIONS_SECONDS", "resolveAdMediaType", "Lcom/softland/callqtv/ui/AdMediaType;", "detectMimeType", "isValidYoutubeVideoIdForEmbed", "id", "YouTubeAdPlayer", "sharedWebView", "Landroid/webkit/WebView;", "onVideoEnded", "onReady", "onError", "buildBaseYoutubeWebView", "releaseYouTubeWebView", "webView", "destroy", "applyYouTubeKioskMode", "isAdSoundEnabled", "nextYouTubeDnsFallbackUrl", "currentUrl", "extractYoutubeIdForFallback", "nextYouTubeEmbedFallbackUrl", "nextYouTubeWatchFallbackUrl", "normalizeYouTubePlaybackUrl", "extractYoutubeIdForAnyUrl", "loadYouTubeUrlWithHeaders", "loadYouTubeIframeFallback", "sourceUrl", "isAdLowBandwidthNetwork", "AdVideoPlayer", "videoUrl", "player", "Landroidx/media3/exoplayer/ExoPlayer;", "sharedTextureView", "Landroid/view/TextureView;", "buildSharedAdTextureView", "applyAdaptiveVideoTrackCap", "isLowBandwidth", "applyFitCenterTransform", "textureView", "videoSize", "Landroidx/media3/common/VideoSize;", "matrixAlmostEqual", "a", "Landroid/graphics/Matrix;", "b", "epsilon", "CountersArea", "layoutType", "hasAds", "CounterBoard", "counter", "tokens", "blinkTrigger", "TokenCard", "token", "isPrimary", "textColor", "Landroidx/compose/ui/graphics/Color;", "bgBrush", "Landroidx/compose/ui/graphics/Brush;", "fontSize", "isInverted", "TokenCard-ww6aTOc", "(Ljava/lang/String;ZFJLandroidx/compose/ui/graphics/Brush;FZ)V", "FooterArea", "daysExpiry", "padding", "FooterArea-gwO9Abs", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;FZF)V", "parseColorOrDefault", "colorString", "default", "parseColorOrDefault-4WTKRHQ", "(Ljava/lang/String;J)J", "AppearanceSettingsDialog", "onDismiss", "onThemeSelected", "(Landroid/content/Context;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function0;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Boolean;Ljava/lang/Boolean;Ljava/lang/Boolean;Ljava/lang/String;)V", "InfoRow", "label", "value", "valueColor", "InfoRow-mxwnekA", "(Ljava/lang/String;Ljava/lang/String;J)V", "LicenseExpiredDialog", "errorMessage", "ColorPickerButton", "hex", "onClick", "GridSettingsItem", "title", "helpText", "titleColor", "cardColor", "borderColor", "content", "Landroidx/compose/runtime/Composable;", "GridSettingsItem-BqC95S0", "(Ljava/lang/String;Lkotlin/jvm/functions/Function0;Ljava/lang/String;JJJLandroidx/compose/runtime/internal/ComposableFunction0;)V", "PresetColorDialog", "onColorSelected", "NotificationSoundDialog", "selectedKey", "onSoundSelected", "PresetThemeColorDialog", "ScrollingFooter", "textLines", "getTokensForCounter", "formatTokenByPattern", "pattern", "CallQTV_v1.0.1_CallQTVRelease"})
+@androidx.annotation.OptIn(markerClass = {androidx.media3.common.util.UnstableApi.class})
+public final class TokenDisplayActivityKt {
+    @org.jetbrains.annotations.NotNull()
+    private static final java.lang.String PREF_YOUTUBE_AD_MAX_SECONDS = "youtube_ad_max_seconds";
+    @org.jetbrains.annotations.NotNull()
+    private static final java.lang.String PREF_YOUTUBE_STRICT_AUTOPLAY = "youtube_strict_autoplay";
+    @org.jetbrains.annotations.NotNull()
+    private static final java.lang.String PREF_YOUTUBE_PLAY_UNTIL_ENDED = "youtube_play_until_ended";
+    private static final int DEFAULT_YOUTUBE_AD_MAX_SECONDS = 120;
+    private static final long MIN_TRUSTED_YOUTUBE_DURATION_MS = 5000L;
+    @org.jetbrains.annotations.NotNull()
+    private static final java.util.List<java.lang.Integer> YOUTUBE_AD_MAX_OPTIONS_SECONDS = null;
+    
+    @org.jetbrains.annotations.Nullable()
+    public static final java.lang.Object playTokenChime(@org.jetbrains.annotations.NotNull()
+    android.content.Context context, @org.jetbrains.annotations.NotNull()
+    java.lang.String soundKey, @org.jetbrains.annotations.Nullable()
+    java.lang.String tokenAudioUrl, @org.jetbrains.annotations.Nullable()
+    java.lang.String counterAudioUrl, @org.jetbrains.annotations.NotNull()
+    kotlin.coroutines.Continuation<? super kotlin.Unit> $completion) {
+        return null;
+    }
+    
+    private static final java.lang.Object playMediaUrl(android.content.Context context, java.lang.String url, kotlin.coroutines.Continuation<? super kotlin.Unit> $completion) {
+        return null;
+    }
+    
+    private static final java.lang.Object playSystemTone(java.lang.String soundKey, kotlin.coroutines.Continuation<? super kotlin.Unit> $completion) {
+        return null;
+    }
+    
+    @androidx.compose.runtime.Composable()
+    public static final void TokenDisplayScreen(@org.jetbrains.annotations.NotNull()
+    com.softland.callqtv.viewmodel.TokenDisplayViewModel viewModel, @org.jetbrains.annotations.NotNull()
+    com.softland.callqtv.viewmodel.MqttViewModel mqttViewModel, @org.jetbrains.annotations.NotNull()
+    java.lang.String counterBgHex, @org.jetbrains.annotations.NotNull()
+    java.lang.String tokenBgHex, @org.jetbrains.annotations.NotNull()
+    kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit> onThemeChange, @org.jetbrains.annotations.NotNull()
+    kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit> onCounterBgChange, @org.jetbrains.annotations.NotNull()
+    kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit> onTokenBgChange) {
+    }
+    
+    @androidx.compose.runtime.Composable()
+    private static final void PendingCallsBadge(int pendingCallCount, androidx.compose.ui.Modifier modifier) {
+    }
+    
+    @androidx.compose.runtime.Composable()
+    private static final void ReconnectStatusBadge(boolean visible, int retryAttempt, int reconnectUiSeconds, androidx.compose.ui.Modifier modifier) {
+    }
+    
+    @androidx.compose.runtime.Composable()
+    public static final void MqttErrorBar(@org.jetbrains.annotations.NotNull()
+    java.lang.String error, boolean exhausted, int retryAttempt, @org.jetbrains.annotations.NotNull()
+    kotlin.jvm.functions.Function0<kotlin.Unit> onRetry) {
+    }
+    
+    @androidx.compose.runtime.Composable()
+    private static final void TokenDisplayContent(com.softland.callqtv.data.local.TvConfigEntity config, int adAreaReloadToken, java.lang.String macAddress, java.lang.String appVersion, boolean isMqttConnected, boolean isNetworkAvailable, java.util.List<com.softland.callqtv.data.local.CounterEntity> counters, java.util.List<com.softland.callqtv.data.local.AdFileEntity> adFiles, java.util.Map<java.lang.String, ? extends java.util.List<java.lang.String>> tokensPerCounter, java.lang.Integer daysUntilLicenseExpiry, java.lang.String dateTime, java.lang.String counterBgHex, java.lang.String tokenBgHex, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit> onThemeChange, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit> onCounterBgChange, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit> onTokenBgChange, kotlin.jvm.functions.Function0<kotlin.Unit> onRefresh, java.util.Map<java.lang.String, java.lang.Long> blinkTriggers, boolean showReconnectBadge, int reconnectRetryAttempt, int reconnectUiSeconds, int pendingCallCount) {
+    }
+    
+    @androidx.compose.runtime.Composable()
+    private static final void TokenDisplayBody(androidx.compose.ui.Modifier modifier, com.softland.callqtv.data.local.TvConfigEntity config, int adAreaReloadToken, java.util.List<com.softland.callqtv.data.local.AdFileEntity> adFiles, java.util.List<com.softland.callqtv.data.local.CounterEntity> countersToDisplay, java.util.Map<java.lang.String, ? extends java.util.List<java.lang.String>> tokensPerCounter, int rows, int columns, float scale, java.lang.String counterBgHex, java.lang.String tokenBgHex, boolean usePortraitLayout, java.lang.String adPlacement, java.util.Map<java.lang.String, java.lang.Long> blinkTriggers, boolean showReconnectBadge, int reconnectRetryAttempt, int reconnectUiSeconds) {
+    }
+    
+    @androidx.compose.runtime.Composable()
+    public static final void BluconStatusIndicator(boolean isOnline, boolean isPortrait, float scale) {
+    }
+    
+    @androidx.compose.runtime.Composable()
+    public static final void NetworkStatusIndicator(boolean isOnline, boolean isPortrait, float scale) {
+    }
+    
+    @androidx.compose.runtime.Composable()
+    public static final void AdArea(@org.jetbrains.annotations.NotNull()
+    java.util.List<com.softland.callqtv.data.local.AdFileEntity> adFiles, @org.jetbrains.annotations.NotNull()
+    com.softland.callqtv.data.local.TvConfigEntity config) {
+    }
+    
+    private static final boolean isAdVideo(java.lang.String path) {
+        return false;
+    }
+    
+    private static final boolean isAdImage(java.lang.String path) {
+        return false;
+    }
+    
+    private static final com.softland.callqtv.ui.AdMediaType resolveAdMediaType(java.lang.String path, android.content.Context context) {
+        return null;
+    }
+    
+    private static final java.lang.String detectMimeType(java.lang.String path, android.content.Context context) {
+        return null;
+    }
+    
+    private static final boolean isValidYoutubeVideoIdForEmbed(java.lang.String id) {
+        return false;
+    }
+    
+    @androidx.compose.runtime.Composable()
+    public static final void YouTubeAdPlayer(@org.jetbrains.annotations.NotNull()
+    java.lang.String url, @org.jetbrains.annotations.Nullable()
+    android.webkit.WebView sharedWebView, @org.jetbrains.annotations.NotNull()
+    kotlin.jvm.functions.Function0<kotlin.Unit> onVideoEnded, @org.jetbrains.annotations.NotNull()
+    kotlin.jvm.functions.Function0<kotlin.Unit> onReady, @org.jetbrains.annotations.NotNull()
+    kotlin.jvm.functions.Function0<kotlin.Unit> onError) {
+    }
+    
+    private static final android.webkit.WebView buildBaseYoutubeWebView(android.content.Context context) {
+        return null;
+    }
+    
+    private static final void releaseYouTubeWebView(android.webkit.WebView webView, boolean destroy) {
+    }
+    
+    private static final void applyYouTubeKioskMode(android.webkit.WebView webView, boolean isAdSoundEnabled) {
+    }
+    
+    private static final java.lang.String nextYouTubeDnsFallbackUrl(java.lang.String currentUrl) {
+        return null;
+    }
+    
+    private static final java.lang.String extractYoutubeIdForFallback(java.lang.String url) {
+        return null;
+    }
+    
+    private static final java.lang.String nextYouTubeEmbedFallbackUrl(java.lang.String currentUrl) {
+        return null;
+    }
+    
+    private static final java.lang.String nextYouTubeWatchFallbackUrl(java.lang.String currentUrl) {
+        return null;
+    }
+    
+    private static final java.lang.String normalizeYouTubePlaybackUrl(java.lang.String url) {
+        return null;
+    }
+    
+    private static final java.lang.String extractYoutubeIdForAnyUrl(java.lang.String url) {
+        return null;
+    }
+    
+    private static final void loadYouTubeUrlWithHeaders(android.webkit.WebView webView, java.lang.String url) {
+    }
+    
+    private static final boolean loadYouTubeIframeFallback(android.webkit.WebView webView, java.lang.String sourceUrl) {
+        return false;
+    }
+    
+    public static final boolean isAdLowBandwidthNetwork(@org.jetbrains.annotations.NotNull()
+    android.content.Context context) {
+        return false;
+    }
+    
+    @androidx.compose.runtime.Composable()
+    public static final void AdVideoPlayer(@org.jetbrains.annotations.NotNull()
+    java.lang.String videoUrl, @org.jetbrains.annotations.NotNull()
+    androidx.media3.exoplayer.ExoPlayer player, @org.jetbrains.annotations.Nullable()
+    android.view.TextureView sharedTextureView, @org.jetbrains.annotations.NotNull()
+    kotlin.jvm.functions.Function0<kotlin.Unit> onVideoEnded, @org.jetbrains.annotations.NotNull()
+    kotlin.jvm.functions.Function0<kotlin.Unit> onReady, @org.jetbrains.annotations.NotNull()
+    kotlin.jvm.functions.Function0<kotlin.Unit> onError) {
+    }
+    
+    private static final android.view.TextureView buildSharedAdTextureView(android.content.Context context) {
+        return null;
+    }
+    
+    private static final void applyAdaptiveVideoTrackCap(androidx.media3.exoplayer.ExoPlayer player, java.lang.String videoUrl, boolean isLowBandwidth) {
+    }
+    
+    private static final void applyFitCenterTransform(android.view.TextureView textureView, androidx.media3.common.VideoSize videoSize) {
+    }
+    
+    private static final boolean matrixAlmostEqual(android.graphics.Matrix a, android.graphics.Matrix b, float epsilon) {
+        return false;
+    }
+    
+    @androidx.compose.runtime.Composable()
+    public static final void CountersArea(@org.jetbrains.annotations.NotNull()
+    java.util.List<com.softland.callqtv.data.local.CounterEntity> counters, @org.jetbrains.annotations.NotNull()
+    java.util.Map<java.lang.String, ? extends java.util.List<java.lang.String>> tokensPerCounter, @org.jetbrains.annotations.NotNull()
+    com.softland.callqtv.data.local.TvConfigEntity config, int rows, int columns, @org.jetbrains.annotations.NotNull()
+    java.lang.String layoutType, float scale, @org.jetbrains.annotations.NotNull()
+    java.lang.String counterBgHex, @org.jetbrains.annotations.NotNull()
+    java.lang.String tokenBgHex, boolean isPortrait, boolean hasAds, @org.jetbrains.annotations.NotNull()
+    java.util.Map<java.lang.String, java.lang.Long> blinkTriggers) {
+    }
+    
+    @androidx.compose.runtime.Composable()
+    public static final void CounterBoard(@org.jetbrains.annotations.NotNull()
+    com.softland.callqtv.data.local.CounterEntity counter, @org.jetbrains.annotations.NotNull()
+    java.util.List<java.lang.String> tokens, @org.jetbrains.annotations.NotNull()
+    com.softland.callqtv.data.local.TvConfigEntity config, int rows, int columns, @org.jetbrains.annotations.NotNull()
+    androidx.compose.ui.Modifier modifier, float scale, @org.jetbrains.annotations.NotNull()
+    java.lang.String counterBgHex, @org.jetbrains.annotations.NotNull()
+    java.lang.String tokenBgHex, boolean isPortrait, boolean hasAds, long blinkTrigger, @org.jetbrains.annotations.NotNull()
+    java.lang.String layoutType) {
+    }
+    
+    @kotlin.OptIn(markerClass = {androidx.compose.material3.ExperimentalMaterial3Api.class})
+    @androidx.compose.runtime.Composable()
+    public static final void AppearanceSettingsDialog(@org.jetbrains.annotations.NotNull()
+    android.content.Context context, @org.jetbrains.annotations.NotNull()
+    kotlin.jvm.functions.Function0<kotlin.Unit> onDismiss, @org.jetbrains.annotations.NotNull()
+    kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit> onThemeSelected, @org.jetbrains.annotations.NotNull()
+    kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit> onCounterBgChange, @org.jetbrains.annotations.NotNull()
+    kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit> onTokenBgChange, @org.jetbrains.annotations.NotNull()
+    kotlin.jvm.functions.Function0<kotlin.Unit> onClearTokenHistoryAndRefresh, @org.jetbrains.annotations.NotNull()
+    java.lang.String macAddress, @org.jetbrains.annotations.NotNull()
+    java.lang.String appVersion, @org.jetbrains.annotations.Nullable()
+    java.lang.Integer daysUntilExpiry, @org.jetbrains.annotations.Nullable()
+    java.lang.Boolean isTokenAnnouncementEnabled, @org.jetbrains.annotations.Nullable()
+    java.lang.Boolean isCounterAnnouncementEnabled, @org.jetbrains.annotations.Nullable()
+    java.lang.Boolean isCounterPrefixEnabled, @org.jetbrains.annotations.NotNull()
+    java.lang.String companyName) {
+    }
+    
+    @androidx.compose.runtime.Composable()
+    public static final void LicenseExpiredDialog(@org.jetbrains.annotations.NotNull()
+    java.lang.String macAddress, @org.jetbrains.annotations.Nullable()
+    java.lang.String errorMessage, @org.jetbrains.annotations.NotNull()
+    kotlin.jvm.functions.Function0<kotlin.Unit> onRefresh) {
+    }
+    
+    @androidx.compose.runtime.Composable()
+    public static final void ColorPickerButton(@org.jetbrains.annotations.NotNull()
+    java.lang.String label, @org.jetbrains.annotations.NotNull()
+    java.lang.String hex, @org.jetbrains.annotations.NotNull()
+    kotlin.jvm.functions.Function0<kotlin.Unit> onClick, @org.jetbrains.annotations.NotNull()
+    androidx.compose.ui.Modifier modifier) {
+    }
+    
+    @androidx.compose.runtime.Composable()
+    public static final void PresetColorDialog(@org.jetbrains.annotations.NotNull()
+    java.lang.String title, @org.jetbrains.annotations.NotNull()
+    kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit> onColorSelected, @org.jetbrains.annotations.NotNull()
+    kotlin.jvm.functions.Function0<kotlin.Unit> onDismiss) {
+    }
+    
+    @androidx.compose.runtime.Composable()
+    public static final void NotificationSoundDialog(@org.jetbrains.annotations.NotNull()
+    java.lang.String title, @org.jetbrains.annotations.NotNull()
+    java.lang.String selectedKey, @org.jetbrains.annotations.NotNull()
+    kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit> onSoundSelected, @org.jetbrains.annotations.NotNull()
+    kotlin.jvm.functions.Function0<kotlin.Unit> onDismiss) {
+    }
+    
+    @androidx.compose.runtime.Composable()
+    public static final void PresetThemeColorDialog(@org.jetbrains.annotations.NotNull()
+    java.lang.String title, @org.jetbrains.annotations.NotNull()
+    kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit> onColorSelected, @org.jetbrains.annotations.NotNull()
+    kotlin.jvm.functions.Function0<kotlin.Unit> onDismiss) {
+    }
+    
+    @androidx.compose.runtime.Composable()
+    public static final void ScrollingFooter(@org.jetbrains.annotations.NotNull()
+    java.util.List<java.lang.String> textLines, float scale, boolean isPortrait) {
+    }
+    
+    private static final java.util.List<java.lang.String> getTokensForCounter(com.softland.callqtv.data.local.CounterEntity counter, java.util.Map<java.lang.String, ? extends java.util.List<java.lang.String>> tokensPerCounter) {
+        return null;
+    }
+    
+    private static final java.lang.String formatTokenByPattern(java.lang.String token, java.lang.String pattern) {
+        return null;
+    }
+}

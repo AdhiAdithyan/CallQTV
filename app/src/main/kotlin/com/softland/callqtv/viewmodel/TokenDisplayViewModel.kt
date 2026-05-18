@@ -150,14 +150,17 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
             viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
                 mqttViewModel.configRefreshRequests
                     .receiveAsFlow()
-                    .collect {
+                    .collect { signal ->
                         val now = System.currentTimeMillis()
-                        if (now - lastMqttRefreshHandledAtMs < MQTT_REFRESH_MIN_INTERVAL_MS) {
+                        if (!signal.forceImmediate &&
+                            now - lastMqttRefreshHandledAtMs < MQTT_REFRESH_MIN_INTERVAL_MS
+                        ) {
                             return@collect
                         }
                         lastMqttRefreshHandledAtMs = now
-                        // Non-UI (no overlay) reload triggered by MQTT.
-                        loadData(mqttViewModel, forceShowOverlay = false)
+                        // CLR: same configuration API path as the Refresh button (overlay rules included).
+                        // Other MQTT triggers stay quiet (no overlay) and remain throttled above.
+                        loadData(mqttViewModel, forceShowOverlay = signal.forceImmediate)
                     }
             }
         }
@@ -204,11 +207,25 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                 syncedAds = lastOfflineSyncedAds
             )
             _connectedDevices.value = cachedSnapshot.connectedDevices
+            mqttViewModel.applyTokenHistoryLimitFromConfig(cachedSnapshot.config)
             val hasRenderableCache = _config.value != null
             android.util.Log.i(
                 "TokenDisplayVMPerf",
                 "Cache pre-load took ${System.currentTimeMillis() - cacheStartMs} ms"
             )
+
+            // Connect to BLUCON/MQTT from cached broker rows immediately — do not wait for
+            // fetchAndCacheTvConfig (can take minutes on slow or offline networks).
+            cachedSnapshot.config?.let {
+                launch {
+                    val mqttStartMs = System.currentTimeMillis()
+                    initMqttIfNeeded(mqttViewModel)
+                    android.util.Log.i(
+                        "TokenDisplayVMPerf",
+                        "MQTT bootstrap from cache took ${System.currentTimeMillis() - mqttStartMs} ms"
+                    )
+                }
+            }
 
             // UX optimization: if we already have cache, stop blocking UI with the
             // full-screen "Loading TV configuration" overlay and continue API sync
@@ -300,14 +317,18 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                     }
 
                     _connectedDevices.value = refreshedSnapshot.connectedDevices
+                    mqttViewModel.applyTokenHistoryLimitFromConfig(_config.value)
 
-                    _config.value?.let { cfg ->
-                        // Launch concurrently so loading spinner dismisses immediately
-                        launch { initMqttIfNeeded(cfg, mqttViewModel) }
+                    if (_config.value != null) {
+                        // After config sync: reconnect only when broker host/topic/credentials changed.
+                        launch { initMqttIfNeeded(mqttViewModel) }
                     }
                 } ?: run {
                     // Timeout: log and fall back to cache. User can retry via Refresh button or MQTT.
                     FileLogger.logError(getApplication(), "TVConfig", "Config API timed out; using cached data")
+                    if (_config.value != null) {
+                        launch { initMqttIfNeeded(mqttViewModel) }
+                    }
                 }
             } catch (e: Exception) {
                 val fallbackSnapshot = loadCachedSnapshot(_macAddress, customerId)
@@ -330,6 +351,9 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                     // Cache available; silently log and wait for MQTT or manual refresh.
                     FileLogger.logError(getApplication(), "TVConfig", "Config API exception (timeout, cached data in use): ${e.message}", e)
                 }
+                if (_config.value != null) {
+                    launch { initMqttIfNeeded(mqttViewModel) }
+                }
             } finally {
                 _isLoading.value = false
                 _adAreaReloadToken.value = (_adAreaReloadToken.value ?: 0) + 1
@@ -344,50 +368,44 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
-    private suspend fun initMqttIfNeeded(cfg: TvConfigEntity, mqttViewModel: MqttViewModel) {
+    private suspend fun initMqttIfNeeded(mqttViewModel: MqttViewModel) {
+        val endpoints = loadBrokerEndpoints()
+        mqttViewModel.reconcileBrokersAfterConfigSync(endpoints, getApplication())
+    }
+
+    private suspend fun loadBrokerEndpoints(): List<MqttViewModel.BrokerEndpoint> {
         val customerIdInt = authPrefs.getInt(PreferenceHelper.customer_id, 0)
         val customerId = String.format(Locale.ROOT, "%04d", customerIdInt)
         val brokers = repository.getMappedBrokerEntities(_macAddress, customerId)
-
-        if (brokers.isEmpty()) {
-            // Fallback to single broker if dedicated table is empty (unlikely with recent code)
-            repository.getMappedBrokerEntity(_macAddress, customerId)?.let { broker ->
-                connectToBroker(broker, mqttViewModel)
-            }
+        val rows = if (brokers.isEmpty()) {
+            listOfNotNull(repository.getMappedBrokerEntity(_macAddress, customerId))
         } else {
-            brokers.forEach { broker ->
-                connectToBroker(broker, mqttViewModel)
-            }
+            brokers
         }
+        return rows.mapNotNull { broker -> broker.toBrokerEndpoint(_macAddress) }
     }
 
-    private fun connectToBroker(broker: com.softland.callqtv.data.local.MappedBrokerEntity, mqttViewModel: MqttViewModel) {
-        val host = broker.host?.trim().orEmpty()
-        val topic = broker.topic?.trim().orEmpty()
+    private fun com.softland.callqtv.data.local.MappedBrokerEntity.toBrokerEndpoint(
+        macAddress: String,
+    ): MqttViewModel.BrokerEndpoint? {
+        val host = host?.trim().orEmpty()
+        val topic = topic?.trim().orEmpty()
+        if (host.isEmpty() || topic.isEmpty()) return null
 
-        if (host.isNotEmpty() && topic.isNotEmpty()) {
-            val port = broker.port?.trim().orEmpty()
-            val mqttPort = port.ifEmpty { "1883" }
-            val serverUri = "tcp://$host:$mqttPort"
+        val mqttPort = port?.trim().orEmpty().ifEmpty { "1883" }
+        val serverUri = "tcp://$host:$mqttPort"
+        val baseMac = macAddress.replace(":", "")
+        val brokerSuffix = brokerId.toString()
+        val clientId = "callqtv_${baseMac}_$brokerSuffix"
 
-            // Use a stable clientId so we do NOT force-disconnect and recreate the MQTT client
-            // on every retry. If broker.brokerId is null, derive a deterministic suffix from
-            // the broker connection parameters instead of a random value.
-            val baseMac = _macAddress.replace(":", "")
-            val brokerSuffix = broker.brokerId?.toString()
-                ?: "${host}_${mqttPort}_${topic}".replace(Regex("[^A-Za-z0-9]"), "")
-            val clientId = "callqtv_${baseMac}_$brokerSuffix"
-
-            mqttViewModel.initAndConnect(
-                serverUri = serverUri,
-                clientId = clientId,
-                username = broker.ssid, // SSID is used as username in certain setups
-                password = broker.password,
-                topic = topic,
-                qos = 1,
-                context = getApplication()
-            )
-        }
+        return MqttViewModel.BrokerEndpoint(
+            serverUri = serverUri,
+            clientId = clientId,
+            username = ssid,
+            password = password,
+            topic = topic,
+            qos = 1,
+        )
     }
 
     companion object {

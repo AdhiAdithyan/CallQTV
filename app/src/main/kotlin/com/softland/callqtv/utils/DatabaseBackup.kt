@@ -1,6 +1,7 @@
 package com.softland.callqtv.utils
 
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import java.io.File
 import java.text.SimpleDateFormat
@@ -8,10 +9,8 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Utility to back up the application's Room database to the
- * public Download/CALLQTV_CONFIG/<date>/ folder.
- *
- * Example: Download/CALLQTV_CONFIG/2026-03-24/backup_2026-03-24.db
+ * Backs up the Room database into CALLQTV_CONFIG/(date)/ next to API/error logs.
+ * API 29+: shared Downloads via MediaStore. Older devices: direct file under public Download.
  */
 object DatabaseBackup {
     private const val TAG = "DatabaseBackup"
@@ -32,17 +31,41 @@ object DatabaseBackup {
                 return
             }
 
-            // Reuse FileLogger's date-based directory for consistency
-            val backupDir = FileLogger.getLogDirectory(context)
-
             val dateStr = todayDateStr()
-            val backupFile = File(backupDir, "backup_$dateStr.db")
+            val backupName = "backup_$dateStr.db"
 
-            // Copy main database file
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val mime = "application/vnd.sqlite3"
+                if (PublicCallqtvConfigStorage.copyFileIntoDownloads(
+                        context, dateStr, backupName, dbFile, mime
+                    )
+                ) {
+                    Log.i(
+                        TAG,
+                        "Database backed up to Downloads/${PublicCallqtvConfigStorage.BASE_FOLDER}/$dateStr/$backupName"
+                    )
+                    val shmFile = File(dbFile.path + "-shm")
+                    if (shmFile.exists()) {
+                        PublicCallqtvConfigStorage.copyFileIntoDownloads(
+                            context, dateStr, "$backupName-shm", shmFile, mime
+                        )
+                    }
+                    val walFile = File(dbFile.path + "-wal")
+                    if (walFile.exists()) {
+                        PublicCallqtvConfigStorage.copyFileIntoDownloads(
+                            context, dateStr, "$backupName-wal", walFile, mime
+                        )
+                    }
+                    return
+                }
+                Log.e(TAG, "MediaStore DB backup failed; falling back to app-accessible file path")
+            }
+
+            val backupDir = FileLogger.getLogDirectory(context)
+            val backupFile = File(backupDir, backupName)
             dbFile.copyTo(backupFile, overwrite = true)
             Log.i(TAG, "Database backed up to: ${backupFile.absolutePath}")
 
-            // Copy sidecar files if they exist (WAL mode)
             val shmFile = File(dbFile.path + "-shm")
             if (shmFile.exists()) {
                 shmFile.copyTo(File(backupFile.path + "-shm"), overwrite = true)

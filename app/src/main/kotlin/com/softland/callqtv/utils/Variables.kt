@@ -33,7 +33,7 @@ object Variables {
                 val addr = networkInterface.hardwareAddress
                 if (addr != null && addr.isNotEmpty()) {
                     val buf = StringBuilder()
-                    for (b in addr) buf.append(String.format("%02X:", b))
+                    for (b in addr) buf.append(String.format(Locale.ROOT, "%02X:", b))
                     if (buf.isNotEmpty()) buf.deleteCharAt(buf.length - 1)
                     return buf.toString()
                 }

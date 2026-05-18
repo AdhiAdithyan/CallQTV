@@ -6,6 +6,22 @@ import android.util.Log
  * Uses AI (ML Kit) and Regex to extract Token and Counter information from unstructured text.
  */
 object SemanticMqttParser {
+    enum class PayloadAction {
+        NORMAL,
+        DB_ONLY,
+        REPLACE_COUNTER
+    }
+
+    data class FixedPayload(
+        val counter: String,
+        val token: String,
+        val buttonStringId: String,
+        val serial: String,
+        val action: PayloadAction,
+        /** Index-4 marker `D` in fixed protocol: VIP / emergency token (display/announce prefix ER). */
+        val isVipEmergency: Boolean = false,
+    )
+
     private const val TAG = "SemanticParser"
 
     // Regex fallbacks for performance and offline reliability
@@ -48,7 +64,7 @@ object SemanticMqttParser {
                 val segment = part.trim()
                 val kv = segment.split(":", limit = 2)
                 if (kv.size > 1) {
-                    val key = kv[0].trim().uppercase()
+                    val key = kv[0].trim().uppercase(java.util.Locale.ROOT)
                     val value = kv[1].trim()
                     if (key == "TOKEN") token = value
                     else if (key == "COUNTER" || key == "DESK") counter = value
@@ -98,5 +114,51 @@ object SemanticMqttParser {
         }
 
         return null
+    }
+
+    /**
+     * New fixed protocol parser.
+     * Example: "$0PABAeCAL0K0001lo-0011*"
+     * - Type marker: index 4
+     *   - A/B/E => DB-only (no token UI); `B` = transferred token
+     *   - C => special-message replace
+     *   - D => same token flow as `-`, but VIP/emergency (handled in app: ER prefix).
+     * - Counter marker: index 5
+     * - Serial: indexes 6..16 (1-based), 11 characters — substring(5, 16); index 18 is not `keypad_index`.
+     * - Message/token id: four digits at indexes 20..23 (substring(19, 23) — end index exclusive).
+     */
+    fun parseFixedPayload(message: String): FixedPayload? {
+        val trimmed = message.trim()
+        if (!trimmed.startsWith("$") || !trimmed.endsWith("*")) return null
+        if (trimmed.length < 24) return null
+
+        return try {
+            val type = trimmed[4].uppercaseChar()
+            val counter = trimmed[5].toString().trim()
+            val serial = trimmed.substring(5, 16).trim()
+            val tokenId = trimmed.substring(19, 23).trim()
+            val buttonStringId = trimmed[22].toString().trim()
+
+            if (counter.isBlank() || serial.isBlank() || tokenId.isBlank()) return null
+
+            val action = when (type) {
+                'A', 'B', 'E' -> PayloadAction.DB_ONLY
+                'C' -> PayloadAction.REPLACE_COUNTER
+                '-', 'D' -> PayloadAction.NORMAL
+                else -> PayloadAction.NORMAL
+            }
+            val isVipEmergency = type == 'D'
+
+            FixedPayload(
+                counter = counter,
+                token = tokenId.trimStart('0').ifEmpty { "0" },
+                buttonStringId = buttonStringId,
+                serial = serial,
+                action = action,
+                isVipEmergency = isVipEmergency,
+            )
+        } catch (_: Exception) {
+            null
+        }
     }
 }

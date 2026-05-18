@@ -1,0 +1,312 @@
+package com.softland.callqtv.data.model;
+
+@kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u0000\u001c\n\u0002\u0018\u0002\n\u0002\u0010\u0000\n\u0002\b\u0003\n\u0002\u0010\b\n\u0002\b\u0005\n\u0002\u0010\u000e\n\u0002\bL\u0018\u00002\u00020\u0001B\u0007\u00a2\u0006\u0004\b\u0002\u0010\u0003R\u001e\u0010\u0004\u001a\u00020\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u0006\u0010\u0007\"\u0004\b\b\u0010\tR \u0010\n\u001a\u0004\u0018\u00010\u000b8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\f\u0010\r\"\u0004\b\u000e\u0010\u000fR \u0010\u0010\u001a\u0004\u0018\u00010\u000b8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u0011\u0010\r\"\u0004\b\u0012\u0010\u000fR \u0010\u0013\u001a\u0004\u0018\u00010\u000b8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u0014\u0010\r\"\u0004\b\u0015\u0010\u000fR \u0010\u0016\u001a\u0004\u0018\u00010\u000b8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u0017\u0010\r\"\u0004\b\u0018\u0010\u000fR \u0010\u0019\u001a\u0004\u0018\u00010\u000b8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u001a\u0010\r\"\u0004\b\u001b\u0010\u000fR \u0010\u001c\u001a\u0004\u0018\u00010\u000b8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u001d\u0010\r\"\u0004\b\u001e\u0010\u000fR\u001e\u0010\u001f\u001a\u00020\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b \u0010\u0007\"\u0004\b!\u0010\tR \u0010\"\u001a\u0004\u0018\u00010\u000b8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\"\u0010\r\"\u0004\b#\u0010\u000fR \u0010$\u001a\u0004\u0018\u00010\u000b8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b%\u0010\r\"\u0004\b&\u0010\u000fR \u0010\'\u001a\u0004\u0018\u00010\u000b8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b(\u0010\r\"\u0004\b)\u0010\u000fR \u0010*\u001a\u0004\u0018\u00010\u000b8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b+\u0010\r\"\u0004\b,\u0010\u000fR\u001e\u0010-\u001a\u00020\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b.\u0010\u0007\"\u0004\b/\u0010\tR \u00100\u001a\u0004\u0018\u00010\u000b8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b1\u0010\r\"\u0004\b2\u0010\u000fR \u00103\u001a\u0004\u0018\u00010\u000b8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b4\u0010\r\"\u0004\b5\u0010\u000fR \u00106\u001a\u0004\u0018\u00010\u000b8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b7\u0010\r\"\u0004\b8\u0010\u000fR \u00109\u001a\u0004\u0018\u00010\u000b8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b:\u0010\r\"\u0004\b;\u0010\u000fR \u0010<\u001a\u0004\u0018\u00010\u000b8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b=\u0010\r\"\u0004\b>\u0010\u000fR \u0010?\u001a\u0004\u0018\u00010\u000b8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b@\u0010\r\"\u0004\bA\u0010\u000fR \u0010B\u001a\u0004\u0018\u00010\u000b8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\bC\u0010\r\"\u0004\bD\u0010\u000fR \u0010E\u001a\u0004\u0018\u00010\u000b8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\bF\u0010\r\"\u0004\bG\u0010\u000fR \u0010H\u001a\u0004\u0018\u00010\u000b8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\bI\u0010\r\"\u0004\bJ\u0010\u000fR \u0010K\u001a\u0004\u0018\u00010\u000b8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\bL\u0010\r\"\u0004\bM\u0010\u000fR \u0010N\u001a\u0004\u0018\u00010\u000b8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\bO\u0010\r\"\u0004\bP\u0010\u000fR \u0010Q\u001a\u0004\u0018\u00010\u000b8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\bR\u0010\r\"\u0004\bS\u0010\u000fR \u0010T\u001a\u0004\u0018\u00010\u000b8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\bU\u0010\r\"\u0004\bV\u0010\u000f\u00a8\u0006W"}, d2 = {"Lcom/softland/callqtv/data/model/CheckDeviceStatusResponse;", "", "<init>", "()V", "status", "", "getStatus", "()I", "setStatus", "(I)V", "message", "", "getMessage", "()Ljava/lang/String;", "setMessage", "(Ljava/lang/String;)V", "licenceActiveTo", "getLicenceActiveTo", "setLicenceActiveTo", "licenceActiveFrom", "getLicenceActiveFrom", "setLicenceActiveFrom", "customerName", "getCustomerName", "setCustomerName", "customerContactPerson", "getCustomerContactPerson", "setCustomerContactPerson", "customerContact", "getCustomerContact", "setCustomerContact", "numberOfLicence", "getNumberOfLicence", "setNumberOfLicence", "isMandatoryUpdate", "setMandatoryUpdate", "apkVersion", "getApkVersion", "setApkVersion", "apkVersionCode", "getApkVersionCode", "setApkVersionCode", "downloadUrl", "getDownloadUrl", "setDownloadUrl", "mandDataSync", "getMandDataSync", "setMandDataSync", "totalCount", "getTotalCount", "setTotalCount", "projectCode", "getProjectCode", "setProjectCode", "previousDisplayRowCount", "getPreviousDisplayRowCount", "setPreviousDisplayRowCount", "currentTokenFontSize", "getCurrentTokenFontSize", "setCurrentTokenFontSize", "webLoginCount", "getWebLoginCount", "setWebLoginCount", "previousTokenFontSize", "getPreviousTokenFontSize", "setPreviousTokenFontSize", "customerHeaderView", "getCustomerHeaderView", "setCustomerHeaderView", "androidTvCount", "getAndroidTvCount", "setAndroidTvCount", "androidApkCount", "getAndroidApkCount", "setAndroidApkCount", "keypadDeviceCount", "getKeypadDeviceCount", "setKeypadDeviceCount", "ledDisplayCount", "getLedDisplayCount", "setLedDisplayCount", "outletCount", "getOutletCount", "setOutletCount", "locations", "getLocations", "setLocations", "app"})
+public final class CheckDeviceStatusResponse {
+    @com.google.gson.annotations.SerializedName(value = "status")
+    private int status = 0;
+    @com.google.gson.annotations.SerializedName(value = "Message")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String message;
+    @com.google.gson.annotations.SerializedName(value = "LicenceActiveTo")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String licenceActiveTo;
+    @com.google.gson.annotations.SerializedName(value = "LicenceActiveFrom")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String licenceActiveFrom;
+    @com.google.gson.annotations.SerializedName(value = "CustomerName")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String customerName;
+    @com.google.gson.annotations.SerializedName(value = "CustomerContactPerson")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String customerContactPerson;
+    @com.google.gson.annotations.SerializedName(value = "CustomerContact")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String customerContact;
+    @com.google.gson.annotations.SerializedName(value = "NumberOfLicence")
+    private int numberOfLicence = 0;
+    @com.google.gson.annotations.SerializedName(value = "IsMandatoryUpdate")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String isMandatoryUpdate;
+    @com.google.gson.annotations.SerializedName(value = "APKVersion")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String apkVersion;
+    @com.google.gson.annotations.SerializedName(value = "APKVersionCode")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String apkVersionCode;
+    @com.google.gson.annotations.SerializedName(value = "DownloadURL")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String downloadUrl;
+    @com.google.gson.annotations.SerializedName(value = "MandDataSync")
+    private int mandDataSync = 0;
+    @com.google.gson.annotations.SerializedName(value = "TotalCount")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String totalCount;
+    @com.google.gson.annotations.SerializedName(value = "ProjectCode")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String projectCode;
+    @com.google.gson.annotations.SerializedName(value = "PreviousDisplayRowCount")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String previousDisplayRowCount;
+    @com.google.gson.annotations.SerializedName(value = "CurrentTokenFontSize")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String currentTokenFontSize;
+    @com.google.gson.annotations.SerializedName(value = "WebLoginCount")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String webLoginCount;
+    @com.google.gson.annotations.SerializedName(value = "PreviousTokenFontSize")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String previousTokenFontSize;
+    @com.google.gson.annotations.SerializedName(value = "CustomerHeaderView")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String customerHeaderView;
+    @com.google.gson.annotations.SerializedName(value = "AndroidTvCount")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String androidTvCount;
+    @com.google.gson.annotations.SerializedName(value = "AndroidApkCount")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String androidApkCount;
+    @com.google.gson.annotations.SerializedName(value = "KeypadDeviceCount")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String keypadDeviceCount;
+    @com.google.gson.annotations.SerializedName(value = "LedDisplayCount")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String ledDisplayCount;
+    @com.google.gson.annotations.SerializedName(value = "OutletCount")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String outletCount;
+    @com.google.gson.annotations.SerializedName(value = "Locations")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String locations;
+    
+    public CheckDeviceStatusResponse() {
+        super();
+    }
+    
+    public final int getStatus() {
+        return 0;
+    }
+    
+    public final void setStatus(int p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getMessage() {
+        return null;
+    }
+    
+    public final void setMessage(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getLicenceActiveTo() {
+        return null;
+    }
+    
+    public final void setLicenceActiveTo(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getLicenceActiveFrom() {
+        return null;
+    }
+    
+    public final void setLicenceActiveFrom(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getCustomerName() {
+        return null;
+    }
+    
+    public final void setCustomerName(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getCustomerContactPerson() {
+        return null;
+    }
+    
+    public final void setCustomerContactPerson(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getCustomerContact() {
+        return null;
+    }
+    
+    public final void setCustomerContact(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    public final int getNumberOfLicence() {
+        return 0;
+    }
+    
+    public final void setNumberOfLicence(int p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String isMandatoryUpdate() {
+        return null;
+    }
+    
+    public final void setMandatoryUpdate(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getApkVersion() {
+        return null;
+    }
+    
+    public final void setApkVersion(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getApkVersionCode() {
+        return null;
+    }
+    
+    public final void setApkVersionCode(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getDownloadUrl() {
+        return null;
+    }
+    
+    public final void setDownloadUrl(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    public final int getMandDataSync() {
+        return 0;
+    }
+    
+    public final void setMandDataSync(int p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getTotalCount() {
+        return null;
+    }
+    
+    public final void setTotalCount(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getProjectCode() {
+        return null;
+    }
+    
+    public final void setProjectCode(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getPreviousDisplayRowCount() {
+        return null;
+    }
+    
+    public final void setPreviousDisplayRowCount(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getCurrentTokenFontSize() {
+        return null;
+    }
+    
+    public final void setCurrentTokenFontSize(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getWebLoginCount() {
+        return null;
+    }
+    
+    public final void setWebLoginCount(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getPreviousTokenFontSize() {
+        return null;
+    }
+    
+    public final void setPreviousTokenFontSize(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getCustomerHeaderView() {
+        return null;
+    }
+    
+    public final void setCustomerHeaderView(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getAndroidTvCount() {
+        return null;
+    }
+    
+    public final void setAndroidTvCount(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getAndroidApkCount() {
+        return null;
+    }
+    
+    public final void setAndroidApkCount(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getKeypadDeviceCount() {
+        return null;
+    }
+    
+    public final void setKeypadDeviceCount(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getLedDisplayCount() {
+        return null;
+    }
+    
+    public final void setLedDisplayCount(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getOutletCount() {
+        return null;
+    }
+    
+    public final void setOutletCount(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getLocations() {
+        return null;
+    }
+    
+    public final void setLocations(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+}

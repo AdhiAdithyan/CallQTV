@@ -1,0 +1,20 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.softland.callqtv.app-mergeCallQTVReleaseResources-2:/values-watch-v21/values-watch-v21.xml",
+            "map": [
+                {
+                    "source": "F:\\gradle-home\\caches\\9.4.0\\transforms\\3b1884394ec2c7beb3f0db09306885f3\\transformed\\appcompat-1.7.0\\res\\values-watch-v21\\values-watch-v21.xml",
+                    "from": {
+                        "startLines": "2,6,10",
+                        "startColumns": "4,4,4",
+                        "startOffsets": "55,271,499",
+                        "endLines": "5,9,13",
+                        "endColumns": "12,12,12",
+                        "endOffsets": "266,494,724"
+                    }
+                }
+            ]
+        }
+    ]
+}

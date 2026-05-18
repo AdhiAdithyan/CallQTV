@@ -32,11 +32,20 @@ data class CounterEntity(
     @ColumnInfo(name = "default_code")
     val defaultCode: String?,
 
+    @ColumnInfo(name = "keypad_index")
+    val keypadIndex: String?,
+
+    @ColumnInfo(name = "dispenser_index")
+    val dispenserIndex: Int?,
+
     @ColumnInfo(name = "source_device")
     val sourceDevice: String?,
 
     @ColumnInfo(name = "button_index")
     val buttonIndex: Int?,
+
+    @ColumnInfo(name = "dispenser_button_number")
+    val dispenserButtonNumber: Int?,
 
     @ColumnInfo(name = "name")
     val name: String?,

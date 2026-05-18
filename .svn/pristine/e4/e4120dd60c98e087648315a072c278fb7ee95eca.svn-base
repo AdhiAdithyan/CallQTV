@@ -1,0 +1,919 @@
+package com.softland.callqtv.data.local;
+
+import androidx.annotation.NonNull;
+import androidx.room.EntityInsertAdapter;
+import androidx.room.RoomDatabase;
+import androidx.room.util.DBUtil;
+import androidx.room.util.SQLiteStatementUtil;
+import androidx.sqlite.SQLiteStatement;
+import java.lang.Boolean;
+import java.lang.Class;
+import java.lang.Integer;
+import java.lang.NullPointerException;
+import java.lang.Override;
+import java.lang.String;
+import java.lang.SuppressWarnings;
+import java.util.Collections;
+import java.util.List;
+import javax.annotation.processing.Generated;
+
+@Generated("androidx.room.RoomProcessor")
+@SuppressWarnings({"unchecked", "deprecation", "removal"})
+public final class TvConfigDao_Impl implements TvConfigDao {
+  private final RoomDatabase __db;
+
+  private final EntityInsertAdapter<TvConfigEntity> __insertAdapterOfTvConfigEntity;
+
+  public TvConfigDao_Impl(@NonNull final RoomDatabase __db) {
+    this.__db = __db;
+    this.__insertAdapterOfTvConfigEntity = new EntityInsertAdapter<TvConfigEntity>() {
+      @Override
+      @NonNull
+      protected String createQuery() {
+        return "INSERT OR REPLACE INTO `tv_config` (`device_id`,`serial_number`,`mac_address`,`customer_id`,`company_name`,`status`,`message`,`audio_language`,`show_ads`,`ad_interval`,`orientation`,`layout_type`,`save_audio_external`,`enable_counter_announcement`,`enable_token_announcement`,`enable_counter_prifix`,`token_audio_url`,`token_music_url`,`display_rows`,`display_columns`,`counter_text_color`,`token_text_color`,`font_size`,`token_font_size`,`counter_font_size`,`current_token_color`,`previous_token_color`,`blink_current_token`,`token_format`,`tokens_per_counter`,`no_of_counters`,`ad_placement`,`ad_files_json`,`counters_json`,`shift_details_json`,`mapped_broker_json`,`blink_seconds`,`current_profile_json`,`connected_devices_json`,`scroll_enabled`,`no_of_text_fields`,`scroll_text_lines_json`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+      }
+
+      @Override
+      protected void bind(@NonNull final SQLiteStatement statement,
+          @NonNull final TvConfigEntity entity) {
+        statement.bindLong(1, entity.getDeviceId());
+        if (entity.getSerialNumber() == null) {
+          statement.bindNull(2);
+        } else {
+          statement.bindText(2, entity.getSerialNumber());
+        }
+        if (entity.getMacAddress() == null) {
+          statement.bindNull(3);
+        } else {
+          statement.bindText(3, entity.getMacAddress());
+        }
+        if (entity.getCustomerId() == null) {
+          statement.bindNull(4);
+        } else {
+          statement.bindText(4, entity.getCustomerId());
+        }
+        if (entity.getCompanyName() == null) {
+          statement.bindNull(5);
+        } else {
+          statement.bindText(5, entity.getCompanyName());
+        }
+        if (entity.getStatus() == null) {
+          statement.bindNull(6);
+        } else {
+          statement.bindText(6, entity.getStatus());
+        }
+        if (entity.getMessage() == null) {
+          statement.bindNull(7);
+        } else {
+          statement.bindText(7, entity.getMessage());
+        }
+        if (entity.getAudioLanguage() == null) {
+          statement.bindNull(8);
+        } else {
+          statement.bindText(8, entity.getAudioLanguage());
+        }
+        if (entity.getShowAds() == null) {
+          statement.bindNull(9);
+        } else {
+          statement.bindText(9, entity.getShowAds());
+        }
+        if (entity.getAdInterval() == null) {
+          statement.bindNull(10);
+        } else {
+          statement.bindLong(10, entity.getAdInterval());
+        }
+        if (entity.getOrientation() == null) {
+          statement.bindNull(11);
+        } else {
+          statement.bindText(11, entity.getOrientation());
+        }
+        if (entity.getLayoutType() == null) {
+          statement.bindNull(12);
+        } else {
+          statement.bindText(12, entity.getLayoutType());
+        }
+        final Integer _tmp = entity.getSaveAudioExternal() == null ? null : (entity.getSaveAudioExternal() ? 1 : 0);
+        if (_tmp == null) {
+          statement.bindNull(13);
+        } else {
+          statement.bindLong(13, _tmp);
+        }
+        final Integer _tmp_1 = entity.getEnableCounterAnnouncement() == null ? null : (entity.getEnableCounterAnnouncement() ? 1 : 0);
+        if (_tmp_1 == null) {
+          statement.bindNull(14);
+        } else {
+          statement.bindLong(14, _tmp_1);
+        }
+        final Integer _tmp_2 = entity.getEnableTokenAnnouncement() == null ? null : (entity.getEnableTokenAnnouncement() ? 1 : 0);
+        if (_tmp_2 == null) {
+          statement.bindNull(15);
+        } else {
+          statement.bindLong(15, _tmp_2);
+        }
+        final Integer _tmp_3 = entity.getEnableCounterPrefix() == null ? null : (entity.getEnableCounterPrefix() ? 1 : 0);
+        if (_tmp_3 == null) {
+          statement.bindNull(16);
+        } else {
+          statement.bindLong(16, _tmp_3);
+        }
+        if (entity.getTokenAudioUrl() == null) {
+          statement.bindNull(17);
+        } else {
+          statement.bindText(17, entity.getTokenAudioUrl());
+        }
+        if (entity.getTokenMusicUrl() == null) {
+          statement.bindNull(18);
+        } else {
+          statement.bindText(18, entity.getTokenMusicUrl());
+        }
+        if (entity.getDisplayRows() == null) {
+          statement.bindNull(19);
+        } else {
+          statement.bindLong(19, entity.getDisplayRows());
+        }
+        if (entity.getDisplayColumns() == null) {
+          statement.bindNull(20);
+        } else {
+          statement.bindLong(20, entity.getDisplayColumns());
+        }
+        if (entity.getCounterTextColor() == null) {
+          statement.bindNull(21);
+        } else {
+          statement.bindText(21, entity.getCounterTextColor());
+        }
+        if (entity.getTokenTextColor() == null) {
+          statement.bindNull(22);
+        } else {
+          statement.bindText(22, entity.getTokenTextColor());
+        }
+        if (entity.getFontSize() == null) {
+          statement.bindNull(23);
+        } else {
+          statement.bindLong(23, entity.getFontSize());
+        }
+        if (entity.getTokenFontSize() == null) {
+          statement.bindNull(24);
+        } else {
+          statement.bindLong(24, entity.getTokenFontSize());
+        }
+        if (entity.getCounterFontSize() == null) {
+          statement.bindNull(25);
+        } else {
+          statement.bindLong(25, entity.getCounterFontSize());
+        }
+        if (entity.getCurrentTokenColor() == null) {
+          statement.bindNull(26);
+        } else {
+          statement.bindText(26, entity.getCurrentTokenColor());
+        }
+        if (entity.getPreviousTokenColor() == null) {
+          statement.bindNull(27);
+        } else {
+          statement.bindText(27, entity.getPreviousTokenColor());
+        }
+        final Integer _tmp_4 = entity.getBlinkCurrentToken() == null ? null : (entity.getBlinkCurrentToken() ? 1 : 0);
+        if (_tmp_4 == null) {
+          statement.bindNull(28);
+        } else {
+          statement.bindLong(28, _tmp_4);
+        }
+        if (entity.getTokenFormat() == null) {
+          statement.bindNull(29);
+        } else {
+          statement.bindText(29, entity.getTokenFormat());
+        }
+        if (entity.getTokensPerCounter() == null) {
+          statement.bindNull(30);
+        } else {
+          statement.bindLong(30, entity.getTokensPerCounter());
+        }
+        if (entity.getNoOfCounters() == null) {
+          statement.bindNull(31);
+        } else {
+          statement.bindLong(31, entity.getNoOfCounters());
+        }
+        if (entity.getAdPlacement() == null) {
+          statement.bindNull(32);
+        } else {
+          statement.bindText(32, entity.getAdPlacement());
+        }
+        if (entity.getAdFilesJson() == null) {
+          statement.bindNull(33);
+        } else {
+          statement.bindText(33, entity.getAdFilesJson());
+        }
+        if (entity.getCountersJson() == null) {
+          statement.bindNull(34);
+        } else {
+          statement.bindText(34, entity.getCountersJson());
+        }
+        if (entity.getShiftDetailsJson() == null) {
+          statement.bindNull(35);
+        } else {
+          statement.bindText(35, entity.getShiftDetailsJson());
+        }
+        if (entity.getMappedBrokerJson() == null) {
+          statement.bindNull(36);
+        } else {
+          statement.bindText(36, entity.getMappedBrokerJson());
+        }
+        if (entity.getBlinkSeconds() == null) {
+          statement.bindNull(37);
+        } else {
+          statement.bindLong(37, entity.getBlinkSeconds());
+        }
+        if (entity.getCurrentProfileJson() == null) {
+          statement.bindNull(38);
+        } else {
+          statement.bindText(38, entity.getCurrentProfileJson());
+        }
+        if (entity.getConnectedDevicesJson() == null) {
+          statement.bindNull(39);
+        } else {
+          statement.bindText(39, entity.getConnectedDevicesJson());
+        }
+        if (entity.getScrollEnabled() == null) {
+          statement.bindNull(40);
+        } else {
+          statement.bindText(40, entity.getScrollEnabled());
+        }
+        if (entity.getNoOfTextFields() == null) {
+          statement.bindNull(41);
+        } else {
+          statement.bindLong(41, entity.getNoOfTextFields());
+        }
+        if (entity.getScrollTextLinesJson() == null) {
+          statement.bindNull(42);
+        } else {
+          statement.bindText(42, entity.getScrollTextLinesJson());
+        }
+      }
+    };
+  }
+
+  @Override
+  public void upsert(final TvConfigEntity config) {
+    if (config == null) throw new NullPointerException();
+    DBUtil.performBlocking(__db, false, true, (_connection) -> {
+      __insertAdapterOfTvConfigEntity.insert(_connection, config);
+      return null;
+    });
+  }
+
+  @Override
+  public TvConfigEntity getByDeviceId(final int deviceId) {
+    final String _sql = "SELECT * FROM tv_config WHERE device_id = ? LIMIT 1";
+    return DBUtil.performBlocking(__db, true, false, (_connection) -> {
+      final SQLiteStatement _stmt = _connection.prepare(_sql);
+      try {
+        int _argIndex = 1;
+        _stmt.bindLong(_argIndex, deviceId);
+        final int _cursorIndexOfDeviceId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "device_id");
+        final int _cursorIndexOfSerialNumber = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "serial_number");
+        final int _cursorIndexOfMacAddress = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "mac_address");
+        final int _cursorIndexOfCustomerId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "customer_id");
+        final int _cursorIndexOfCompanyName = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "company_name");
+        final int _cursorIndexOfStatus = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "status");
+        final int _cursorIndexOfMessage = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "message");
+        final int _cursorIndexOfAudioLanguage = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "audio_language");
+        final int _cursorIndexOfShowAds = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "show_ads");
+        final int _cursorIndexOfAdInterval = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "ad_interval");
+        final int _cursorIndexOfOrientation = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "orientation");
+        final int _cursorIndexOfLayoutType = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "layout_type");
+        final int _cursorIndexOfSaveAudioExternal = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "save_audio_external");
+        final int _cursorIndexOfEnableCounterAnnouncement = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "enable_counter_announcement");
+        final int _cursorIndexOfEnableTokenAnnouncement = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "enable_token_announcement");
+        final int _cursorIndexOfEnableCounterPrefix = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "enable_counter_prifix");
+        final int _cursorIndexOfTokenAudioUrl = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "token_audio_url");
+        final int _cursorIndexOfTokenMusicUrl = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "token_music_url");
+        final int _cursorIndexOfDisplayRows = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "display_rows");
+        final int _cursorIndexOfDisplayColumns = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "display_columns");
+        final int _cursorIndexOfCounterTextColor = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "counter_text_color");
+        final int _cursorIndexOfTokenTextColor = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "token_text_color");
+        final int _cursorIndexOfFontSize = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "font_size");
+        final int _cursorIndexOfTokenFontSize = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "token_font_size");
+        final int _cursorIndexOfCounterFontSize = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "counter_font_size");
+        final int _cursorIndexOfCurrentTokenColor = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "current_token_color");
+        final int _cursorIndexOfPreviousTokenColor = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "previous_token_color");
+        final int _cursorIndexOfBlinkCurrentToken = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "blink_current_token");
+        final int _cursorIndexOfTokenFormat = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "token_format");
+        final int _cursorIndexOfTokensPerCounter = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "tokens_per_counter");
+        final int _cursorIndexOfNoOfCounters = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "no_of_counters");
+        final int _cursorIndexOfAdPlacement = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "ad_placement");
+        final int _cursorIndexOfAdFilesJson = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "ad_files_json");
+        final int _cursorIndexOfCountersJson = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "counters_json");
+        final int _cursorIndexOfShiftDetailsJson = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "shift_details_json");
+        final int _cursorIndexOfMappedBrokerJson = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "mapped_broker_json");
+        final int _cursorIndexOfBlinkSeconds = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "blink_seconds");
+        final int _cursorIndexOfCurrentProfileJson = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "current_profile_json");
+        final int _cursorIndexOfConnectedDevicesJson = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "connected_devices_json");
+        final int _cursorIndexOfScrollEnabled = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "scroll_enabled");
+        final int _cursorIndexOfNoOfTextFields = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "no_of_text_fields");
+        final int _cursorIndexOfScrollTextLinesJson = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "scroll_text_lines_json");
+        final TvConfigEntity _result;
+        if (_stmt.step()) {
+          final int _tmpDeviceId;
+          _tmpDeviceId = (int) (_stmt.getLong(_cursorIndexOfDeviceId));
+          final String _tmpSerialNumber;
+          if (_stmt.isNull(_cursorIndexOfSerialNumber)) {
+            _tmpSerialNumber = null;
+          } else {
+            _tmpSerialNumber = _stmt.getText(_cursorIndexOfSerialNumber);
+          }
+          final String _tmpMacAddress;
+          if (_stmt.isNull(_cursorIndexOfMacAddress)) {
+            _tmpMacAddress = null;
+          } else {
+            _tmpMacAddress = _stmt.getText(_cursorIndexOfMacAddress);
+          }
+          final String _tmpCustomerId;
+          if (_stmt.isNull(_cursorIndexOfCustomerId)) {
+            _tmpCustomerId = null;
+          } else {
+            _tmpCustomerId = _stmt.getText(_cursorIndexOfCustomerId);
+          }
+          final String _tmpCompanyName;
+          if (_stmt.isNull(_cursorIndexOfCompanyName)) {
+            _tmpCompanyName = null;
+          } else {
+            _tmpCompanyName = _stmt.getText(_cursorIndexOfCompanyName);
+          }
+          final String _tmpStatus;
+          if (_stmt.isNull(_cursorIndexOfStatus)) {
+            _tmpStatus = null;
+          } else {
+            _tmpStatus = _stmt.getText(_cursorIndexOfStatus);
+          }
+          final String _tmpMessage;
+          if (_stmt.isNull(_cursorIndexOfMessage)) {
+            _tmpMessage = null;
+          } else {
+            _tmpMessage = _stmt.getText(_cursorIndexOfMessage);
+          }
+          final String _tmpAudioLanguage;
+          if (_stmt.isNull(_cursorIndexOfAudioLanguage)) {
+            _tmpAudioLanguage = null;
+          } else {
+            _tmpAudioLanguage = _stmt.getText(_cursorIndexOfAudioLanguage);
+          }
+          final String _tmpShowAds;
+          if (_stmt.isNull(_cursorIndexOfShowAds)) {
+            _tmpShowAds = null;
+          } else {
+            _tmpShowAds = _stmt.getText(_cursorIndexOfShowAds);
+          }
+          final Integer _tmpAdInterval;
+          if (_stmt.isNull(_cursorIndexOfAdInterval)) {
+            _tmpAdInterval = null;
+          } else {
+            _tmpAdInterval = (int) (_stmt.getLong(_cursorIndexOfAdInterval));
+          }
+          final String _tmpOrientation;
+          if (_stmt.isNull(_cursorIndexOfOrientation)) {
+            _tmpOrientation = null;
+          } else {
+            _tmpOrientation = _stmt.getText(_cursorIndexOfOrientation);
+          }
+          final String _tmpLayoutType;
+          if (_stmt.isNull(_cursorIndexOfLayoutType)) {
+            _tmpLayoutType = null;
+          } else {
+            _tmpLayoutType = _stmt.getText(_cursorIndexOfLayoutType);
+          }
+          final Boolean _tmpSaveAudioExternal;
+          final Integer _tmp;
+          if (_stmt.isNull(_cursorIndexOfSaveAudioExternal)) {
+            _tmp = null;
+          } else {
+            _tmp = (int) (_stmt.getLong(_cursorIndexOfSaveAudioExternal));
+          }
+          _tmpSaveAudioExternal = _tmp == null ? null : _tmp != 0;
+          final Boolean _tmpEnableCounterAnnouncement;
+          final Integer _tmp_1;
+          if (_stmt.isNull(_cursorIndexOfEnableCounterAnnouncement)) {
+            _tmp_1 = null;
+          } else {
+            _tmp_1 = (int) (_stmt.getLong(_cursorIndexOfEnableCounterAnnouncement));
+          }
+          _tmpEnableCounterAnnouncement = _tmp_1 == null ? null : _tmp_1 != 0;
+          final Boolean _tmpEnableTokenAnnouncement;
+          final Integer _tmp_2;
+          if (_stmt.isNull(_cursorIndexOfEnableTokenAnnouncement)) {
+            _tmp_2 = null;
+          } else {
+            _tmp_2 = (int) (_stmt.getLong(_cursorIndexOfEnableTokenAnnouncement));
+          }
+          _tmpEnableTokenAnnouncement = _tmp_2 == null ? null : _tmp_2 != 0;
+          final Boolean _tmpEnableCounterPrefix;
+          final Integer _tmp_3;
+          if (_stmt.isNull(_cursorIndexOfEnableCounterPrefix)) {
+            _tmp_3 = null;
+          } else {
+            _tmp_3 = (int) (_stmt.getLong(_cursorIndexOfEnableCounterPrefix));
+          }
+          _tmpEnableCounterPrefix = _tmp_3 == null ? null : _tmp_3 != 0;
+          final String _tmpTokenAudioUrl;
+          if (_stmt.isNull(_cursorIndexOfTokenAudioUrl)) {
+            _tmpTokenAudioUrl = null;
+          } else {
+            _tmpTokenAudioUrl = _stmt.getText(_cursorIndexOfTokenAudioUrl);
+          }
+          final String _tmpTokenMusicUrl;
+          if (_stmt.isNull(_cursorIndexOfTokenMusicUrl)) {
+            _tmpTokenMusicUrl = null;
+          } else {
+            _tmpTokenMusicUrl = _stmt.getText(_cursorIndexOfTokenMusicUrl);
+          }
+          final Integer _tmpDisplayRows;
+          if (_stmt.isNull(_cursorIndexOfDisplayRows)) {
+            _tmpDisplayRows = null;
+          } else {
+            _tmpDisplayRows = (int) (_stmt.getLong(_cursorIndexOfDisplayRows));
+          }
+          final Integer _tmpDisplayColumns;
+          if (_stmt.isNull(_cursorIndexOfDisplayColumns)) {
+            _tmpDisplayColumns = null;
+          } else {
+            _tmpDisplayColumns = (int) (_stmt.getLong(_cursorIndexOfDisplayColumns));
+          }
+          final String _tmpCounterTextColor;
+          if (_stmt.isNull(_cursorIndexOfCounterTextColor)) {
+            _tmpCounterTextColor = null;
+          } else {
+            _tmpCounterTextColor = _stmt.getText(_cursorIndexOfCounterTextColor);
+          }
+          final String _tmpTokenTextColor;
+          if (_stmt.isNull(_cursorIndexOfTokenTextColor)) {
+            _tmpTokenTextColor = null;
+          } else {
+            _tmpTokenTextColor = _stmt.getText(_cursorIndexOfTokenTextColor);
+          }
+          final Integer _tmpFontSize;
+          if (_stmt.isNull(_cursorIndexOfFontSize)) {
+            _tmpFontSize = null;
+          } else {
+            _tmpFontSize = (int) (_stmt.getLong(_cursorIndexOfFontSize));
+          }
+          final Integer _tmpTokenFontSize;
+          if (_stmt.isNull(_cursorIndexOfTokenFontSize)) {
+            _tmpTokenFontSize = null;
+          } else {
+            _tmpTokenFontSize = (int) (_stmt.getLong(_cursorIndexOfTokenFontSize));
+          }
+          final Integer _tmpCounterFontSize;
+          if (_stmt.isNull(_cursorIndexOfCounterFontSize)) {
+            _tmpCounterFontSize = null;
+          } else {
+            _tmpCounterFontSize = (int) (_stmt.getLong(_cursorIndexOfCounterFontSize));
+          }
+          final String _tmpCurrentTokenColor;
+          if (_stmt.isNull(_cursorIndexOfCurrentTokenColor)) {
+            _tmpCurrentTokenColor = null;
+          } else {
+            _tmpCurrentTokenColor = _stmt.getText(_cursorIndexOfCurrentTokenColor);
+          }
+          final String _tmpPreviousTokenColor;
+          if (_stmt.isNull(_cursorIndexOfPreviousTokenColor)) {
+            _tmpPreviousTokenColor = null;
+          } else {
+            _tmpPreviousTokenColor = _stmt.getText(_cursorIndexOfPreviousTokenColor);
+          }
+          final Boolean _tmpBlinkCurrentToken;
+          final Integer _tmp_4;
+          if (_stmt.isNull(_cursorIndexOfBlinkCurrentToken)) {
+            _tmp_4 = null;
+          } else {
+            _tmp_4 = (int) (_stmt.getLong(_cursorIndexOfBlinkCurrentToken));
+          }
+          _tmpBlinkCurrentToken = _tmp_4 == null ? null : _tmp_4 != 0;
+          final String _tmpTokenFormat;
+          if (_stmt.isNull(_cursorIndexOfTokenFormat)) {
+            _tmpTokenFormat = null;
+          } else {
+            _tmpTokenFormat = _stmt.getText(_cursorIndexOfTokenFormat);
+          }
+          final Integer _tmpTokensPerCounter;
+          if (_stmt.isNull(_cursorIndexOfTokensPerCounter)) {
+            _tmpTokensPerCounter = null;
+          } else {
+            _tmpTokensPerCounter = (int) (_stmt.getLong(_cursorIndexOfTokensPerCounter));
+          }
+          final Integer _tmpNoOfCounters;
+          if (_stmt.isNull(_cursorIndexOfNoOfCounters)) {
+            _tmpNoOfCounters = null;
+          } else {
+            _tmpNoOfCounters = (int) (_stmt.getLong(_cursorIndexOfNoOfCounters));
+          }
+          final String _tmpAdPlacement;
+          if (_stmt.isNull(_cursorIndexOfAdPlacement)) {
+            _tmpAdPlacement = null;
+          } else {
+            _tmpAdPlacement = _stmt.getText(_cursorIndexOfAdPlacement);
+          }
+          final String _tmpAdFilesJson;
+          if (_stmt.isNull(_cursorIndexOfAdFilesJson)) {
+            _tmpAdFilesJson = null;
+          } else {
+            _tmpAdFilesJson = _stmt.getText(_cursorIndexOfAdFilesJson);
+          }
+          final String _tmpCountersJson;
+          if (_stmt.isNull(_cursorIndexOfCountersJson)) {
+            _tmpCountersJson = null;
+          } else {
+            _tmpCountersJson = _stmt.getText(_cursorIndexOfCountersJson);
+          }
+          final String _tmpShiftDetailsJson;
+          if (_stmt.isNull(_cursorIndexOfShiftDetailsJson)) {
+            _tmpShiftDetailsJson = null;
+          } else {
+            _tmpShiftDetailsJson = _stmt.getText(_cursorIndexOfShiftDetailsJson);
+          }
+          final String _tmpMappedBrokerJson;
+          if (_stmt.isNull(_cursorIndexOfMappedBrokerJson)) {
+            _tmpMappedBrokerJson = null;
+          } else {
+            _tmpMappedBrokerJson = _stmt.getText(_cursorIndexOfMappedBrokerJson);
+          }
+          final Integer _tmpBlinkSeconds;
+          if (_stmt.isNull(_cursorIndexOfBlinkSeconds)) {
+            _tmpBlinkSeconds = null;
+          } else {
+            _tmpBlinkSeconds = (int) (_stmt.getLong(_cursorIndexOfBlinkSeconds));
+          }
+          final String _tmpCurrentProfileJson;
+          if (_stmt.isNull(_cursorIndexOfCurrentProfileJson)) {
+            _tmpCurrentProfileJson = null;
+          } else {
+            _tmpCurrentProfileJson = _stmt.getText(_cursorIndexOfCurrentProfileJson);
+          }
+          final String _tmpConnectedDevicesJson;
+          if (_stmt.isNull(_cursorIndexOfConnectedDevicesJson)) {
+            _tmpConnectedDevicesJson = null;
+          } else {
+            _tmpConnectedDevicesJson = _stmt.getText(_cursorIndexOfConnectedDevicesJson);
+          }
+          final String _tmpScrollEnabled;
+          if (_stmt.isNull(_cursorIndexOfScrollEnabled)) {
+            _tmpScrollEnabled = null;
+          } else {
+            _tmpScrollEnabled = _stmt.getText(_cursorIndexOfScrollEnabled);
+          }
+          final Integer _tmpNoOfTextFields;
+          if (_stmt.isNull(_cursorIndexOfNoOfTextFields)) {
+            _tmpNoOfTextFields = null;
+          } else {
+            _tmpNoOfTextFields = (int) (_stmt.getLong(_cursorIndexOfNoOfTextFields));
+          }
+          final String _tmpScrollTextLinesJson;
+          if (_stmt.isNull(_cursorIndexOfScrollTextLinesJson)) {
+            _tmpScrollTextLinesJson = null;
+          } else {
+            _tmpScrollTextLinesJson = _stmt.getText(_cursorIndexOfScrollTextLinesJson);
+          }
+          _result = new TvConfigEntity(_tmpDeviceId,_tmpSerialNumber,_tmpMacAddress,_tmpCustomerId,_tmpCompanyName,_tmpStatus,_tmpMessage,_tmpAudioLanguage,_tmpShowAds,_tmpAdInterval,_tmpOrientation,_tmpLayoutType,_tmpSaveAudioExternal,_tmpEnableCounterAnnouncement,_tmpEnableTokenAnnouncement,_tmpEnableCounterPrefix,_tmpTokenAudioUrl,_tmpTokenMusicUrl,_tmpDisplayRows,_tmpDisplayColumns,_tmpCounterTextColor,_tmpTokenTextColor,_tmpFontSize,_tmpTokenFontSize,_tmpCounterFontSize,_tmpCurrentTokenColor,_tmpPreviousTokenColor,_tmpBlinkCurrentToken,_tmpTokenFormat,_tmpTokensPerCounter,_tmpNoOfCounters,_tmpAdPlacement,_tmpAdFilesJson,_tmpCountersJson,_tmpShiftDetailsJson,_tmpMappedBrokerJson,_tmpBlinkSeconds,_tmpCurrentProfileJson,_tmpConnectedDevicesJson,_tmpScrollEnabled,_tmpNoOfTextFields,_tmpScrollTextLinesJson);
+        } else {
+          _result = null;
+        }
+        return _result;
+      } finally {
+        _stmt.close();
+      }
+    });
+  }
+
+  @Override
+  public TvConfigEntity getByMacAndCustomer(final String macAddress, final String customerId) {
+    final String _sql = "SELECT * FROM tv_config WHERE mac_address = ? AND customer_id = ? LIMIT 1";
+    return DBUtil.performBlocking(__db, true, false, (_connection) -> {
+      final SQLiteStatement _stmt = _connection.prepare(_sql);
+      try {
+        int _argIndex = 1;
+        if (macAddress == null) {
+          _stmt.bindNull(_argIndex);
+        } else {
+          _stmt.bindText(_argIndex, macAddress);
+        }
+        _argIndex = 2;
+        if (customerId == null) {
+          _stmt.bindNull(_argIndex);
+        } else {
+          _stmt.bindText(_argIndex, customerId);
+        }
+        final int _cursorIndexOfDeviceId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "device_id");
+        final int _cursorIndexOfSerialNumber = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "serial_number");
+        final int _cursorIndexOfMacAddress = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "mac_address");
+        final int _cursorIndexOfCustomerId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "customer_id");
+        final int _cursorIndexOfCompanyName = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "company_name");
+        final int _cursorIndexOfStatus = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "status");
+        final int _cursorIndexOfMessage = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "message");
+        final int _cursorIndexOfAudioLanguage = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "audio_language");
+        final int _cursorIndexOfShowAds = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "show_ads");
+        final int _cursorIndexOfAdInterval = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "ad_interval");
+        final int _cursorIndexOfOrientation = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "orientation");
+        final int _cursorIndexOfLayoutType = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "layout_type");
+        final int _cursorIndexOfSaveAudioExternal = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "save_audio_external");
+        final int _cursorIndexOfEnableCounterAnnouncement = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "enable_counter_announcement");
+        final int _cursorIndexOfEnableTokenAnnouncement = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "enable_token_announcement");
+        final int _cursorIndexOfEnableCounterPrefix = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "enable_counter_prifix");
+        final int _cursorIndexOfTokenAudioUrl = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "token_audio_url");
+        final int _cursorIndexOfTokenMusicUrl = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "token_music_url");
+        final int _cursorIndexOfDisplayRows = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "display_rows");
+        final int _cursorIndexOfDisplayColumns = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "display_columns");
+        final int _cursorIndexOfCounterTextColor = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "counter_text_color");
+        final int _cursorIndexOfTokenTextColor = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "token_text_color");
+        final int _cursorIndexOfFontSize = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "font_size");
+        final int _cursorIndexOfTokenFontSize = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "token_font_size");
+        final int _cursorIndexOfCounterFontSize = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "counter_font_size");
+        final int _cursorIndexOfCurrentTokenColor = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "current_token_color");
+        final int _cursorIndexOfPreviousTokenColor = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "previous_token_color");
+        final int _cursorIndexOfBlinkCurrentToken = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "blink_current_token");
+        final int _cursorIndexOfTokenFormat = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "token_format");
+        final int _cursorIndexOfTokensPerCounter = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "tokens_per_counter");
+        final int _cursorIndexOfNoOfCounters = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "no_of_counters");
+        final int _cursorIndexOfAdPlacement = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "ad_placement");
+        final int _cursorIndexOfAdFilesJson = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "ad_files_json");
+        final int _cursorIndexOfCountersJson = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "counters_json");
+        final int _cursorIndexOfShiftDetailsJson = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "shift_details_json");
+        final int _cursorIndexOfMappedBrokerJson = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "mapped_broker_json");
+        final int _cursorIndexOfBlinkSeconds = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "blink_seconds");
+        final int _cursorIndexOfCurrentProfileJson = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "current_profile_json");
+        final int _cursorIndexOfConnectedDevicesJson = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "connected_devices_json");
+        final int _cursorIndexOfScrollEnabled = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "scroll_enabled");
+        final int _cursorIndexOfNoOfTextFields = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "no_of_text_fields");
+        final int _cursorIndexOfScrollTextLinesJson = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "scroll_text_lines_json");
+        final TvConfigEntity _result;
+        if (_stmt.step()) {
+          final int _tmpDeviceId;
+          _tmpDeviceId = (int) (_stmt.getLong(_cursorIndexOfDeviceId));
+          final String _tmpSerialNumber;
+          if (_stmt.isNull(_cursorIndexOfSerialNumber)) {
+            _tmpSerialNumber = null;
+          } else {
+            _tmpSerialNumber = _stmt.getText(_cursorIndexOfSerialNumber);
+          }
+          final String _tmpMacAddress;
+          if (_stmt.isNull(_cursorIndexOfMacAddress)) {
+            _tmpMacAddress = null;
+          } else {
+            _tmpMacAddress = _stmt.getText(_cursorIndexOfMacAddress);
+          }
+          final String _tmpCustomerId;
+          if (_stmt.isNull(_cursorIndexOfCustomerId)) {
+            _tmpCustomerId = null;
+          } else {
+            _tmpCustomerId = _stmt.getText(_cursorIndexOfCustomerId);
+          }
+          final String _tmpCompanyName;
+          if (_stmt.isNull(_cursorIndexOfCompanyName)) {
+            _tmpCompanyName = null;
+          } else {
+            _tmpCompanyName = _stmt.getText(_cursorIndexOfCompanyName);
+          }
+          final String _tmpStatus;
+          if (_stmt.isNull(_cursorIndexOfStatus)) {
+            _tmpStatus = null;
+          } else {
+            _tmpStatus = _stmt.getText(_cursorIndexOfStatus);
+          }
+          final String _tmpMessage;
+          if (_stmt.isNull(_cursorIndexOfMessage)) {
+            _tmpMessage = null;
+          } else {
+            _tmpMessage = _stmt.getText(_cursorIndexOfMessage);
+          }
+          final String _tmpAudioLanguage;
+          if (_stmt.isNull(_cursorIndexOfAudioLanguage)) {
+            _tmpAudioLanguage = null;
+          } else {
+            _tmpAudioLanguage = _stmt.getText(_cursorIndexOfAudioLanguage);
+          }
+          final String _tmpShowAds;
+          if (_stmt.isNull(_cursorIndexOfShowAds)) {
+            _tmpShowAds = null;
+          } else {
+            _tmpShowAds = _stmt.getText(_cursorIndexOfShowAds);
+          }
+          final Integer _tmpAdInterval;
+          if (_stmt.isNull(_cursorIndexOfAdInterval)) {
+            _tmpAdInterval = null;
+          } else {
+            _tmpAdInterval = (int) (_stmt.getLong(_cursorIndexOfAdInterval));
+          }
+          final String _tmpOrientation;
+          if (_stmt.isNull(_cursorIndexOfOrientation)) {
+            _tmpOrientation = null;
+          } else {
+            _tmpOrientation = _stmt.getText(_cursorIndexOfOrientation);
+          }
+          final String _tmpLayoutType;
+          if (_stmt.isNull(_cursorIndexOfLayoutType)) {
+            _tmpLayoutType = null;
+          } else {
+            _tmpLayoutType = _stmt.getText(_cursorIndexOfLayoutType);
+          }
+          final Boolean _tmpSaveAudioExternal;
+          final Integer _tmp;
+          if (_stmt.isNull(_cursorIndexOfSaveAudioExternal)) {
+            _tmp = null;
+          } else {
+            _tmp = (int) (_stmt.getLong(_cursorIndexOfSaveAudioExternal));
+          }
+          _tmpSaveAudioExternal = _tmp == null ? null : _tmp != 0;
+          final Boolean _tmpEnableCounterAnnouncement;
+          final Integer _tmp_1;
+          if (_stmt.isNull(_cursorIndexOfEnableCounterAnnouncement)) {
+            _tmp_1 = null;
+          } else {
+            _tmp_1 = (int) (_stmt.getLong(_cursorIndexOfEnableCounterAnnouncement));
+          }
+          _tmpEnableCounterAnnouncement = _tmp_1 == null ? null : _tmp_1 != 0;
+          final Boolean _tmpEnableTokenAnnouncement;
+          final Integer _tmp_2;
+          if (_stmt.isNull(_cursorIndexOfEnableTokenAnnouncement)) {
+            _tmp_2 = null;
+          } else {
+            _tmp_2 = (int) (_stmt.getLong(_cursorIndexOfEnableTokenAnnouncement));
+          }
+          _tmpEnableTokenAnnouncement = _tmp_2 == null ? null : _tmp_2 != 0;
+          final Boolean _tmpEnableCounterPrefix;
+          final Integer _tmp_3;
+          if (_stmt.isNull(_cursorIndexOfEnableCounterPrefix)) {
+            _tmp_3 = null;
+          } else {
+            _tmp_3 = (int) (_stmt.getLong(_cursorIndexOfEnableCounterPrefix));
+          }
+          _tmpEnableCounterPrefix = _tmp_3 == null ? null : _tmp_3 != 0;
+          final String _tmpTokenAudioUrl;
+          if (_stmt.isNull(_cursorIndexOfTokenAudioUrl)) {
+            _tmpTokenAudioUrl = null;
+          } else {
+            _tmpTokenAudioUrl = _stmt.getText(_cursorIndexOfTokenAudioUrl);
+          }
+          final String _tmpTokenMusicUrl;
+          if (_stmt.isNull(_cursorIndexOfTokenMusicUrl)) {
+            _tmpTokenMusicUrl = null;
+          } else {
+            _tmpTokenMusicUrl = _stmt.getText(_cursorIndexOfTokenMusicUrl);
+          }
+          final Integer _tmpDisplayRows;
+          if (_stmt.isNull(_cursorIndexOfDisplayRows)) {
+            _tmpDisplayRows = null;
+          } else {
+            _tmpDisplayRows = (int) (_stmt.getLong(_cursorIndexOfDisplayRows));
+          }
+          final Integer _tmpDisplayColumns;
+          if (_stmt.isNull(_cursorIndexOfDisplayColumns)) {
+            _tmpDisplayColumns = null;
+          } else {
+            _tmpDisplayColumns = (int) (_stmt.getLong(_cursorIndexOfDisplayColumns));
+          }
+          final String _tmpCounterTextColor;
+          if (_stmt.isNull(_cursorIndexOfCounterTextColor)) {
+            _tmpCounterTextColor = null;
+          } else {
+            _tmpCounterTextColor = _stmt.getText(_cursorIndexOfCounterTextColor);
+          }
+          final String _tmpTokenTextColor;
+          if (_stmt.isNull(_cursorIndexOfTokenTextColor)) {
+            _tmpTokenTextColor = null;
+          } else {
+            _tmpTokenTextColor = _stmt.getText(_cursorIndexOfTokenTextColor);
+          }
+          final Integer _tmpFontSize;
+          if (_stmt.isNull(_cursorIndexOfFontSize)) {
+            _tmpFontSize = null;
+          } else {
+            _tmpFontSize = (int) (_stmt.getLong(_cursorIndexOfFontSize));
+          }
+          final Integer _tmpTokenFontSize;
+          if (_stmt.isNull(_cursorIndexOfTokenFontSize)) {
+            _tmpTokenFontSize = null;
+          } else {
+            _tmpTokenFontSize = (int) (_stmt.getLong(_cursorIndexOfTokenFontSize));
+          }
+          final Integer _tmpCounterFontSize;
+          if (_stmt.isNull(_cursorIndexOfCounterFontSize)) {
+            _tmpCounterFontSize = null;
+          } else {
+            _tmpCounterFontSize = (int) (_stmt.getLong(_cursorIndexOfCounterFontSize));
+          }
+          final String _tmpCurrentTokenColor;
+          if (_stmt.isNull(_cursorIndexOfCurrentTokenColor)) {
+            _tmpCurrentTokenColor = null;
+          } else {
+            _tmpCurrentTokenColor = _stmt.getText(_cursorIndexOfCurrentTokenColor);
+          }
+          final String _tmpPreviousTokenColor;
+          if (_stmt.isNull(_cursorIndexOfPreviousTokenColor)) {
+            _tmpPreviousTokenColor = null;
+          } else {
+            _tmpPreviousTokenColor = _stmt.getText(_cursorIndexOfPreviousTokenColor);
+          }
+          final Boolean _tmpBlinkCurrentToken;
+          final Integer _tmp_4;
+          if (_stmt.isNull(_cursorIndexOfBlinkCurrentToken)) {
+            _tmp_4 = null;
+          } else {
+            _tmp_4 = (int) (_stmt.getLong(_cursorIndexOfBlinkCurrentToken));
+          }
+          _tmpBlinkCurrentToken = _tmp_4 == null ? null : _tmp_4 != 0;
+          final String _tmpTokenFormat;
+          if (_stmt.isNull(_cursorIndexOfTokenFormat)) {
+            _tmpTokenFormat = null;
+          } else {
+            _tmpTokenFormat = _stmt.getText(_cursorIndexOfTokenFormat);
+          }
+          final Integer _tmpTokensPerCounter;
+          if (_stmt.isNull(_cursorIndexOfTokensPerCounter)) {
+            _tmpTokensPerCounter = null;
+          } else {
+            _tmpTokensPerCounter = (int) (_stmt.getLong(_cursorIndexOfTokensPerCounter));
+          }
+          final Integer _tmpNoOfCounters;
+          if (_stmt.isNull(_cursorIndexOfNoOfCounters)) {
+            _tmpNoOfCounters = null;
+          } else {
+            _tmpNoOfCounters = (int) (_stmt.getLong(_cursorIndexOfNoOfCounters));
+          }
+          final String _tmpAdPlacement;
+          if (_stmt.isNull(_cursorIndexOfAdPlacement)) {
+            _tmpAdPlacement = null;
+          } else {
+            _tmpAdPlacement = _stmt.getText(_cursorIndexOfAdPlacement);
+          }
+          final String _tmpAdFilesJson;
+          if (_stmt.isNull(_cursorIndexOfAdFilesJson)) {
+            _tmpAdFilesJson = null;
+          } else {
+            _tmpAdFilesJson = _stmt.getText(_cursorIndexOfAdFilesJson);
+          }
+          final String _tmpCountersJson;
+          if (_stmt.isNull(_cursorIndexOfCountersJson)) {
+            _tmpCountersJson = null;
+          } else {
+            _tmpCountersJson = _stmt.getText(_cursorIndexOfCountersJson);
+          }
+          final String _tmpShiftDetailsJson;
+          if (_stmt.isNull(_cursorIndexOfShiftDetailsJson)) {
+            _tmpShiftDetailsJson = null;
+          } else {
+            _tmpShiftDetailsJson = _stmt.getText(_cursorIndexOfShiftDetailsJson);
+          }
+          final String _tmpMappedBrokerJson;
+          if (_stmt.isNull(_cursorIndexOfMappedBrokerJson)) {
+            _tmpMappedBrokerJson = null;
+          } else {
+            _tmpMappedBrokerJson = _stmt.getText(_cursorIndexOfMappedBrokerJson);
+          }
+          final Integer _tmpBlinkSeconds;
+          if (_stmt.isNull(_cursorIndexOfBlinkSeconds)) {
+            _tmpBlinkSeconds = null;
+          } else {
+            _tmpBlinkSeconds = (int) (_stmt.getLong(_cursorIndexOfBlinkSeconds));
+          }
+          final String _tmpCurrentProfileJson;
+          if (_stmt.isNull(_cursorIndexOfCurrentProfileJson)) {
+            _tmpCurrentProfileJson = null;
+          } else {
+            _tmpCurrentProfileJson = _stmt.getText(_cursorIndexOfCurrentProfileJson);
+          }
+          final String _tmpConnectedDevicesJson;
+          if (_stmt.isNull(_cursorIndexOfConnectedDevicesJson)) {
+            _tmpConnectedDevicesJson = null;
+          } else {
+            _tmpConnectedDevicesJson = _stmt.getText(_cursorIndexOfConnectedDevicesJson);
+          }
+          final String _tmpScrollEnabled;
+          if (_stmt.isNull(_cursorIndexOfScrollEnabled)) {
+            _tmpScrollEnabled = null;
+          } else {
+            _tmpScrollEnabled = _stmt.getText(_cursorIndexOfScrollEnabled);
+          }
+          final Integer _tmpNoOfTextFields;
+          if (_stmt.isNull(_cursorIndexOfNoOfTextFields)) {
+            _tmpNoOfTextFields = null;
+          } else {
+            _tmpNoOfTextFields = (int) (_stmt.getLong(_cursorIndexOfNoOfTextFields));
+          }
+          final String _tmpScrollTextLinesJson;
+          if (_stmt.isNull(_cursorIndexOfScrollTextLinesJson)) {
+            _tmpScrollTextLinesJson = null;
+          } else {
+            _tmpScrollTextLinesJson = _stmt.getText(_cursorIndexOfScrollTextLinesJson);
+          }
+          _result = new TvConfigEntity(_tmpDeviceId,_tmpSerialNumber,_tmpMacAddress,_tmpCustomerId,_tmpCompanyName,_tmpStatus,_tmpMessage,_tmpAudioLanguage,_tmpShowAds,_tmpAdInterval,_tmpOrientation,_tmpLayoutType,_tmpSaveAudioExternal,_tmpEnableCounterAnnouncement,_tmpEnableTokenAnnouncement,_tmpEnableCounterPrefix,_tmpTokenAudioUrl,_tmpTokenMusicUrl,_tmpDisplayRows,_tmpDisplayColumns,_tmpCounterTextColor,_tmpTokenTextColor,_tmpFontSize,_tmpTokenFontSize,_tmpCounterFontSize,_tmpCurrentTokenColor,_tmpPreviousTokenColor,_tmpBlinkCurrentToken,_tmpTokenFormat,_tmpTokensPerCounter,_tmpNoOfCounters,_tmpAdPlacement,_tmpAdFilesJson,_tmpCountersJson,_tmpShiftDetailsJson,_tmpMappedBrokerJson,_tmpBlinkSeconds,_tmpCurrentProfileJson,_tmpConnectedDevicesJson,_tmpScrollEnabled,_tmpNoOfTextFields,_tmpScrollTextLinesJson);
+        } else {
+          _result = null;
+        }
+        return _result;
+      } finally {
+        _stmt.close();
+      }
+    });
+  }
+
+  @NonNull
+  public static List<Class<?>> getRequiredConverters() {
+    return Collections.emptyList();
+  }
+}

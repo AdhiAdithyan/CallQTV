@@ -1,0 +1,278 @@
+[
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/anim_slide_out_bottom.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/anim/slide_out_bottom.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_ic_launcher_background.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/ic_launcher_background.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/mipmap-xhdpi_ic_launcher.webp.flat",
+        "source": "com.softland.callqtv.app-main-8:/mipmap-xhdpi/ic_launcher.webp"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/mipmap-xxxhdpi_ic_launcher.webp.flat",
+        "source": "com.softland.callqtv.app-main-8:/mipmap-xxxhdpi/ic_launcher.webp"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_predefined_button_bg.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/predefined_button_bg.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/mipmap-anydpi-v26_ic_launcher_round.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/mipmap-anydpi-v26/ic_launcher_round.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/mipmap-anydpi-v26_ic_launcher.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/mipmap-anydpi-v26/ic_launcher.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_bg_layout.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/bg_layout.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/mipmap-hdpi_ic_launcher.webp.flat",
+        "source": "com.softland.callqtv.app-main-8:/mipmap-hdpi/ic_launcher.webp"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_ic_cancel.png.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/ic_cancel.png"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_edittext_rounded_bg.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/edittext_rounded_bg.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_placeholder_ad.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/placeholder_ad.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_ic_send.png.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/ic_send.png"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_ic_softland_logo.png.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/ic_softland_logo.png"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/xml_file_paths.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/xml/file_paths.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_ic_network_available.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/ic_network_available.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/mipmap-xxhdpi_ic_launcher_round.webp.flat",
+        "source": "com.softland.callqtv.app-main-8:/mipmap-xxhdpi/ic_launcher_round.webp"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/anim_slide_in_bottom.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/anim/slide_in_bottom.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_ic_ready.png.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/ic_ready.png"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_circle_bg2.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/circle_bg2.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_icon_background_red.png.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/icon_background_red.png"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_callq_tv_1.png.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/callq_tv_1.png"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/xml_data_extraction_rules.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/xml/data_extraction_rules.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_create_oredr.png.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/create_oredr.png"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/anim_slide_in_left.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/anim/slide_in_left.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_icon_bg_round.png.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/icon_bg_round.png"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_callq_tv_logo.png.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/callq_tv_logo.png"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_ic_person.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/ic_person.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_settings.png.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/settings.png"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable-v24_ic_launcher_foreground.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable-v24/ic_launcher_foreground.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/anim_top_to_bottom.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/anim/top_to_bottom.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_ic_record_voice.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/ic_record_voice.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_app_bg.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/app_bg.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_app_bg2.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/app_bg2.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_ic_check_circle.png.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/ic_check_circle.png"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_rectangle_2.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/rectangle_2.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/anim_lefttoright.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/anim/lefttoright.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/anim_fade_out.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/anim/fade_out.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_circle_bg.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/circle_bg.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/mipmap-mdpi_ic_launcher.webp.flat",
+        "source": "com.softland.callqtv.app-main-8:/mipmap-mdpi/ic_launcher.webp"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_ic_search.png.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/ic_search.png"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/xml_backup_rules.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/xml/backup_rules.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_ic_notification.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/ic_notification.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_ic_clear.png.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/ic_clear.png"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/anim_fade_in.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/anim/fade_in.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_ic_order_status.png.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/ic_order_status.png"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_ic_message.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/ic_message.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_app_bg_vector.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/app_bg_vector.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_chat_bubble.png.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/chat_bubble.png"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/mipmap-xxxhdpi_ic_launcher_round.webp.flat",
+        "source": "com.softland.callqtv.app-main-8:/mipmap-xxxhdpi/ic_launcher_round.webp"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_ic_lock.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/ic_lock.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_ic_logout.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/ic_logout.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/anim_righttoleft.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/anim/righttoleft.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/mipmap-mdpi_ic_launcher_round.webp.flat",
+        "source": "com.softland.callqtv.app-main-8:/mipmap-mdpi/ic_launcher_round.webp"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/mipmap-xxhdpi_ic_launcher.webp.flat",
+        "source": "com.softland.callqtv.app-main-8:/mipmap-xxhdpi/ic_launcher.webp"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_ic_play_circle.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/ic_play_circle.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_ic_verified.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/ic_verified.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/mipmap-hdpi_ic_launcher_round.webp.flat",
+        "source": "com.softland.callqtv.app-main-8:/mipmap-hdpi/ic_launcher_round.webp"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_ic_error.png.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/ic_error.png"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_ic_filter.png.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/ic_filter.png"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_warning_24.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/warning_24.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_ic_settings.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/ic_settings.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_ic_network_unavailable.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/ic_network_unavailable.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_callq_tv_2.png.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/callq_tv_2.png"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/mipmap-xhdpi_ic_launcher_round.webp.flat",
+        "source": "com.softland.callqtv.app-main-8:/mipmap-xhdpi/ic_launcher_round.webp"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_message_item_background.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/message_item_background.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/raw_beep.mp3.flat",
+        "source": "com.softland.callqtv.app-main-8:/raw/beep.mp3"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/drawable_circle_bg1.xml.flat",
+        "source": "com.softland.callqtv.app-main-8:/drawable/circle_bg1.xml"
+    },
+    {
+        "merged": "com.softland.callqtv.app-CallQTVDebug-4:/raw_lf20_raiw2hpe.json.flat",
+        "source": "com.softland.callqtv.app-main-8:/raw/lf20_raiw2hpe.json"
+    }
+]

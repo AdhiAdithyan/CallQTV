@@ -1,0 +1,74 @@
+package com.softland.callqtv.data.network;
+
+@kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u0000f\n\u0002\u0018\u0002\n\u0002\u0010\u0000\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0010\u000e\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0002\n\u0002\u0018\u0002\n\u0002\b\u0003\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0002\n\u0002\u0018\u0002\n\u0002\u0018\u0002\n\u0002\b\u0002\n\u0002\u0018\u0002\n\u0002\u0018\u0002\n\u0002\b\u0002\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0002\n\u0002\u0018\u0002\n\u0002\u0018\u0002\n\u0002\b\u0002\bf\u0018\u00002\u00020\u0001J\"\u0010\u0002\u001a\u00020\u00032\b\b\u0001\u0010\u0004\u001a\u00020\u00052\b\b\u0001\u0010\u0006\u001a\u00020\u0007H\u00a7@\u00a2\u0006\u0002\u0010\bJ\"\u0010\t\u001a\u00020\n2\b\b\u0001\u0010\u0004\u001a\u00020\u00052\b\b\u0001\u0010\u000b\u001a\u00020\u0005H\u00a7@\u00a2\u0006\u0002\u0010\fJ\"\u0010\r\u001a\u00020\u000e2\b\b\u0001\u0010\u0004\u001a\u00020\u00052\b\b\u0001\u0010\u000f\u001a\u00020\u0010H\u00a7@\u00a2\u0006\u0002\u0010\u0011J\"\u0010\u0012\u001a\u00020\u00132\b\b\u0001\u0010\u0004\u001a\u00020\u00052\b\b\u0001\u0010\u000f\u001a\u00020\u0014H\u00a7@\u00a2\u0006\u0002\u0010\u0015J\"\u0010\u0016\u001a\u00020\u00172\b\b\u0001\u0010\u0004\u001a\u00020\u00052\b\b\u0001\u0010\u000f\u001a\u00020\u0018H\u00a7@\u00a2\u0006\u0002\u0010\u0019J\"\u0010\u001a\u001a\u00020\u001b2\b\b\u0001\u0010\u0004\u001a\u00020\u00052\b\b\u0001\u0010\u001c\u001a\u00020\u001dH\u00a7@\u00a2\u0006\u0002\u0010\u001eJ\"\u0010\u001f\u001a\u00020 2\b\b\u0001\u0010\u0004\u001a\u00020\u00052\b\b\u0001\u0010\u000f\u001a\u00020!H\u00a7@\u00a2\u0006\u0002\u0010\"\u00a8\u0006#\u00c0\u0006\u0003"}, d2 = {"Lcom/softland/callqtv/data/network/ApiService;", "", "login", "Lcom/softland/callqtv/data/model/LoginResponse;", "url", "", "loginRequest", "Lcom/softland/callqtv/data/model/LoginRequest;", "(Ljava/lang/String;Lcom/softland/callqtv/data/model/LoginRequest;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", "getServiceUrl", "Lcom/softland/callqtv/data/model/ServiceUrlResponse;", "encodedJson", "(Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", "authenticateProduct", "Lcom/softland/callqtv/data/model/ProductAuthenticationRes;", "request", "Lcom/softland/callqtv/data/model/ProductAuthenticationReq;", "(Ljava/lang/String;Lcom/softland/callqtv/data/model/ProductAuthenticationReq;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", "getDeviceRegistration", "Lcom/softland/callqtv/data/model/DeviceRegistrationResponse;", "Lcom/softland/callqtv/data/model/DeviceRegistrationRequest;", "(Ljava/lang/String;Lcom/softland/callqtv/data/model/DeviceRegistrationRequest;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", "getCheckDeviceStatus", "Lcom/softland/callqtv/data/model/CheckDeviceStatusResponse;", "Lcom/softland/callqtv/data/model/CheckDeviceStatusRequest;", "(Ljava/lang/String;Lcom/softland/callqtv/data/model/CheckDeviceStatusRequest;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", "registerDevice", "Lcom/softland/callqtv/data/model/DeviceMappingResponse;", "plainTextBody", "Lcom/softland/callqtv/data/model/DeviceMappingRequest;", "(Ljava/lang/String;Lcom/softland/callqtv/data/model/DeviceMappingRequest;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", "fetchTvConfig", "Lcom/softland/callqtv/data/model/TvConfigResponse;", "Lcom/softland/callqtv/data/model/TvConfigRequest;", "(Ljava/lang/String;Lcom/softland/callqtv/data/model/TvConfigRequest;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", "CallQTV_v1.0.0_CallQTVDebug"})
+public abstract interface ApiService {
+    
+    @retrofit2.http.POST()
+    @org.jetbrains.annotations.Nullable()
+    public abstract java.lang.Object login(@retrofit2.http.Url()
+    @org.jetbrains.annotations.NotNull()
+    java.lang.String url, @retrofit2.http.Body()
+    @org.jetbrains.annotations.NotNull()
+    com.softland.callqtv.data.model.LoginRequest loginRequest, @org.jetbrains.annotations.NotNull()
+    kotlin.coroutines.Continuation<? super com.softland.callqtv.data.model.LoginResponse> $completion);
+    
+    @retrofit2.http.GET()
+    @org.jetbrains.annotations.Nullable()
+    public abstract java.lang.Object getServiceUrl(@retrofit2.http.Url()
+    @org.jetbrains.annotations.NotNull()
+    java.lang.String url, @retrofit2.http.Query(value = "composite")
+    @org.jetbrains.annotations.NotNull()
+    java.lang.String encodedJson, @org.jetbrains.annotations.NotNull()
+    kotlin.coroutines.Continuation<? super com.softland.callqtv.data.model.ServiceUrlResponse> $completion);
+    
+    @retrofit2.http.POST()
+    @org.jetbrains.annotations.Nullable()
+    public abstract java.lang.Object authenticateProduct(@retrofit2.http.Url()
+    @org.jetbrains.annotations.NotNull()
+    java.lang.String url, @retrofit2.http.Body()
+    @org.jetbrains.annotations.NotNull()
+    com.softland.callqtv.data.model.ProductAuthenticationReq request, @org.jetbrains.annotations.NotNull()
+    kotlin.coroutines.Continuation<? super com.softland.callqtv.data.model.ProductAuthenticationRes> $completion);
+    
+    @retrofit2.http.POST()
+    @org.jetbrains.annotations.Nullable()
+    public abstract java.lang.Object getDeviceRegistration(@retrofit2.http.Url()
+    @org.jetbrains.annotations.NotNull()
+    java.lang.String url, @retrofit2.http.Body()
+    @org.jetbrains.annotations.NotNull()
+    com.softland.callqtv.data.model.DeviceRegistrationRequest request, @org.jetbrains.annotations.NotNull()
+    kotlin.coroutines.Continuation<? super com.softland.callqtv.data.model.DeviceRegistrationResponse> $completion);
+    
+    @retrofit2.http.POST()
+    @org.jetbrains.annotations.Nullable()
+    public abstract java.lang.Object getCheckDeviceStatus(@retrofit2.http.Url()
+    @org.jetbrains.annotations.NotNull()
+    java.lang.String url, @retrofit2.http.Body()
+    @org.jetbrains.annotations.NotNull()
+    com.softland.callqtv.data.model.CheckDeviceStatusRequest request, @org.jetbrains.annotations.NotNull()
+    kotlin.coroutines.Continuation<? super com.softland.callqtv.data.model.CheckDeviceStatusResponse> $completion);
+    
+    @retrofit2.http.POST()
+    @org.jetbrains.annotations.Nullable()
+    public abstract java.lang.Object registerDevice(@retrofit2.http.Url()
+    @org.jetbrains.annotations.NotNull()
+    java.lang.String url, @retrofit2.http.Body()
+    @org.jetbrains.annotations.NotNull()
+    com.softland.callqtv.data.model.DeviceMappingRequest plainTextBody, @org.jetbrains.annotations.NotNull()
+    kotlin.coroutines.Continuation<? super com.softland.callqtv.data.model.DeviceMappingResponse> $completion);
+    
+    /**
+     * Fetch TV configuration for a device.
+     *
+     * Base URL example:
+     * https://py.softlandindia.net/CallQ/config/api/android/config
+     */
+    @retrofit2.http.POST()
+    @org.jetbrains.annotations.Nullable()
+    public abstract java.lang.Object fetchTvConfig(@retrofit2.http.Url()
+    @org.jetbrains.annotations.NotNull()
+    java.lang.String url, @retrofit2.http.Body()
+    @org.jetbrains.annotations.NotNull()
+    com.softland.callqtv.data.model.TvConfigRequest request, @org.jetbrains.annotations.NotNull()
+    kotlin.coroutines.Continuation<? super com.softland.callqtv.data.model.TvConfigResponse> $completion);
+}

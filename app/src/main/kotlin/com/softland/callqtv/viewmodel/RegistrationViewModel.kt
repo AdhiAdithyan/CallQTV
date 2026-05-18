@@ -78,7 +78,10 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
         val customerIdInt = id.toIntOrNull() ?: 0
 
         // Persist customer ID immediately so it's remembered for the next session
-        authPrefs.edit().putInt(PreferenceHelper.customer_id, customerIdInt).apply()
+        authPrefs.edit()
+            .putInt(PreferenceHelper.customer_id, customerIdInt)
+            .putString(PreferenceHelper.customer_id_text, id)
+            .apply()
 
         viewModelScope.launch {
             val macAddress = withContext(Dispatchers.IO) { Variables.getMacId(getApplication()) }
@@ -278,8 +281,12 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
     }
 
     private fun saveAuthDetails(customerId: Int, res: com.softland.callqtv.data.model.CheckDeviceStatusResponse) {
+        val enteredCustomerId = _customerId.value.orEmpty()
         authPrefs.edit().apply {
             putInt(PreferenceHelper.customer_id, customerId)
+            if (enteredCustomerId.isNotBlank()) {
+                putString(PreferenceHelper.customer_id_text, enteredCustomerId)
+            }
             putString(PreferenceHelper.product_license_end, res.licenceActiveTo)
             putString(PreferenceHelper.project_code, res.projectCode)
             apply()

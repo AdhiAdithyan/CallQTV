@@ -1,0 +1,25 @@
+package com.softland.callqtv.data.local;
+
+@kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u0000*\n\u0002\u0018\u0002\n\u0002\u0010\u0000\n\u0000\n\u0002\u0010\u0002\n\u0000\n\u0002\u0010 \n\u0002\u0018\u0002\n\u0002\b\u0002\n\u0002\u0010\b\n\u0000\n\u0002\u0010\u000e\n\u0002\b\u0004\bg\u0018\u00002\u00020\u0001J\u0016\u0010\u0002\u001a\u00020\u00032\f\u0010\u0004\u001a\b\u0012\u0004\u0012\u00020\u00060\u0005H\'J \u0010\u0007\u001a\u00020\u00032\u0006\u0010\b\u001a\u00020\t2\u0006\u0010\n\u001a\u00020\u000b2\u0006\u0010\f\u001a\u00020\u000bH\'J\u0016\u0010\r\u001a\b\u0012\u0004\u0012\u00020\u00060\u00052\u0006\u0010\b\u001a\u00020\tH\'J\u001e\u0010\u000e\u001a\b\u0012\u0004\u0012\u00020\u00060\u00052\u0006\u0010\n\u001a\u00020\u000b2\u0006\u0010\f\u001a\u00020\u000bH\'\u00a8\u0006\u000f\u00c0\u0006\u0003"}, d2 = {"Lcom/softland/callqtv/data/local/CounterDao;", "", "insertAll", "", "entities", "", "Lcom/softland/callqtv/data/local/CounterEntity;", "deleteByDeviceAndCustomer", "deviceId", "", "macAddress", "", "customerId", "getByDeviceId", "getByMacAndCustomer", "CallQTV_v1.0.0_CallQTVDebug"})
+@androidx.room.Dao()
+public abstract interface CounterDao {
+    
+    @androidx.room.Insert(onConflict = 1)
+    public abstract void insertAll(@org.jetbrains.annotations.NotNull()
+    java.util.List<com.softland.callqtv.data.local.CounterEntity> entities);
+    
+    @androidx.room.Query(value = "DELETE FROM counters WHERE device_id = :deviceId AND mac_address = :macAddress AND customer_id = :customerId")
+    public abstract void deleteByDeviceAndCustomer(int deviceId, @org.jetbrains.annotations.NotNull()
+    java.lang.String macAddress, @org.jetbrains.annotations.NotNull()
+    java.lang.String customerId);
+    
+    @androidx.room.Query(value = "SELECT * FROM counters WHERE device_id = :deviceId ORDER BY button_index ASC")
+    @org.jetbrains.annotations.NotNull()
+    public abstract java.util.List<com.softland.callqtv.data.local.CounterEntity> getByDeviceId(int deviceId);
+    
+    @androidx.room.Query(value = "SELECT * FROM counters WHERE mac_address = :macAddress AND customer_id = :customerId ORDER BY button_index ASC")
+    @org.jetbrains.annotations.NotNull()
+    public abstract java.util.List<com.softland.callqtv.data.local.CounterEntity> getByMacAndCustomer(@org.jetbrains.annotations.NotNull()
+    java.lang.String macAddress, @org.jetbrains.annotations.NotNull()
+    java.lang.String customerId);
+}

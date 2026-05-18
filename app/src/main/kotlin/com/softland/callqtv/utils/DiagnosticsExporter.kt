@@ -6,8 +6,10 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
+import androidx.annotation.RequiresApi
 import java.io.File
 import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -18,7 +20,6 @@ import java.util.zip.ZipOutputStream
 object DiagnosticsExporter {
     private const val TAG = "DiagnosticsExporter"
     private const val EXPORT_ROOT = "CALLQTV_EXPORT"
-    private const val CONFIG_ROOT = "CALLQTV_CONFIG"
 
     data class ExportResult(
         val success: Boolean,
@@ -51,10 +52,18 @@ object DiagnosticsExporter {
                     val sourceTag = if (idx == 0) "public_or_active" else "source_$idx"
                     copyDirectory(
                         src,
-                        File(exportDir, "all_config_sources/$sourceTag/$CONFIG_ROOT"),
+                        File(exportDir, "all_config_sources/$sourceTag/${PublicCallqtvConfigStorage.BASE_FOLDER}"),
                         copiedFiles
                     )
                 }
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                PublicCallqtvConfigStorage.copyPublicConfigTreeInto(
+                    context,
+                    File(exportDir, "shared_downloads_CALLQTV_CONFIG"),
+                    copiedFiles
+                )
             }
 
             // Explicitly export ALL error and API response logs (not only folder copy).
@@ -105,7 +114,24 @@ object DiagnosticsExporter {
             )
 
             val zipName = "snapshot_$timestamp.zip"
-            val sharedExport = exportSnapshotZipToSharedDownloads(context, exportDir, zipName)
+            // Prefer real external volumes (SD/USB app dirs) when mounted — no SAF, always writable for the app.
+            val externalVol = exportSnapshotZipToExternalVolumes(context, exportDir, zipName)
+            val sharedExport = when {
+                externalVol.success -> externalVol
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> {
+                    val primary = exportSnapshotZipToSharedDownloads(context, exportDir, zipName)
+                    if (primary.success) {
+                        primary
+                    } else {
+                        Log.w(
+                            TAG,
+                            "Shared Downloads ZIP failed (${primary.message}); falling back to app-writable storage"
+                        )
+                        exportSnapshotZipToLegacyStorage(context, exportDir, zipName)
+                    }
+                }
+                else -> exportSnapshotZipToLegacyStorage(context, exportDir, zipName)
+            }
             clearDirectoryContents(exportParent)
 
             ExportResult(
@@ -141,14 +167,13 @@ object DiagnosticsExporter {
         val activeBase = activeDateDir.parentFile ?: activeDateDir
         val publicBase = File(
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-            CONFIG_ROOT
+            PublicCallqtvConfigStorage.BASE_FOLDER
         )
-        val appSpecificBase = File(
-            context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
-                ?: context.getExternalFilesDir(null)
-                ?: context.filesDir,
-            CONFIG_ROOT
-        )
+        val appSpecificRoot = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
+            ?: context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+            ?: context.getExternalFilesDir(null)
+            ?: context.filesDir
+        val appSpecificBase = File(appSpecificRoot, PublicCallqtvConfigStorage.BASE_FOLDER)
         return listOf(activeBase, publicBase, appSpecificBase).distinctBy { it.absolutePath }
     }
 
@@ -198,6 +223,7 @@ object DiagnosticsExporter {
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.Q)
     private fun exportSnapshotZipToSharedDownloads(
         context: Context,
         sourceDir: File,
@@ -242,6 +268,124 @@ object DiagnosticsExporter {
                 message = "Export failed: ${e.message ?: "shared storage write error"}"
             )
         }
+    }
+
+    /**
+     * Writes the ZIP under [EXPORT_ROOT] on **removable** app-specific external dirs only
+     * (SD card, USB storage when exposed to the app). Primary internal emulated storage is
+     * not used here so we still prefer shared Downloads / legacy paths on normal devices.
+     */
+    private fun exportSnapshotZipToExternalVolumes(
+        context: Context,
+        sourceDir: File,
+        zipName: String,
+    ): SharedExportResult {
+        val triedPaths = linkedSetOf<String>()
+        for ((root, label) in listRemovableExternalExportRootsWithLabels(context)) {
+            val key = try {
+                root.absoluteFile.canonicalPath
+            } catch (_: Exception) {
+                root.absolutePath
+            }
+            if (!triedPaths.add(key)) continue
+            val r = tryWriteSnapshotZip(sourceDir, zipName, root, label)
+            if (r.success) return r
+            Log.d(TAG, "Removable volume export skipped ($label): ${r.message}")
+        }
+        return SharedExportResult(false, "", "no writable removable external volume")
+    }
+
+    private fun listRemovableExternalExportRootsWithLabels(context: Context): List<Pair<File, String>> {
+        val bases: List<File> =
+            context.getExternalFilesDirs(Environment.DIRECTORY_DOWNLOADS)
+                .filterNotNull()
+                .filter { it.exists() || it.mkdirs() }
+        return bases
+            .filter { base ->
+                try {
+                    Environment.isExternalStorageRemovable(base)
+                } catch (_: Exception) {
+                    false
+                }
+            }
+            .map { base ->
+                val root = File(base, EXPORT_ROOT)
+                root to "external removable (SD/USB)"
+            }
+    }
+
+    private fun tryWriteSnapshotZip(
+        sourceDir: File,
+        zipName: String,
+        exportRoot: File,
+        label: String,
+    ): SharedExportResult {
+        return try {
+            if (!exportRoot.exists()) exportRoot.mkdirs()
+            if (!exportRoot.canWrite()) {
+                return SharedExportResult(false, "", "not writable: ${exportRoot.absolutePath}")
+            }
+            val outFile = File(exportRoot, zipName)
+            FileOutputStream(outFile).use { out ->
+                zipDirectoryToStream(sourceDir, out)
+            }
+            SharedExportResult(
+                success = true,
+                location = outFile.absolutePath,
+                message = "Exported ZIP ($label): ${outFile.absolutePath}",
+            )
+        } catch (e: Exception) {
+            SharedExportResult(false, "", e.message ?: "zip write error")
+        }
+    }
+
+    private fun exportSnapshotZipToLegacyStorage(
+        context: Context,
+        sourceDir: File,
+        zipName: String
+    ): SharedExportResult {
+        return try {
+            val first = tryWriteSnapshotZip(
+                sourceDir,
+                zipName,
+                getExportParent(context),
+                "public or preferred folder",
+            )
+            if (first.success) {
+                first
+            } else {
+                Log.w(TAG, "Preferred export failed (${first.message}); retrying app-scoped storage")
+                tryWriteSnapshotZip(
+                    sourceDir,
+                    zipName,
+                    getAppScopedExportRoot(context),
+                    "app storage",
+                )
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Legacy ZIP export failed: ${e.message}")
+            try {
+                val appRoot = getAppScopedExportRoot(context)
+                Log.i(TAG, "Retrying ZIP export under app-scoped storage: ${appRoot.absolutePath}")
+                tryWriteSnapshotZip(sourceDir, zipName, appRoot, "app storage")
+            } catch (e2: Exception) {
+                Log.e(TAG, "App-scoped ZIP export also failed", e2)
+                SharedExportResult(
+                    success = false,
+                    location = "",
+                    message = "Export failed: ${e2.message ?: e.message ?: "storage write error"}"
+                )
+            }
+        }
+    }
+
+    /** Always writable under scoped storage (no MediaStore). */
+    private fun getAppScopedExportRoot(context: Context): File {
+        val base = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+            ?: context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
+            ?: context.getExternalFilesDir(null)
+            ?: context.filesDir
+        return File(base, EXPORT_ROOT).apply { mkdirs() }
     }
 
     private fun zipDirectoryToStream(sourceDir: File, outputStream: OutputStream) {

@@ -1,0 +1,22 @@
+package com.softland.callqtv;
+
+/**
+ * Added by: Adithyan
+ * Date: 28-Dec-2021
+ *
+ * This class extends FileProvider to solve storage related issues
+ * (like fetching data from storage etc.). Do not add additional logic here.
+ */
+@kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u0000\"\n\u0002\u0018\u0002\n\u0002\u0018\u0002\n\u0002\u0018\u0002\n\u0002\b\u0003\n\u0002\u0010\u0002\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0010\u0003\n\u0000\u0018\u00002\u00020\u00012\u00020\u0002B\u0007\u00a2\u0006\u0004\b\u0003\u0010\u0004J\u0018\u0010\u0005\u001a\u00020\u00062\u0006\u0010\u0007\u001a\u00020\b2\u0006\u0010\t\u001a\u00020\nH\u0016\u00a8\u0006\u000b"}, d2 = {"Lcom/softland/callqtv/StoragePathProvider;", "Landroidx/core/content/FileProvider;", "Ljava/lang/Thread$UncaughtExceptionHandler;", "<init>", "()V", "uncaughtException", "", "thread", "Ljava/lang/Thread;", "throwable", "", "CallQTV_v1.0.0_CallQTVDebug"})
+public final class StoragePathProvider extends androidx.core.content.FileProvider implements java.lang.Thread.UncaughtExceptionHandler {
+    
+    public StoragePathProvider() {
+        super();
+    }
+    
+    @java.lang.Override()
+    public void uncaughtException(@org.jetbrains.annotations.NotNull()
+    java.lang.Thread thread, @org.jetbrains.annotations.NotNull()
+    java.lang.Throwable throwable) {
+    }
+}

@@ -1,0 +1,633 @@
+package com.softland.callqtv.viewmodel
+
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.viewModelScope
+import com.google.gson.Gson
+import com.softland.callqtv.data.local.AppDatabase
+import com.softland.callqtv.data.repository.MqttClientManager
+import com.softland.callqtv.data.repository.TokenHistoryRepository
+import com.softland.callqtv.utils.SemanticMqttParser
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import java.util.Random
+import java.net.InetSocketAddress
+import java.net.Socket
+import java.net.URI
+
+class MqttViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val managers = mutableMapOf<String, MqttClientManager>()
+    private val connectionDetailsMap = mutableMapOf<String, MqttConnectionDetails>()
+    private val stateMutex = Mutex()
+    private val gson = Gson()
+    
+    private val retryAttempts = mutableMapOf<String, Int>()
+    private val retryJobs = mutableMapOf<String, kotlinx.coroutines.Job>()
+    private val reachabilityJobs = mutableMapOf<String, kotlinx.coroutines.Job>()
+
+    private val tokenHistoryRepo: TokenHistoryRepository by lazy {
+        TokenHistoryRepository(AppDatabase.getInstance(application), application)
+    }
+
+    private val connectedDeviceDao by lazy {
+        AppDatabase.getInstance(application).connectedDeviceDao()
+    }
+
+    // In-memory cache of allowed keypad serials (normalized uppercase),
+    // to avoid a DB lookup on every MQTT message.
+    private val keypadSerials = mutableSetOf<String>()
+    @Volatile private var keypadSerialsLoaded = false
+
+    private data class MqttConnectionDetails(
+        val serverUri: String,
+        val clientId: String,
+        val username: String?,
+        val password: String?,
+        val topic: String,
+        val qos: Int
+    )
+
+    private val _receivedMessage = MutableLiveData<String>()
+    fun getReceivedMessage(): LiveData<String> = _receivedMessage
+
+    private val _lastPayload = MutableLiveData<String>("")
+    fun getLastPayload(): LiveData<String> = _lastPayload
+
+    private val _connectionStatusMap = MutableLiveData<Map<String, Boolean>>(emptyMap())
+    fun getConnectionStatusMap(): LiveData<Map<String, Boolean>> = _connectionStatusMap
+
+    private val _connectionStatus = MutableLiveData<Boolean>(false)
+    fun getConnectionStatus(): LiveData<Boolean> = _connectionStatus
+
+    private val _errorMessage = MutableLiveData<String>("")
+    fun getErrorMessage(): LiveData<String> = _errorMessage
+
+    private val _isConnectingToMqtt = MutableLiveData<Boolean>(false)
+    fun isConnectingToMqtt(): LiveData<Boolean> = _isConnectingToMqtt
+
+    private val _connectTimer = MutableLiveData<Int>(0)
+    fun getConnectTimer(): LiveData<Int> = _connectTimer
+    
+    private var timerJob: kotlinx.coroutines.Job? = null
+
+    private fun startConnectTimer() {
+        _isConnectingToMqtt.postValue(true)
+        _connectTimer.postValue(0)
+        timerJob?.cancel()
+        timerJob = viewModelScope.launch(Dispatchers.Main) {
+            var time = 0
+            while(true) {
+                delay(1000)
+                time++
+                _connectTimer.postValue(time)
+            }
+        }
+    }
+
+    private fun stopConnectTimer() {
+        _isConnectingToMqtt.postValue(false)
+        timerJob?.cancel()
+        timerJob = null
+    }
+
+    private val _isAutoRetryExhausted = MutableLiveData<Boolean>(false)
+    fun isAutoRetryExhausted(): LiveData<Boolean> = _isAutoRetryExhausted
+
+    // Exposes current MQTT retry attempt (for UI display)
+    private val _mqttRetryAttempt = MutableLiveData<Int>(0)
+    fun getMqttRetryAttempt(): LiveData<Int> = _mqttRetryAttempt
+
+    // Exposes whether the broker host/port is reachable via a short TCP ping.
+    private val _isBrokerReachable = MutableLiveData<Boolean>(true)
+    fun isBrokerReachable(): LiveData<Boolean> = _isBrokerReachable
+
+    val tokenUpdateChannel = kotlinx.coroutines.channels.Channel<Pair<String, String>>(capacity = kotlinx.coroutines.channels.Channel.UNLIMITED)
+
+    private val _tokensPerCounter = MutableLiveData<Map<String, List<String>>>(emptyMap())
+    fun getTokensPerCounter(): LiveData<Map<String, List<String>>> = _tokensPerCounter
+
+    // Thread-safe internal state to prevent race conditions during updates
+    private val internalTokenMap = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
+    private val announcedTokenTimestamps = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    @Volatile private var isHistoryLoaded = false
+
+    /**
+     * Deduplicate rapid MQTT messages. Returns true if announced within the last 2 seconds.
+     */
+    fun isAlreadyAnnounced(counterKey: String, token: String): Boolean {
+        val key = "${counterKey.trim()}_${token.trim()}"
+        val lastTime = announcedTokenTimestamps[key] ?: 0L
+        return (System.currentTimeMillis() - lastTime) < 2000L
+    }
+
+    fun markAsAnnounced(counterKey: String, token: String) {
+        val key = "${counterKey.trim()}_${token.trim()}"
+        announcedTokenTimestamps[key] = System.currentTimeMillis()
+        
+        // Cleanup old entries (simple way to prevent memory leak)
+        if (announcedTokenTimestamps.size > 100) {
+            val now = System.currentTimeMillis()
+            announcedTokenTimestamps.entries.removeIf { now - it.value > 60000 }
+        }
+    }
+
+    fun loadPersistedHistory() {
+        viewModelScope.launch(Dispatchers.IO) {
+            stateMutex.withLock {
+                try {
+                    val persisted = tokenHistoryRepo.loadAll()
+                    // If MQTT updates arrived before we loaded from DB, merge them
+                    // This is safer than internalTokenMap.clear()
+                    persisted.forEach { (key, tokens) ->
+                        val current = internalTokenMap[key] ?: emptyList()
+                        // Combine: persisted tokens followed by current ones, then take top 15
+                        val combined = (tokens + current).distinct().take(15)
+                        internalTokenMap[key] = combined
+                    }
+                    isHistoryLoaded = true
+                    _tokensPerCounter.postValue(internalTokenMap.toMap())
+                } catch (e: Exception) {
+                    android.util.Log.w("MqttViewModel", "Failed to load token history: ${e.message}")
+                }
+            }
+        }
+    }
+
+    fun clearTokenHistory() {
+        viewModelScope.launch(Dispatchers.IO) {
+            stateMutex.withLock {
+                try {
+                    tokenHistoryRepo.clearAll()
+                    internalTokenMap.clear()
+                    isHistoryLoaded = true // Resetting counts as loaded
+                    _tokensPerCounter.postValue(emptyMap())
+                    announcedTokenTimestamps.clear()
+                } catch (e: Exception) {
+                    android.util.Log.w("MqttViewModel", "Failed to clear token history: ${e.message}")
+                }
+            }
+        }
+    }
+
+    fun initAndConnect(
+        serverUri: String,
+        clientId: String,
+        username: String?,
+        password: String?,
+        topic: String,
+        qos: Int,
+        context: android.content.Context
+    ) {
+        connectionDetailsMap[serverUri] = MqttConnectionDetails(serverUri, clientId, username, password, topic, qos)
+
+        val existing = managers[serverUri]
+        if (existing != null) {
+            if (existing.clientId == clientId) {
+                existing.subscribe(topic, qos)
+                if (!existing.isConnected()) existing.connect(username, password)
+                return
+            } else {
+                removeManager(serverUri)
+            }
+        }
+
+        val manager = MqttClientManager(context.applicationContext, serverUri, clientId).apply {
+            setMqttListener(object : MqttClientManager.MqttListener {
+                override fun onMessageReceived(topic: String, message: String) {
+                    // Offload all heavy validation/processing to a background dispatcher so that
+                    // the MQTT callback thread stays fast even under bursty loads.
+                    viewModelScope.launch(Dispatchers.Default) {
+                        val trimmed = message.trim()
+
+                        // Fast path filters – keep the existing business rules
+                        if (!trimmed.contains("CAL0K")) return@launch
+                        if (!trimmed.startsWith("$")) return@launch
+                        if (trimmed.length < 24) return@launch
+                        // Business rule: ignore responses where the 17th character is '0'
+                        if (trimmed[16] == '0') {
+                            android.util.Log.d("MqttViewModel", "Ignoring CAL0K payload with 17th char '0': $trimmed")
+                            return@launch
+                        }
+
+                        // Validate against Keypad Serial Number (runs on IO dispatcher internally)
+                        if (!isValidKeypadMessage(trimmed)) {
+                            // Detailed logging is done inside isValidKeypadMessage; keep this as a high-level marker
+                            android.util.Log.d("MqttViewModel", "Ignored message: Keypad serial mismatch or device not found $trimmed")
+                            return@launch
+                        }
+
+                        android.util.Log.i(
+                            "MqttViewModel",
+                            "!!! VERIFIED MQTT MESSAGE !!! Topic: [$topic], Payload: $trimmed"
+                        )
+
+                        _receivedMessage.postValue(trimmed)
+                        _lastPayload.postValue(trimmed)
+
+                        // Parse and route token in the same coroutine to avoid extra launches
+                        parseMqttMessage(topic, trimmed)
+                    }
+                }
+
+                override fun onConnectionStatus(isConnected: Boolean) {
+                    updateStatus(serverUri, isConnected)
+                    if (isConnected) {
+                        stopConnectTimer()
+                        _isAutoRetryExhausted.postValue(false)
+                        _errorMessage.postValue("")
+                        // Connection success: reset backoff
+                        retryAttempts[serverUri] = 0
+                        retryJobs[serverUri]?.cancel()
+                        _mqttRetryAttempt.postValue(0)
+                    }
+                }
+
+                override fun onError(error: String) {
+                    stopConnectTimer()
+                    _errorMessage.postValue("[$serverUri] $error")
+                    // Initial connection failed or lost before Paho could handle auto-reconnect
+                    scheduleInitialRetry(serverUri)
+                }
+
+                override fun onAutoRetryExhausted() {
+                    _isAutoRetryExhausted.postValue(true)
+                }
+            })
+        }
+
+        // Start/ensure a reachability monitor for this broker host/port.
+        startReachabilityMonitor(serverUri)
+
+        startConnectTimer()
+        managers[serverUri] = manager
+        manager.subscribe(topic, qos)
+        manager.connect(username, password)
+    }
+
+    /**
+     * Extracts the keypad serial number from a raw MQTT message.
+     *
+     * Expected format (example): "$02026bCAL0K00071100030*"
+     * After removing '$' and '*', we get: "02026bCAL0K00071100030"
+     * The actual serial is characters 1..15 (Kotlin endIndex exclusive): "2026bCAL0K0007"
+     */
+    private fun extractKeypadSerial(message: String): String? {
+        val trimmed = message.trim()
+        if (!trimmed.startsWith("$") || !trimmed.endsWith("*")) return null
+
+        // Remove leading '$' and trailing '*'
+        val body = trimmed.substring(1, trimmed.length - 1)
+        if (body.length < 16) return null
+
+        // Protocol: serial is characters 1..15 of body (index 1 inclusive, 15 exclusive)
+        val serial = body.substring(1, 15).trim()
+        if (serial.isEmpty()) return null
+
+        return serial
+    }
+
+    /**
+     * Checks if the serial extracted from the keypad message matches a connected device
+     * of type "KEYPAD" for the current MAC and customer, using an in-memory cache to
+     * avoid DB lookups on every MQTT message.
+     */
+    private suspend fun isValidKeypadMessage(message: String): Boolean {
+        val serialInMessage = extractKeypadSerial(message) ?: return false
+        val normalizedSerial = serialInMessage.trim().uppercase()
+
+        return withContext(Dispatchers.IO) {
+            ensureKeypadSerialCache()
+            keypadSerials.contains(normalizedSerial)
+        }
+    }
+
+    /**
+     * Populates the in-memory keypad serial cache from the connected_devices table.
+     * Called on-demand from the IO dispatcher; safe to call repeatedly.
+     */
+    private suspend fun ensureKeypadSerialCache() {
+        if (keypadSerialsLoaded) return
+
+        stateMutex.withLock {
+            if (keypadSerialsLoaded) return
+
+            try {
+                val app = getApplication<Application>()
+                val authPrefs = app.getSharedPreferences(
+                    com.softland.callqtv.data.local.AppSharedPreferences.AUTHENTICATION,
+                    android.content.Context.MODE_PRIVATE
+                )
+                val customerId = String.format(
+                    java.util.Locale.ROOT,
+                    "%04d",
+                    authPrefs.getInt(com.softland.callqtv.utils.PreferenceHelper.customer_id, 0)
+                )
+                val macAddress = com.softland.callqtv.utils.Variables.getMacId(app)
+
+                val devices = connectedDeviceDao.getByMacAndCustomer(macAddress, customerId)
+
+                keypadSerials.clear()
+                devices.forEach { device ->
+                    if (device.deviceType?.uppercase() == "KEYPAD") {
+                        device.serialNumber
+                            ?.trim()
+                            ?.takeIf { it.isNotEmpty() }
+                            ?.uppercase()
+                            ?.let { keypadSerials.add(it) }
+
+                        // Also inspect configJson once to capture any additional embedded serials.
+                        val cfg = device.configJson
+                        if (!cfg.isNullOrBlank()) {
+                            // Very lightweight scan: look for CAL0K-style serials and cache them.
+                            val regex = "20[0-9A-Za-z]{11}".toRegex()
+                            regex.findAll(cfg).forEach { m ->
+                                keypadSerials.add(m.value.uppercase())
+                            }
+                        }
+                    }
+                }
+
+                keypadSerialsLoaded = true
+            } catch (e: Exception) {
+                android.util.Log.w("MqttViewModel", "Failed to build keypad serial cache: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Allows other parts of the app (e.g., after TV config refresh) to invalidate the
+     * keypad serial cache so it will be rebuilt on the next keypad message.
+     */
+    fun invalidateKeypadSerialCache() {
+        stateMutex.tryLock()?.let { lockAcquired ->
+            try {
+                if (lockAcquired) {
+                    keypadSerials.clear()
+                    keypadSerialsLoaded = false
+                }
+            } finally {
+                if (lockAcquired) stateMutex.unlock()
+            }
+        } ?: run {
+            // If mutex is busy, fall back to simple volatile flag reset; cache will be refilled later.
+            keypadSerialsLoaded = false
+        }
+    }
+
+    fun retryConnect() {
+        _errorMessage.postValue("")
+        _isAutoRetryExhausted.postValue(false)
+        _mqttRetryAttempt.postValue(0)
+        startConnectTimer()
+        connectionDetailsMap.values.forEach { details ->
+            initAndConnect(details.serverUri, details.clientId, details.username, details.password, details.topic, details.qos, getApplication())
+        }
+    }
+
+    private fun updateStatus(serverUri: String, isConnected: Boolean) {
+        viewModelScope.launch {
+            stateMutex.withLock {
+                val current = _connectionStatusMap.value?.toMutableMap() ?: mutableMapOf()
+                current[serverUri] = isConnected
+                _connectionStatusMap.postValue(current)
+                _connectionStatus.postValue(current.values.all { it })
+            }
+        }
+    }
+
+    private fun scheduleInitialRetry(serverUri: String) {
+        val details = connectionDetailsMap[serverUri] ?: return
+        
+        // If already connected, no need to retry
+        if (managers[serverUri]?.isConnected() == true) return
+        
+        // Avoid overlapping retry jobs
+        if (retryJobs[serverUri]?.isActive == true) return
+
+        val attempt = retryAttempts[serverUri] ?: 0
+        // Exponential backoff: 5s, 10s, 30s, then capped at 1 min
+        val delayMs = when (attempt) {
+            0 -> 5000L
+            1 -> 10000L
+            2 -> 15000L
+            3 -> 30000L
+            4 -> 40000L
+            else -> 30000L
+        }
+
+        retryJobs[serverUri] = viewModelScope.launch {
+            android.util.Log.d("MqttViewModel", "Retrying initial connection for $serverUri in ${delayMs/1000}s (Attempt ${attempt + 1})")
+            delay(delayMs)
+            retryAttempts[serverUri] = attempt + 1
+            _mqttRetryAttempt.postValue(attempt + 1)
+            initAndConnect(
+                details.serverUri, 
+                details.clientId, 
+                details.username, 
+                details.password, 
+                details.topic, 
+                details.qos, 
+                getApplication()
+            )
+        }
+    }
+
+    /**
+     * Periodically TCP-pings the MQTT broker host/port derived from serverUri.
+     * Updates isBrokerReachable so the UI can show when the broker device is unreachable
+     * even if the MQTT client still considers the session connected.
+     */
+    private fun startReachabilityMonitor(serverUri: String) {
+        if (reachabilityJobs[serverUri]?.isActive == true) return
+
+        val job = viewModelScope.launch(Dispatchers.IO) {
+            val uri = try { URI(serverUri) } catch (_: Exception) { null }
+            val host = uri?.host
+            val port = if (uri?.port ?: -1 > 0) uri!!.port else 1883
+            if (host.isNullOrBlank()) return@launch
+
+            while (isActive) {
+                try {
+                    Socket().use { socket ->
+                        socket.connect(InetSocketAddress(host, port), 2000)
+                    }
+                    _isBrokerReachable.postValue(true)
+                } catch (_: Exception) {
+                    _isBrokerReachable.postValue(false)
+                }
+
+                delay(30000L)
+            }
+        }
+
+        reachabilityJobs[serverUri] = job
+    }
+
+// Redundant retry loop removed. Relying on Paho's isAutomaticReconnect = true 
+// for optimized and conflict-free reconnection management.
+
+    private fun removeManager(serverUri: String) {
+        viewModelScope.launch {
+            stateMutex.withLock {
+                managers[serverUri]?.close()
+                managers.remove(serverUri)
+                reachabilityJobs[serverUri]?.cancel()
+                reachabilityJobs.remove(serverUri)
+                val current = _connectionStatusMap.value?.toMutableMap() ?: mutableMapOf()
+                current.remove(serverUri)
+                _connectionStatusMap.postValue(current)
+            }
+        }
+    }
+
+    suspend fun processTokenUpdate(counter: String, token: String): Boolean {
+        val trimmedCounter = counter.trim()
+        val trimmedToken = token.trim()
+        
+        if (trimmedToken == "0" || trimmedToken.isBlank() || trimmedCounter == "0" || trimmedCounter.isBlank()) return false
+        if (trimmedToken.contains("CAL", ignoreCase = true)) return false
+
+        return stateMutex.withLock {
+            // If history isn't loaded yet, try to load it first
+            if (!isHistoryLoaded) {
+                val persisted = withContext(Dispatchers.IO) { tokenHistoryRepo.loadAll() }
+                persisted.forEach { (k, v) -> 
+                    if (!internalTokenMap.containsKey(k)) internalTokenMap[k] = v 
+                }
+                isHistoryLoaded = true
+            }
+
+            val list = (internalTokenMap[trimmedCounter] ?: emptyList()).toMutableList()
+            val existingPosition = list.indexOf(trimmedToken)
+
+            // If already at top, per user request: DO NOT announce
+            if (existingPosition == 0) {
+                return@withLock false 
+            }
+
+            if (existingPosition > 0) {
+                list.removeAt(existingPosition)
+                // Clear the "announced" flag before moving to top, so it can be re-announced
+                announcedTokenTimestamps.remove("${trimmedCounter}_$trimmedToken")
+            }
+
+            list.add(0, trimmedToken)
+            val updatedList = list.take(15)
+            internalTokenMap[trimmedCounter] = updatedList
+            _tokensPerCounter.postValue(internalTokenMap.toMap())
+
+            persistToken(trimmedCounter, trimmedToken)
+            true // Announcement should happen
+        }
+    }
+
+    /**
+     * Atomically add token to both primary and fallback keys in one map update.
+     * Prevents race where two processTokenUpdate calls overwrite each other.
+     * Returns true if the token was new or moved for the primary key (should announce).
+     */
+    suspend fun processTokenUpdateForKeys(primaryKey: String, token: String, fallbackKey: String?): Boolean {
+        val trimmedPrimary = primaryKey.trim()
+        val trimmedToken = token.trim()
+        val trimmedFallback = fallbackKey?.trim()
+
+        if (trimmedToken == "0" || trimmedToken.isBlank() || trimmedPrimary == "0" || trimmedPrimary.isBlank()) return false
+        if (trimmedToken.contains("CAL", ignoreCase = true)) return false
+
+        return stateMutex.withLock {
+            if (!isHistoryLoaded) {
+                val persisted = withContext(Dispatchers.IO) { tokenHistoryRepo.loadAll() }
+                persisted.forEach { (k, v) -> 
+                    if (!internalTokenMap.containsKey(k)) internalTokenMap[k] = v 
+                }
+                isHistoryLoaded = true
+            }
+
+            val keysToUpdate = mutableListOf(trimmedPrimary)
+            if (trimmedFallback != null && trimmedFallback != trimmedPrimary) keysToUpdate.add(trimmedFallback)
+
+            var shouldAnnounce = false
+
+            for (key in keysToUpdate) {
+                val list = (internalTokenMap[key] ?: emptyList()).toMutableList()
+                val existingPosition = list.indexOf(trimmedToken)
+                
+                // If it's already the most recent for this key, keep moving but don't set shouldAnnounce
+                if (existingPosition == 0) {
+                    continue
+                }
+
+                // If it's the primary key and it's not at top, it's a candidate for announcement
+                if (key == trimmedPrimary) {
+                    shouldAnnounce = true
+                }
+
+                if (existingPosition > 0) {
+                    list.removeAt(existingPosition)
+                    // Clear flag so it can be re-announced since its position is changing
+                    announcedTokenTimestamps.remove("${key}_$trimmedToken")
+                }
+                
+                list.add(0, trimmedToken)
+                internalTokenMap[key] = list.take(15)
+                persistToken(key, trimmedToken)
+            }
+            
+            if (shouldAnnounce) {
+                _tokensPerCounter.postValue(internalTokenMap.toMap())
+            }
+            
+            shouldAnnounce
+        }
+    }
+
+    private fun persistToken(key: String, token: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                tokenHistoryRepo.saveToken(key, token)
+            } catch (e: Exception) {
+                android.util.Log.w("MqttViewModel", "Persist failed: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Parses a verified MQTT message and enqueues token updates for processing.
+     * Runs on a background dispatcher (caller responsibility).
+     */
+    private suspend fun parseMqttMessage(topic: String, message: String) {
+        try {
+            // Semantic parsing is pure/CPU-bound; keep it on Default.
+            val result = SemanticMqttParser.parse(message, topic)
+            if (result != null) {
+                val (counter, token) = result
+                if (token != "0" && token.isNotBlank() && counter != "0" && counter.isNotBlank()) {
+                    // Channel has UNLIMITED capacity; enqueue without blocking the MQTT thread.
+                    tokenUpdateChannel.send(counter to token)
+                }
+            }
+        } catch (e: Exception) {
+            // Swallow and log – a bad payload should never break the stream.
+            android.util.Log.w("MqttViewModel", "Failed to parse MQTT message '$message' on topic '$topic': ${e.message}")
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        val toClose = managers.values.toList()
+        managers.clear()
+        reachabilityJobs.values.forEach { it.cancel() }
+        reachabilityJobs.clear()
+        viewModelScope.launch(Dispatchers.IO) {
+            toClose.forEach { it.close() }
+        }
+    }
+}

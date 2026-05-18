@@ -1,3 +1,5 @@
+@file:androidx.annotation.OptIn(markerClass = [androidx.media3.common.util.UnstableApi::class])
+
 package com.softland.callqtv.ui
 
 import android.content.Context
@@ -15,7 +17,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -30,15 +35,27 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 
+internal fun detachViewFromParent(view: android.view.View) {
+    (view.parent as? android.view.ViewGroup)?.removeView(view)
+}
+
+internal fun isWmvAdPath(path: String): Boolean {
+    val lc = path.lowercase()
+    return lc.contains(".wmv") || lc.contains("x-ms-wmv") || lc.endsWith("/wmv")
+}
+
 @Composable
 fun AdUnifiedPlayer(
     ad: AdFileEntity,
     mediaType: AdMediaType,
     allowYoutubeAds: Boolean,
+    viewport: AdViewportPx = AdViewportSizing.lastViewport,
     sharedYoutubeWebView: WebView,
     sharedVideoTextureView: TextureView? = null,
     activePlayerIdx: Int,
-    isWmvUnsupportedVideo: (String) -> Boolean,
+    /** When false, ExoPlayer buffers the next clip off-screen (no second TextureView). */
+    videoAttachToTexture: Boolean = true,
+    videoSurfaceReadySignal: Int = 0,
     onReady: () -> Unit = {},
     onEnded: () -> Unit = {},
     onError: () -> Unit = {}
@@ -52,7 +69,6 @@ fun AdUnifiedPlayer(
             if (allowYoutubeAds) {
                 LaunchedEffect(ad.filePath) {
                     Log.i("YouTubeAdFlow", "Loading YouTube ad as-is: ${ad.filePath}")
-                    // Avoid synchronous disk I/O on the main thread (reduces frame skips).
                     withContext(Dispatchers.IO) {
                         FileLogger.logError(
                             context,
@@ -69,66 +85,64 @@ fun AdUnifiedPlayer(
                     onError = onError
                 )
             } else {
-                // Embedded YouTube WebView playback can cause global UI jank on TV devices.
-                // Keep disabled by default unless explicitly enabled from settings.
                 Log.i("YouTubeAdFlow", "Skipping YouTube ad: disabled by setting allow_youtube_ads=false")
                 FileLogger.logError(context, "YouTubeAdFlow", "Skipping YouTube ad: disabled by setting allow_youtube_ads=false")
                 LaunchedEffect(ad.filePath) {
                     delay(300)
                     onError()
                 }
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Skipping YouTube ad (disabled in settings)",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-        AdMediaType.Video -> {
-            if (isWmvUnsupportedVideo(ad.filePath)) {
-                LaunchedEffect(ad.filePath) {
-                    Log.w("AdPlayer", "Skipping unsupported WMV ad: ${ad.filePath}")
-                    FileLogger.logError(context, "AdPlayer", "Skipping unsupported WMV ad: ${ad.filePath}")
-                    onError()
-                }
-                Box(modifier = Modifier.fillMaxSize())
-            } else {
-                AdVideoPlayer(
-                    videoUrl = ad.filePath,
-                    player = MediaEngine.get(context, activePlayerIdx),
-                    sharedTextureView = sharedVideoTextureView,
-                    onVideoEnded = onEnded,
-                    onReady = onReady,
-                    onError = onError
+                AdFormatUnavailableHint(
+                    message = "YouTube ads are disabled in settings"
                 )
             }
         }
-        AdMediaType.Image -> {
-            AsyncImage(
-                model = ImageRequest.Builder(context)
-                    .data(ad.filePath)
-                    .crossfade(false)
-                    .build(),
-                contentDescription = "Ad",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Fit,
-                onSuccess = { onReady() },
-                onError = { onError() }
+        AdMediaType.Video -> {
+            AdVideoWithWebFallback(
+                path = ad.filePath,
+                preferWebFirst = isWmvAdPath(ad.filePath),
+                viewport = viewport,
+                sharedVideoTextureView = sharedVideoTextureView,
+                activePlayerIdx = activePlayerIdx,
+                attachToTexture = videoAttachToTexture,
+                videoSurfaceReadySignal = videoSurfaceReadySignal,
+                onReady = onReady,
+                onEnded = onEnded,
+                onError = onError
             )
+        }
+        AdMediaType.Image -> {
+            var coilFailed by remember(ad.filePath) { mutableStateOf(false) }
+            val canWebFallback = ad.filePath.startsWith("http://", ignoreCase = true) ||
+                ad.filePath.startsWith("https://", ignoreCase = true)
+            if (coilFailed && canWebFallback) {
+                WebLinkAdPlayer(url = ad.filePath, onReady = onReady, onError = onError)
+            } else {
+                AsyncImage(
+                    model = AdViewportSizing.coilImageRequestBuilder(context, ad.filePath, viewport)
+                        .build(),
+                    contentDescription = "Ad",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit,
+                    onSuccess = { onReady() },
+                    onError = {
+                        Log.w("AdPlayer", "Image load failed, trying WebView: ${ad.filePath}")
+                        if (canWebFallback) coilFailed = true else onError()
+                    }
+                )
+            }
         }
         AdMediaType.Web -> {
             if (isLikelyLiveStreamUrl(ad.filePath)) {
-                // Route stream-like links through ExoPlayer for reliable HLS/DASH playback.
-                AdVideoPlayer(
-                    videoUrl = ad.filePath,
-                    player = MediaEngine.get(context, activePlayerIdx),
-                    sharedTextureView = sharedVideoTextureView,
-                    onVideoEnded = onEnded,
+                AdVideoWithWebFallback(
+                    path = ad.filePath,
+                    preferWebFirst = false,
+                    viewport = viewport,
+                    sharedVideoTextureView = sharedVideoTextureView,
+                    activePlayerIdx = activePlayerIdx,
+                    attachToTexture = videoAttachToTexture,
+                    videoSurfaceReadySignal = videoSurfaceReadySignal,
                     onReady = onReady,
+                    onEnded = onEnded,
                     onError = onError
                 )
             } else {
@@ -142,7 +156,61 @@ fun AdUnifiedPlayer(
     }
 }
 
-private fun isLikelyLiveStreamUrl(url: String): Boolean {
+/** Tries ExoPlayer first; on failure falls back to WebView so WMV/odd URLs still show something. */
+@Composable
+private fun AdVideoWithWebFallback(
+    path: String,
+    preferWebFirst: Boolean,
+    viewport: AdViewportPx,
+    sharedVideoTextureView: TextureView?,
+    activePlayerIdx: Int,
+    attachToTexture: Boolean,
+    videoSurfaceReadySignal: Int,
+    onReady: () -> Unit,
+    onEnded: () -> Unit,
+    onError: () -> Unit
+) {
+    val context = LocalContext.current
+    var useWeb by remember(path) { mutableStateOf(preferWebFirst) }
+    if (useWeb) {
+        WebLinkAdPlayer(
+            url = path,
+            onReady = onReady,
+            onError = onError
+        )
+    } else {
+        AdVideoPlayer(
+            videoUrl = path,
+            player = MediaEngine.get(context, activePlayerIdx),
+            viewport = viewport,
+            sharedTextureView = sharedVideoTextureView,
+            attachToTexture = attachToTexture,
+            videoSurfaceReadySignal = videoSurfaceReadySignal,
+            onVideoEnded = onEnded,
+            onReady = onReady,
+            onError = {
+                Log.w("AdPlayer", "ExoPlayer failed; WebView fallback for: $path")
+                useWeb = true
+            }
+        )
+    }
+}
+
+@Composable
+private fun AdFormatUnavailableHint(message: String) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = message,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium
+        )
+    }
+}
+
+internal fun isLikelyLiveStreamUrl(url: String): Boolean {
     val u = url.lowercase()
     return u.contains(".m3u8") ||
         u.contains(".mpd") ||
@@ -161,10 +229,10 @@ private fun WebLinkAdPlayer(
     onError: () -> Unit
 ) {
     val context = LocalContext.current
-    val readySent = androidx.compose.runtime.remember(url) { AtomicBoolean(false) }
-    val errorSent = androidx.compose.runtime.remember(url) { AtomicBoolean(false) }
-    val reloadedOnce = androidx.compose.runtime.remember(url) { AtomicBoolean(false) }
-    val isLowBandwidth = androidx.compose.runtime.remember(url) { isAdLowBandwidthNetwork(context) }
+    val readySent = remember(url) { AtomicBoolean(false) }
+    val errorSent = remember(url) { AtomicBoolean(false) }
+    val reloadedOnce = remember(url) { AtomicBoolean(false) }
+    val isLowBandwidth = remember(url) { isAdLowBandwidthNetwork(context) }
     val webView = remember(url) {
         WebView(context).apply {
             settings.javaScriptEnabled = true
@@ -173,7 +241,7 @@ private fun WebLinkAdPlayer(
             settings.cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
             isFocusable = false
             isFocusableInTouchMode = false
-            setBackgroundColor(android.graphics.Color.BLACK)
+            setBackgroundColor(android.graphics.Color.WHITE)
             webChromeClient = object : WebChromeClient() {}
             webViewClient = object : WebViewClient() {
                 override fun onPageCommitVisible(view: WebView?, pageUrl: String?) {
@@ -224,7 +292,7 @@ private fun WebLinkAdPlayer(
 
     AndroidView(
         factory = {
-            (webView.parent as? android.view.ViewGroup)?.removeView(webView)
+            detachViewFromParent(webView)
             webView
         },
         update = { view ->

@@ -1,0 +1,76 @@
+package com.softland.callqtv.viewmodel;
+
+@kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u0000h\n\u0002\u0018\u0002\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0003\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0002\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\u0010\u000e\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0006\n\u0002\u0018\u0002\n\u0002\b\u0003\n\u0002\u0010\u0002\n\u0002\b\u0005\n\u0002\u0010\b\n\u0002\b\n\n\u0002\u0018\u0002\n\u0000\u0018\u00002\u00020\u0001B\u000f\u0012\u0006\u0010\u0002\u001a\u00020\u0003\u00a2\u0006\u0004\b\u0004\u0010\u0005J\u000e\u0010!\u001a\u00020\"2\u0006\u0010#\u001a\u00020\u0015J\u0006\u0010$\u001a\u00020\"J\u0006\u0010%\u001a\u00020\"J&\u0010&\u001a\u00020\"2\u0006\u0010\'\u001a\u00020\u00152\u0006\u0010\u0016\u001a\u00020(2\u0006\u0010)\u001a\u00020\u0010H\u0082@\u00a2\u0006\u0002\u0010*J.\u0010+\u001a\u00020\"2\u0006\u0010\'\u001a\u00020\u00152\u0006\u0010\u0016\u001a\u00020(2\u0006\u0010)\u001a\u00020\u00102\u0006\u0010,\u001a\u00020\u0012H\u0082@\u00a2\u0006\u0002\u0010-J\u0006\u0010.\u001a\u00020\"J\u000e\u0010/\u001a\u00020\"2\u0006\u00100\u001a\u00020\u0015J\u0018\u00101\u001a\u00020\"2\u0006\u0010\u0016\u001a\u00020(2\u0006\u00102\u001a\u000203H\u0002R\u000e\u0010\u0006\u001a\u00020\u0007X\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u000e\u0010\b\u001a\u00020\tX\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u0016\u0010\n\u001a\n \f*\u0004\u0018\u00010\u000b0\u000bX\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u000e\u0010\r\u001a\u00020\u000eX\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u0010\u0010\u000f\u001a\u0004\u0018\u00010\u0010X\u0082\u000e\u00a2\u0006\u0002\n\u0000R\u0010\u0010\u0011\u001a\u0004\u0018\u00010\u0012X\u0082\u000e\u00a2\u0006\u0002\n\u0000R\u001c\u0010\u0013\u001a\u0010\u0012\f\u0012\n \f*\u0004\u0018\u00010\u00150\u00150\u0014X\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u0017\u0010\u0016\u001a\b\u0012\u0004\u0012\u00020\u00150\u0017\u00a2\u0006\b\n\u0000\u001a\u0004\b\u0018\u0010\u0019R\u0016\u0010\u001a\u001a\n\u0012\u0006\u0012\u0004\u0018\u00010\u00150\u0014X\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u0019\u0010\u001b\u001a\n\u0012\u0006\u0012\u0004\u0018\u00010\u00150\u0017\u00a2\u0006\b\n\u0000\u001a\u0004\b\u001c\u0010\u0019R\u0014\u0010\u001d\u001a\b\u0012\u0004\u0012\u00020\u001e0\u0014X\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u0017\u0010\u001f\u001a\b\u0012\u0004\u0012\u00020\u001e0\u0017\u00a2\u0006\b\n\u0000\u001a\u0004\b \u0010\u0019\u00a8\u00064"}, d2 = {"Lcom/softland/callqtv/viewmodel/RegistrationViewModel;", "Landroidx/lifecycle/AndroidViewModel;", "application", "Landroid/app/Application;", "<init>", "(Landroid/app/Application;)V", "projectRepository", "Lcom/softland/callqtv/data/repository/ProjectRepository;", "serviceRepository", "Lcom/softland/callqtv/data/repository/ServiceUrlRepository;", "authPrefs", "Landroid/content/SharedPreferences;", "kotlin.jvm.PlatformType", "gson", "Lcom/google/gson/Gson;", "lastAuthRes", "Lcom/softland/callqtv/data/model/ProductAuthenticationRes;", "lastRegRes", "Lcom/softland/callqtv/data/model/DeviceRegistrationResponse;", "_customerId", "Landroidx/lifecycle/MutableLiveData;", "", "customerId", "Landroidx/lifecycle/LiveData;", "getCustomerId", "()Landroidx/lifecycle/LiveData;", "_customerIdError", "customerIdError", "getCustomerIdError", "_state", "Lcom/softland/callqtv/viewmodel/RegistrationState;", "state", "getState", "setCustomerId", "", "id", "resetState", "startRegistrationFlow", "performDeviceRegistration", "macAddress", "", "authRes", "(Ljava/lang/String;ILcom/softland/callqtv/data/model/ProductAuthenticationRes;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", "checkDeviceStatus", "regRes", "(Ljava/lang/String;ILcom/softland/callqtv/data/model/ProductAuthenticationRes;Lcom/softland/callqtv/data/model/DeviceRegistrationResponse;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", "retryRegistrationFlow", "fetchServiceUrl", "projectCode", "saveAuthDetails", "res", "Lcom/softland/callqtv/data/model/CheckDeviceStatusResponse;", "CallQTV_v1.0.0_CallQTVRelease"})
+public final class RegistrationViewModel extends androidx.lifecycle.AndroidViewModel {
+    @org.jetbrains.annotations.NotNull()
+    private final com.softland.callqtv.data.repository.ProjectRepository projectRepository = null;
+    @org.jetbrains.annotations.NotNull()
+    private final com.softland.callqtv.data.repository.ServiceUrlRepository serviceRepository = null;
+    private final android.content.SharedPreferences authPrefs = null;
+    @org.jetbrains.annotations.NotNull()
+    private final com.google.gson.Gson gson = null;
+    @org.jetbrains.annotations.Nullable()
+    private com.softland.callqtv.data.model.ProductAuthenticationRes lastAuthRes;
+    @org.jetbrains.annotations.Nullable()
+    private com.softland.callqtv.data.model.DeviceRegistrationResponse lastRegRes;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.MutableLiveData<java.lang.String> _customerId = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.LiveData<java.lang.String> customerId = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.MutableLiveData<java.lang.String> _customerIdError = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.LiveData<java.lang.String> customerIdError = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.MutableLiveData<com.softland.callqtv.viewmodel.RegistrationState> _state = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.LiveData<com.softland.callqtv.viewmodel.RegistrationState> state = null;
+    
+    public RegistrationViewModel(@org.jetbrains.annotations.NotNull()
+    android.app.Application application) {
+        super(null);
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final androidx.lifecycle.LiveData<java.lang.String> getCustomerId() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final androidx.lifecycle.LiveData<java.lang.String> getCustomerIdError() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final androidx.lifecycle.LiveData<com.softland.callqtv.viewmodel.RegistrationState> getState() {
+        return null;
+    }
+    
+    public final void setCustomerId(@org.jetbrains.annotations.NotNull()
+    java.lang.String id) {
+    }
+    
+    public final void resetState() {
+    }
+    
+    public final void startRegistrationFlow() {
+    }
+    
+    private final java.lang.Object performDeviceRegistration(java.lang.String macAddress, int customerId, com.softland.callqtv.data.model.ProductAuthenticationRes authRes, kotlin.coroutines.Continuation<? super kotlin.Unit> $completion) {
+        return null;
+    }
+    
+    private final java.lang.Object checkDeviceStatus(java.lang.String macAddress, int customerId, com.softland.callqtv.data.model.ProductAuthenticationRes authRes, com.softland.callqtv.data.model.DeviceRegistrationResponse regRes, kotlin.coroutines.Continuation<? super kotlin.Unit> $completion) {
+        return null;
+    }
+    
+    public final void retryRegistrationFlow() {
+    }
+    
+    public final void fetchServiceUrl(@org.jetbrains.annotations.NotNull()
+    java.lang.String projectCode) {
+    }
+    
+    private final void saveAuthDetails(int customerId, com.softland.callqtv.data.model.CheckDeviceStatusResponse res) {
+    }
+}

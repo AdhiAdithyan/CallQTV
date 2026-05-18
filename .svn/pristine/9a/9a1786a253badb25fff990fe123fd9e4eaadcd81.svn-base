@@ -1,0 +1,537 @@
+package com.softland.callqtv.data.local;
+
+import androidx.annotation.NonNull;
+import androidx.room.EntityInsertAdapter;
+import androidx.room.RoomDatabase;
+import androidx.room.util.DBUtil;
+import androidx.room.util.SQLiteStatementUtil;
+import androidx.sqlite.SQLiteStatement;
+import java.lang.Boolean;
+import java.lang.Class;
+import java.lang.Integer;
+import java.lang.NullPointerException;
+import java.lang.Override;
+import java.lang.String;
+import java.lang.SuppressWarnings;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import javax.annotation.processing.Generated;
+
+@Generated("androidx.room.RoomProcessor")
+@SuppressWarnings({"unchecked", "deprecation", "removal"})
+public final class CounterDao_Impl implements CounterDao {
+  private final RoomDatabase __db;
+
+  private final EntityInsertAdapter<CounterEntity> __insertAdapterOfCounterEntity;
+
+  public CounterDao_Impl(@NonNull final RoomDatabase __db) {
+    this.__db = __db;
+    this.__insertAdapterOfCounterEntity = new EntityInsertAdapter<CounterEntity>() {
+      @Override
+      @NonNull
+      protected String createQuery() {
+        return "INSERT OR REPLACE INTO `counters` (`id`,`device_id`,`mac_address`,`customer_id`,`counter_id`,`default_name`,`default_code`,`source_device`,`button_index`,`name`,`code`,`row_span`,`col_span`,`is_enabled`,`audio_url`,`audio_name`,`counter_config_id`,`max_token_number`,`dispenser_serial_number`,`dispenser_token_type`,`dispenser_display_name`,`raw_json`) VALUES (nullif(?, 0),?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+      }
+
+      @Override
+      protected void bind(@NonNull final SQLiteStatement statement,
+          @NonNull final CounterEntity entity) {
+        statement.bindLong(1, entity.getId());
+        statement.bindLong(2, entity.getDeviceId());
+        if (entity.getMacAddress() == null) {
+          statement.bindNull(3);
+        } else {
+          statement.bindText(3, entity.getMacAddress());
+        }
+        if (entity.getCustomerId() == null) {
+          statement.bindNull(4);
+        } else {
+          statement.bindText(4, entity.getCustomerId());
+        }
+        if (entity.getCounterId() == null) {
+          statement.bindNull(5);
+        } else {
+          statement.bindText(5, entity.getCounterId());
+        }
+        if (entity.getDefaultName() == null) {
+          statement.bindNull(6);
+        } else {
+          statement.bindText(6, entity.getDefaultName());
+        }
+        if (entity.getDefaultCode() == null) {
+          statement.bindNull(7);
+        } else {
+          statement.bindText(7, entity.getDefaultCode());
+        }
+        if (entity.getSourceDevice() == null) {
+          statement.bindNull(8);
+        } else {
+          statement.bindText(8, entity.getSourceDevice());
+        }
+        if (entity.getButtonIndex() == null) {
+          statement.bindNull(9);
+        } else {
+          statement.bindLong(9, entity.getButtonIndex());
+        }
+        if (entity.getName() == null) {
+          statement.bindNull(10);
+        } else {
+          statement.bindText(10, entity.getName());
+        }
+        if (entity.getCode() == null) {
+          statement.bindNull(11);
+        } else {
+          statement.bindText(11, entity.getCode());
+        }
+        if (entity.getRowSpan() == null) {
+          statement.bindNull(12);
+        } else {
+          statement.bindLong(12, entity.getRowSpan());
+        }
+        if (entity.getColSpan() == null) {
+          statement.bindNull(13);
+        } else {
+          statement.bindLong(13, entity.getColSpan());
+        }
+        final Integer _tmp = entity.isEnabled() == null ? null : (entity.isEnabled() ? 1 : 0);
+        if (_tmp == null) {
+          statement.bindNull(14);
+        } else {
+          statement.bindLong(14, _tmp);
+        }
+        if (entity.getAudioUrl() == null) {
+          statement.bindNull(15);
+        } else {
+          statement.bindText(15, entity.getAudioUrl());
+        }
+        if (entity.getAudioName() == null) {
+          statement.bindNull(16);
+        } else {
+          statement.bindText(16, entity.getAudioName());
+        }
+        if (entity.getCounterConfigId() == null) {
+          statement.bindNull(17);
+        } else {
+          statement.bindLong(17, entity.getCounterConfigId());
+        }
+        if (entity.getMaxTokenNumber() == null) {
+          statement.bindNull(18);
+        } else {
+          statement.bindLong(18, entity.getMaxTokenNumber());
+        }
+        if (entity.getDispenserSerialNumber() == null) {
+          statement.bindNull(19);
+        } else {
+          statement.bindText(19, entity.getDispenserSerialNumber());
+        }
+        if (entity.getDispenserTokenType() == null) {
+          statement.bindNull(20);
+        } else {
+          statement.bindText(20, entity.getDispenserTokenType());
+        }
+        if (entity.getDispenserDisplayName() == null) {
+          statement.bindNull(21);
+        } else {
+          statement.bindText(21, entity.getDispenserDisplayName());
+        }
+        if (entity.getRawJson() == null) {
+          statement.bindNull(22);
+        } else {
+          statement.bindText(22, entity.getRawJson());
+        }
+      }
+    };
+  }
+
+  @Override
+  public void insertAll(final List<CounterEntity> entities) {
+    if (entities == null) throw new NullPointerException();
+    DBUtil.performBlocking(__db, false, true, (_connection) -> {
+      __insertAdapterOfCounterEntity.insert(_connection, entities);
+      return null;
+    });
+  }
+
+  @Override
+  public List<CounterEntity> getByDeviceId(final int deviceId) {
+    final String _sql = "SELECT * FROM counters WHERE device_id = ? ORDER BY button_index ASC";
+    return DBUtil.performBlocking(__db, true, false, (_connection) -> {
+      final SQLiteStatement _stmt = _connection.prepare(_sql);
+      try {
+        int _argIndex = 1;
+        _stmt.bindLong(_argIndex, deviceId);
+        final int _cursorIndexOfId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "id");
+        final int _cursorIndexOfDeviceId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "device_id");
+        final int _cursorIndexOfMacAddress = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "mac_address");
+        final int _cursorIndexOfCustomerId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "customer_id");
+        final int _cursorIndexOfCounterId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "counter_id");
+        final int _cursorIndexOfDefaultName = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "default_name");
+        final int _cursorIndexOfDefaultCode = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "default_code");
+        final int _cursorIndexOfSourceDevice = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "source_device");
+        final int _cursorIndexOfButtonIndex = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "button_index");
+        final int _cursorIndexOfName = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "name");
+        final int _cursorIndexOfCode = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "code");
+        final int _cursorIndexOfRowSpan = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "row_span");
+        final int _cursorIndexOfColSpan = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "col_span");
+        final int _cursorIndexOfIsEnabled = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "is_enabled");
+        final int _cursorIndexOfAudioUrl = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "audio_url");
+        final int _cursorIndexOfAudioName = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "audio_name");
+        final int _cursorIndexOfCounterConfigId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "counter_config_id");
+        final int _cursorIndexOfMaxTokenNumber = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "max_token_number");
+        final int _cursorIndexOfDispenserSerialNumber = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "dispenser_serial_number");
+        final int _cursorIndexOfDispenserTokenType = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "dispenser_token_type");
+        final int _cursorIndexOfDispenserDisplayName = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "dispenser_display_name");
+        final int _cursorIndexOfRawJson = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "raw_json");
+        final List<CounterEntity> _result = new ArrayList<CounterEntity>();
+        while (_stmt.step()) {
+          final CounterEntity _item;
+          final long _tmpId;
+          _tmpId = _stmt.getLong(_cursorIndexOfId);
+          final int _tmpDeviceId;
+          _tmpDeviceId = (int) (_stmt.getLong(_cursorIndexOfDeviceId));
+          final String _tmpMacAddress;
+          if (_stmt.isNull(_cursorIndexOfMacAddress)) {
+            _tmpMacAddress = null;
+          } else {
+            _tmpMacAddress = _stmt.getText(_cursorIndexOfMacAddress);
+          }
+          final String _tmpCustomerId;
+          if (_stmt.isNull(_cursorIndexOfCustomerId)) {
+            _tmpCustomerId = null;
+          } else {
+            _tmpCustomerId = _stmt.getText(_cursorIndexOfCustomerId);
+          }
+          final String _tmpCounterId;
+          if (_stmt.isNull(_cursorIndexOfCounterId)) {
+            _tmpCounterId = null;
+          } else {
+            _tmpCounterId = _stmt.getText(_cursorIndexOfCounterId);
+          }
+          final String _tmpDefaultName;
+          if (_stmt.isNull(_cursorIndexOfDefaultName)) {
+            _tmpDefaultName = null;
+          } else {
+            _tmpDefaultName = _stmt.getText(_cursorIndexOfDefaultName);
+          }
+          final String _tmpDefaultCode;
+          if (_stmt.isNull(_cursorIndexOfDefaultCode)) {
+            _tmpDefaultCode = null;
+          } else {
+            _tmpDefaultCode = _stmt.getText(_cursorIndexOfDefaultCode);
+          }
+          final String _tmpSourceDevice;
+          if (_stmt.isNull(_cursorIndexOfSourceDevice)) {
+            _tmpSourceDevice = null;
+          } else {
+            _tmpSourceDevice = _stmt.getText(_cursorIndexOfSourceDevice);
+          }
+          final Integer _tmpButtonIndex;
+          if (_stmt.isNull(_cursorIndexOfButtonIndex)) {
+            _tmpButtonIndex = null;
+          } else {
+            _tmpButtonIndex = (int) (_stmt.getLong(_cursorIndexOfButtonIndex));
+          }
+          final String _tmpName;
+          if (_stmt.isNull(_cursorIndexOfName)) {
+            _tmpName = null;
+          } else {
+            _tmpName = _stmt.getText(_cursorIndexOfName);
+          }
+          final String _tmpCode;
+          if (_stmt.isNull(_cursorIndexOfCode)) {
+            _tmpCode = null;
+          } else {
+            _tmpCode = _stmt.getText(_cursorIndexOfCode);
+          }
+          final Integer _tmpRowSpan;
+          if (_stmt.isNull(_cursorIndexOfRowSpan)) {
+            _tmpRowSpan = null;
+          } else {
+            _tmpRowSpan = (int) (_stmt.getLong(_cursorIndexOfRowSpan));
+          }
+          final Integer _tmpColSpan;
+          if (_stmt.isNull(_cursorIndexOfColSpan)) {
+            _tmpColSpan = null;
+          } else {
+            _tmpColSpan = (int) (_stmt.getLong(_cursorIndexOfColSpan));
+          }
+          final Boolean _tmpIsEnabled;
+          final Integer _tmp;
+          if (_stmt.isNull(_cursorIndexOfIsEnabled)) {
+            _tmp = null;
+          } else {
+            _tmp = (int) (_stmt.getLong(_cursorIndexOfIsEnabled));
+          }
+          _tmpIsEnabled = _tmp == null ? null : _tmp != 0;
+          final String _tmpAudioUrl;
+          if (_stmt.isNull(_cursorIndexOfAudioUrl)) {
+            _tmpAudioUrl = null;
+          } else {
+            _tmpAudioUrl = _stmt.getText(_cursorIndexOfAudioUrl);
+          }
+          final String _tmpAudioName;
+          if (_stmt.isNull(_cursorIndexOfAudioName)) {
+            _tmpAudioName = null;
+          } else {
+            _tmpAudioName = _stmt.getText(_cursorIndexOfAudioName);
+          }
+          final Integer _tmpCounterConfigId;
+          if (_stmt.isNull(_cursorIndexOfCounterConfigId)) {
+            _tmpCounterConfigId = null;
+          } else {
+            _tmpCounterConfigId = (int) (_stmt.getLong(_cursorIndexOfCounterConfigId));
+          }
+          final Integer _tmpMaxTokenNumber;
+          if (_stmt.isNull(_cursorIndexOfMaxTokenNumber)) {
+            _tmpMaxTokenNumber = null;
+          } else {
+            _tmpMaxTokenNumber = (int) (_stmt.getLong(_cursorIndexOfMaxTokenNumber));
+          }
+          final String _tmpDispenserSerialNumber;
+          if (_stmt.isNull(_cursorIndexOfDispenserSerialNumber)) {
+            _tmpDispenserSerialNumber = null;
+          } else {
+            _tmpDispenserSerialNumber = _stmt.getText(_cursorIndexOfDispenserSerialNumber);
+          }
+          final String _tmpDispenserTokenType;
+          if (_stmt.isNull(_cursorIndexOfDispenserTokenType)) {
+            _tmpDispenserTokenType = null;
+          } else {
+            _tmpDispenserTokenType = _stmt.getText(_cursorIndexOfDispenserTokenType);
+          }
+          final String _tmpDispenserDisplayName;
+          if (_stmt.isNull(_cursorIndexOfDispenserDisplayName)) {
+            _tmpDispenserDisplayName = null;
+          } else {
+            _tmpDispenserDisplayName = _stmt.getText(_cursorIndexOfDispenserDisplayName);
+          }
+          final String _tmpRawJson;
+          if (_stmt.isNull(_cursorIndexOfRawJson)) {
+            _tmpRawJson = null;
+          } else {
+            _tmpRawJson = _stmt.getText(_cursorIndexOfRawJson);
+          }
+          _item = new CounterEntity(_tmpId,_tmpDeviceId,_tmpMacAddress,_tmpCustomerId,_tmpCounterId,_tmpDefaultName,_tmpDefaultCode,_tmpSourceDevice,_tmpButtonIndex,_tmpName,_tmpCode,_tmpRowSpan,_tmpColSpan,_tmpIsEnabled,_tmpAudioUrl,_tmpAudioName,_tmpCounterConfigId,_tmpMaxTokenNumber,_tmpDispenserSerialNumber,_tmpDispenserTokenType,_tmpDispenserDisplayName,_tmpRawJson);
+          _result.add(_item);
+        }
+        return _result;
+      } finally {
+        _stmt.close();
+      }
+    });
+  }
+
+  @Override
+  public List<CounterEntity> getByMacAndCustomer(final String macAddress, final String customerId) {
+    final String _sql = "SELECT * FROM counters WHERE mac_address = ? AND customer_id = ? ORDER BY button_index ASC";
+    return DBUtil.performBlocking(__db, true, false, (_connection) -> {
+      final SQLiteStatement _stmt = _connection.prepare(_sql);
+      try {
+        int _argIndex = 1;
+        if (macAddress == null) {
+          _stmt.bindNull(_argIndex);
+        } else {
+          _stmt.bindText(_argIndex, macAddress);
+        }
+        _argIndex = 2;
+        if (customerId == null) {
+          _stmt.bindNull(_argIndex);
+        } else {
+          _stmt.bindText(_argIndex, customerId);
+        }
+        final int _cursorIndexOfId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "id");
+        final int _cursorIndexOfDeviceId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "device_id");
+        final int _cursorIndexOfMacAddress = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "mac_address");
+        final int _cursorIndexOfCustomerId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "customer_id");
+        final int _cursorIndexOfCounterId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "counter_id");
+        final int _cursorIndexOfDefaultName = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "default_name");
+        final int _cursorIndexOfDefaultCode = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "default_code");
+        final int _cursorIndexOfSourceDevice = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "source_device");
+        final int _cursorIndexOfButtonIndex = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "button_index");
+        final int _cursorIndexOfName = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "name");
+        final int _cursorIndexOfCode = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "code");
+        final int _cursorIndexOfRowSpan = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "row_span");
+        final int _cursorIndexOfColSpan = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "col_span");
+        final int _cursorIndexOfIsEnabled = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "is_enabled");
+        final int _cursorIndexOfAudioUrl = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "audio_url");
+        final int _cursorIndexOfAudioName = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "audio_name");
+        final int _cursorIndexOfCounterConfigId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "counter_config_id");
+        final int _cursorIndexOfMaxTokenNumber = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "max_token_number");
+        final int _cursorIndexOfDispenserSerialNumber = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "dispenser_serial_number");
+        final int _cursorIndexOfDispenserTokenType = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "dispenser_token_type");
+        final int _cursorIndexOfDispenserDisplayName = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "dispenser_display_name");
+        final int _cursorIndexOfRawJson = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "raw_json");
+        final List<CounterEntity> _result = new ArrayList<CounterEntity>();
+        while (_stmt.step()) {
+          final CounterEntity _item;
+          final long _tmpId;
+          _tmpId = _stmt.getLong(_cursorIndexOfId);
+          final int _tmpDeviceId;
+          _tmpDeviceId = (int) (_stmt.getLong(_cursorIndexOfDeviceId));
+          final String _tmpMacAddress;
+          if (_stmt.isNull(_cursorIndexOfMacAddress)) {
+            _tmpMacAddress = null;
+          } else {
+            _tmpMacAddress = _stmt.getText(_cursorIndexOfMacAddress);
+          }
+          final String _tmpCustomerId;
+          if (_stmt.isNull(_cursorIndexOfCustomerId)) {
+            _tmpCustomerId = null;
+          } else {
+            _tmpCustomerId = _stmt.getText(_cursorIndexOfCustomerId);
+          }
+          final String _tmpCounterId;
+          if (_stmt.isNull(_cursorIndexOfCounterId)) {
+            _tmpCounterId = null;
+          } else {
+            _tmpCounterId = _stmt.getText(_cursorIndexOfCounterId);
+          }
+          final String _tmpDefaultName;
+          if (_stmt.isNull(_cursorIndexOfDefaultName)) {
+            _tmpDefaultName = null;
+          } else {
+            _tmpDefaultName = _stmt.getText(_cursorIndexOfDefaultName);
+          }
+          final String _tmpDefaultCode;
+          if (_stmt.isNull(_cursorIndexOfDefaultCode)) {
+            _tmpDefaultCode = null;
+          } else {
+            _tmpDefaultCode = _stmt.getText(_cursorIndexOfDefaultCode);
+          }
+          final String _tmpSourceDevice;
+          if (_stmt.isNull(_cursorIndexOfSourceDevice)) {
+            _tmpSourceDevice = null;
+          } else {
+            _tmpSourceDevice = _stmt.getText(_cursorIndexOfSourceDevice);
+          }
+          final Integer _tmpButtonIndex;
+          if (_stmt.isNull(_cursorIndexOfButtonIndex)) {
+            _tmpButtonIndex = null;
+          } else {
+            _tmpButtonIndex = (int) (_stmt.getLong(_cursorIndexOfButtonIndex));
+          }
+          final String _tmpName;
+          if (_stmt.isNull(_cursorIndexOfName)) {
+            _tmpName = null;
+          } else {
+            _tmpName = _stmt.getText(_cursorIndexOfName);
+          }
+          final String _tmpCode;
+          if (_stmt.isNull(_cursorIndexOfCode)) {
+            _tmpCode = null;
+          } else {
+            _tmpCode = _stmt.getText(_cursorIndexOfCode);
+          }
+          final Integer _tmpRowSpan;
+          if (_stmt.isNull(_cursorIndexOfRowSpan)) {
+            _tmpRowSpan = null;
+          } else {
+            _tmpRowSpan = (int) (_stmt.getLong(_cursorIndexOfRowSpan));
+          }
+          final Integer _tmpColSpan;
+          if (_stmt.isNull(_cursorIndexOfColSpan)) {
+            _tmpColSpan = null;
+          } else {
+            _tmpColSpan = (int) (_stmt.getLong(_cursorIndexOfColSpan));
+          }
+          final Boolean _tmpIsEnabled;
+          final Integer _tmp;
+          if (_stmt.isNull(_cursorIndexOfIsEnabled)) {
+            _tmp = null;
+          } else {
+            _tmp = (int) (_stmt.getLong(_cursorIndexOfIsEnabled));
+          }
+          _tmpIsEnabled = _tmp == null ? null : _tmp != 0;
+          final String _tmpAudioUrl;
+          if (_stmt.isNull(_cursorIndexOfAudioUrl)) {
+            _tmpAudioUrl = null;
+          } else {
+            _tmpAudioUrl = _stmt.getText(_cursorIndexOfAudioUrl);
+          }
+          final String _tmpAudioName;
+          if (_stmt.isNull(_cursorIndexOfAudioName)) {
+            _tmpAudioName = null;
+          } else {
+            _tmpAudioName = _stmt.getText(_cursorIndexOfAudioName);
+          }
+          final Integer _tmpCounterConfigId;
+          if (_stmt.isNull(_cursorIndexOfCounterConfigId)) {
+            _tmpCounterConfigId = null;
+          } else {
+            _tmpCounterConfigId = (int) (_stmt.getLong(_cursorIndexOfCounterConfigId));
+          }
+          final Integer _tmpMaxTokenNumber;
+          if (_stmt.isNull(_cursorIndexOfMaxTokenNumber)) {
+            _tmpMaxTokenNumber = null;
+          } else {
+            _tmpMaxTokenNumber = (int) (_stmt.getLong(_cursorIndexOfMaxTokenNumber));
+          }
+          final String _tmpDispenserSerialNumber;
+          if (_stmt.isNull(_cursorIndexOfDispenserSerialNumber)) {
+            _tmpDispenserSerialNumber = null;
+          } else {
+            _tmpDispenserSerialNumber = _stmt.getText(_cursorIndexOfDispenserSerialNumber);
+          }
+          final String _tmpDispenserTokenType;
+          if (_stmt.isNull(_cursorIndexOfDispenserTokenType)) {
+            _tmpDispenserTokenType = null;
+          } else {
+            _tmpDispenserTokenType = _stmt.getText(_cursorIndexOfDispenserTokenType);
+          }
+          final String _tmpDispenserDisplayName;
+          if (_stmt.isNull(_cursorIndexOfDispenserDisplayName)) {
+            _tmpDispenserDisplayName = null;
+          } else {
+            _tmpDispenserDisplayName = _stmt.getText(_cursorIndexOfDispenserDisplayName);
+          }
+          final String _tmpRawJson;
+          if (_stmt.isNull(_cursorIndexOfRawJson)) {
+            _tmpRawJson = null;
+          } else {
+            _tmpRawJson = _stmt.getText(_cursorIndexOfRawJson);
+          }
+          _item = new CounterEntity(_tmpId,_tmpDeviceId,_tmpMacAddress,_tmpCustomerId,_tmpCounterId,_tmpDefaultName,_tmpDefaultCode,_tmpSourceDevice,_tmpButtonIndex,_tmpName,_tmpCode,_tmpRowSpan,_tmpColSpan,_tmpIsEnabled,_tmpAudioUrl,_tmpAudioName,_tmpCounterConfigId,_tmpMaxTokenNumber,_tmpDispenserSerialNumber,_tmpDispenserTokenType,_tmpDispenserDisplayName,_tmpRawJson);
+          _result.add(_item);
+        }
+        return _result;
+      } finally {
+        _stmt.close();
+      }
+    });
+  }
+
+  @Override
+  public void deleteByDeviceAndCustomer(final int deviceId, final String macAddress,
+      final String customerId) {
+    final String _sql = "DELETE FROM counters WHERE device_id = ? AND mac_address = ? AND customer_id = ?";
+    DBUtil.performBlocking(__db, false, true, (_connection) -> {
+      final SQLiteStatement _stmt = _connection.prepare(_sql);
+      try {
+        int _argIndex = 1;
+        _stmt.bindLong(_argIndex, deviceId);
+        _argIndex = 2;
+        if (macAddress == null) {
+          _stmt.bindNull(_argIndex);
+        } else {
+          _stmt.bindText(_argIndex, macAddress);
+        }
+        _argIndex = 3;
+        if (customerId == null) {
+          _stmt.bindNull(_argIndex);
+        } else {
+          _stmt.bindText(_argIndex, customerId);
+        }
+        _stmt.step();
+        return null;
+      } finally {
+        _stmt.close();
+      }
+    });
+  }
+
+  @NonNull
+  public static List<Class<?>> getRequiredConverters() {
+    return Collections.emptyList();
+  }
+}

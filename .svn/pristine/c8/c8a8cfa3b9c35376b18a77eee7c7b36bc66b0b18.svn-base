@@ -1,0 +1,25 @@
+package com.softland.callqtv.viewmodel;
+
+@kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u00000\n\u0002\u0018\u0002\n\u0002\u0018\u0002\n\u0002\u0010\u000b\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0003\n\u0002\u0018\u0002\n\u0000\n\u0002\u0010\u0002\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0004\u0018\u00002\b\u0012\u0004\u0012\u00020\u00020\u0001B\u000f\u0012\u0006\u0010\u0003\u001a\u00020\u0004\u00a2\u0006\u0004\b\u0005\u0010\u0006J\u0010\u0010\t\u001a\u00020\n2\u0006\u0010\u000b\u001a\u00020\fH\u0002J\b\u0010\u0010\u001a\u00020\nH\u0014J\b\u0010\u0011\u001a\u00020\nH\u0014R\u000e\u0010\u0007\u001a\u00020\bX\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u0010\u0010\r\u001a\u00020\u000eX\u0082\u0004\u00a2\u0006\u0004\n\u0002\u0010\u000f\u00a8\u0006\u0012"}, d2 = {"Lcom/softland/callqtv/viewmodel/NetworkLiveData;", "Landroidx/lifecycle/LiveData;", "", "context", "Landroid/content/Context;", "<init>", "(Landroid/content/Context;)V", "connectivityManager", "Landroid/net/ConnectivityManager;", "checkNetwork", "", "network", "Landroid/net/Network;", "networkCallback", "Landroid/net/ConnectivityManager$NetworkCallback;", "Landroid/net/ConnectivityManager$NetworkCallback;", "onActive", "onInactive", "CallQTV_v1.0.1_CallQTVDebug"})
+public final class NetworkLiveData extends androidx.lifecycle.LiveData<java.lang.Boolean> {
+    @org.jetbrains.annotations.NotNull()
+    private final android.net.ConnectivityManager connectivityManager = null;
+    @org.jetbrains.annotations.NotNull()
+    private final android.net.ConnectivityManager.NetworkCallback networkCallback = null;
+    
+    public NetworkLiveData(@org.jetbrains.annotations.NotNull()
+    android.content.Context context) {
+        super(null);
+    }
+    
+    private final void checkNetwork(android.net.Network network) {
+    }
+    
+    @java.lang.Override()
+    protected void onActive() {
+    }
+    
+    @java.lang.Override()
+    protected void onInactive() {
+    }
+}

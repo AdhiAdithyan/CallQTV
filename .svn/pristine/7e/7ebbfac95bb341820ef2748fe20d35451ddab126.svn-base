@@ -1,0 +1,5 @@
+
+- Application is in debug mode.
+- Log file created: `error_log.txt`
+
+If you encounter any runtime errors or unexpected behavior, please check this file for details.

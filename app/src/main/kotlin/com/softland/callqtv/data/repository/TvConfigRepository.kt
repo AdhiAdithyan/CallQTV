@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
 import com.softland.callqtv.data.model.MappedBroker
+import com.softland.callqtv.data.model.BrokerConfig
 import com.softland.callqtv.data.model.TvConfigPayload
 import com.softland.callqtv.data.model.TvConfigRequest
 import com.softland.callqtv.data.model.TvConfigResponse
@@ -175,10 +176,10 @@ class TvConfigRepository(private val context: Context) {
 
                 // Always replace mapped_broker rows for this mac+customer so it stays in sync
                 // with the latest API response (avoids stale rows when broker id/host/topic change).
-                val mappedBrokerEntity = body.toMappedBrokerEntityOrNull(macAddress, customerId)
+                val mappedBrokerEntities = body.toMappedBrokerEntities(macAddress, customerId)
                 mappedBrokerDao.deleteByMacAndCustomer(macAddress, customerId)
-                if (mappedBrokerEntity != null) {
-                    mappedBrokerDao.upsert(mappedBrokerEntity)
+                if (mappedBrokerEntities.isNotEmpty()) {
+                    mappedBrokerEntities.forEach { mappedBrokerDao.upsert(it) }
                 }
 
                 // Always replace child tables with the latest API response so DB stays in sync
@@ -315,7 +316,25 @@ class TvConfigRepository(private val context: Context) {
         val mappedBrokerJson = if (this.mappedBroker != null) {
             gson.toJson(this.mappedBroker)
         } else {
-            null
+            this.connectedDevices
+                ?.firstOrNull { it.deviceType.equals("BROKER", ignoreCase = true) }
+                ?.let { brokerDevice ->
+                    val cfg = brokerDevice.config?.let {
+                        try {
+                            gson.fromJson(it, BrokerConfig::class.java)
+                        } catch (_: Exception) {
+                            null
+                        }
+                    }
+                    gson.toJson(
+                        MappedBroker(
+                            id = brokerDevice.id,
+                            serialNumber = brokerDevice.serialNumber,
+                            deviceType = brokerDevice.deviceType,
+                            config = cfg
+                        )
+                    )
+                }
         }
         val countersJson = gson.toJson(this.counters ?: emptyList<Any>())
         val shiftDetailsJson = this.shiftDetails
@@ -324,6 +343,7 @@ class TvConfigRepository(private val context: Context) {
 
         val currentProfileJson = this.currentProfile?.let { gson.toJson(it) }
         val connectedDevicesJson = this.connectedDevices?.let { gson.toJson(it) }
+        val keypadsJson = this.keypads?.let { gson.toJson(it) }
         val sc = this.scrollConfig
         val scrollTextLinesJson = sc?.scrollTextLines?.let { gson.toJson(it) }
 
@@ -369,7 +389,10 @@ class TvConfigRepository(private val context: Context) {
             connectedDevicesJson = connectedDevicesJson,
             scrollEnabled = sc?.scrollEnabled,
             noOfTextFields = sc?.noOfTextFields,
-            scrollTextLinesJson = scrollTextLinesJson
+            scrollTextLinesJson = scrollTextLinesJson,
+            keypadsJson = keypadsJson,
+            scrollTextColor = sc?.scrollTextColor?.takeIf { it.isNotBlank() }
+                ?: cfg.scrollTextColor?.takeIf { it.isNotBlank() }
         )
     }
 
@@ -388,10 +411,13 @@ class TvConfigRepository(private val context: Context) {
                 macAddress = macAddress,
                 customerId = customerId,
                 counterId = c.counterId,
-                defaultName = c.defaultName,
+                defaultName = c.defaultName ?: c.name,
                 defaultCode = c.defaultCode,
+                keypadIndex = c.keypadIndex,
+                dispenserIndex = c.dispenserIndex,
                 sourceDevice = this.deviceSerial,
                 buttonIndex = c.buttonIndex,
+                dispenserButtonNumber = c.dispenserButtonIndex ?: c.dispenserButtonNumber,
                 name = c.name,
                 code = c.code,
                 rowSpan = c.rowSpan,
@@ -401,7 +427,8 @@ class TvConfigRepository(private val context: Context) {
                 audioName = c.audioName,
                 counterConfigId = c.counterConfigId,
                 maxTokenNumber = c.maxTokenNumber,
-                dispenserSerialNumber = c.dispenserSerialNumber,
+                dispenserSerialNumber = c.dispenserSn?.takeIf { it.isNotBlank() }
+                    ?: c.dispenserSerialNumber,
                 dispenserTokenType = c.dispenserTokenType,
                 dispenserDisplayName = c.dispenserDisplayName,
                 rawJson = gson.toJson(c)
@@ -409,31 +436,67 @@ class TvConfigRepository(private val context: Context) {
         }
     }
 
-    private fun TvConfigResponse.toMappedBrokerEntityOrNull(
+    private fun TvConfigResponse.toMappedBrokerEntities(
         macAddress: String,
         customerId: String
-    ): MappedBrokerEntity? {
-        val deviceIdLocal = this.deviceId ?: return null
-        val broker = this.mappedBroker ?: return null
-        val brokerId = broker.id ?: return null
+    ): List<MappedBrokerEntity> {
+        val deviceIdLocal = this.deviceId ?: return emptyList()
+        val brokers = mutableListOf<MappedBrokerEntity>()
 
-        val rawJson = gson.toJson(broker)
-        val cfg = broker.config
+        this.mappedBroker?.let { broker ->
+            val brokerId = broker.id
+            if (brokerId != null) {
+                val rawJson = gson.toJson(broker)
+                val cfg = broker.config
+                brokers.add(
+                    MappedBrokerEntity(
+                        deviceId = deviceIdLocal,
+                        macAddress = macAddress,
+                        customerId = customerId,
+                        brokerId = brokerId,
+                        serialNumber = broker.serialNumber,
+                        deviceType = broker.deviceType,
+                        ssid = cfg?.ssid,
+                        password = cfg?.password,
+                        host = cfg?.host,
+                        port = cfg?.port,
+                        topic = cfg?.topic,
+                        mappedBrokerJson = rawJson
+                    )
+                )
+            }
+        }
 
-        return MappedBrokerEntity(
-            deviceId = deviceIdLocal,
-            macAddress = macAddress,
-            customerId = customerId,
-            brokerId = brokerId,
-            serialNumber = broker.serialNumber,
-            deviceType = broker.deviceType,
-            ssid = cfg?.ssid,
-            password = cfg?.password,
-            host = cfg?.host,
-            port = cfg?.port,
-            topic = cfg?.topic,
-            mappedBrokerJson = rawJson
-        )
+        this.connectedDevices
+            ?.filter { it.deviceType.equals("BROKER", ignoreCase = true) }
+            ?.forEach { brokerDevice ->
+                val brokerId = brokerDevice.id ?: return@forEach
+                val cfg = brokerDevice.config?.let {
+                    try {
+                        gson.fromJson(it, BrokerConfig::class.java)
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+                brokers.add(
+                    MappedBrokerEntity(
+                        deviceId = deviceIdLocal,
+                        macAddress = macAddress,
+                        customerId = customerId,
+                        brokerId = brokerId,
+                        serialNumber = brokerDevice.serialNumber,
+                        deviceType = brokerDevice.deviceType,
+                        ssid = cfg?.ssid,
+                        password = cfg?.password,
+                        host = cfg?.host,
+                        port = cfg?.port,
+                        topic = cfg?.topic,
+                        mappedBrokerJson = gson.toJson(brokerDevice)
+                    )
+                )
+            }
+
+        return brokers
     }
 
     private fun TvConfigResponse.toAdFileEntities(

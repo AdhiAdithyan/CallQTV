@@ -1,0 +1,440 @@
+package com.softland.callqtv.data.model;
+
+@kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u0000*\n\u0002\u0018\u0002\n\u0002\u0010\u0000\n\u0000\n\u0002\u0010\u000e\n\u0002\b\u0003\n\u0002\u0010\u000b\n\u0002\b\u0006\n\u0002\u0010\b\n\u0002\b\u000f\n\u0002\u0010 \n\u0002\bG\b\u0086\b\u0018\u00002\u00020\u0001B\u00d1\u0002\u0012\n\b\u0002\u0010\u0002\u001a\u0004\u0018\u00010\u0003\u0012\n\b\u0002\u0010\u0004\u001a\u0004\u0018\u00010\u0003\u0012\n\b\u0002\u0010\u0005\u001a\u0004\u0018\u00010\u0003\u0012\n\b\u0002\u0010\u0006\u001a\u0004\u0018\u00010\u0007\u0012\n\b\u0002\u0010\b\u001a\u0004\u0018\u00010\u0007\u0012\n\b\u0002\u0010\t\u001a\u0004\u0018\u00010\u0007\u0012\n\b\u0002\u0010\n\u001a\u0004\u0018\u00010\u0007\u0012\n\b\u0002\u0010\u000b\u001a\u0004\u0018\u00010\u0003\u0012\n\b\u0002\u0010\f\u001a\u0004\u0018\u00010\u0003\u0012\n\b\u0002\u0010\r\u001a\u0004\u0018\u00010\u000e\u0012\n\b\u0002\u0010\u000f\u001a\u0004\u0018\u00010\u000e\u0012\n\b\u0002\u0010\u0010\u001a\u0004\u0018\u00010\u0003\u0012\n\b\u0002\u0010\u0011\u001a\u0004\u0018\u00010\u0003\u0012\n\b\u0002\u0010\u0012\u001a\u0004\u0018\u00010\u000e\u0012\n\b\u0002\u0010\u0013\u001a\u0004\u0018\u00010\u000e\u0012\n\b\u0002\u0010\u0014\u001a\u0004\u0018\u00010\u000e\u0012\n\b\u0002\u0010\u0015\u001a\u0004\u0018\u00010\u000e\u0012\n\b\u0002\u0010\u0016\u001a\u0004\u0018\u00010\u0003\u0012\n\b\u0002\u0010\u0017\u001a\u0004\u0018\u00010\u0003\u0012\n\b\u0002\u0010\u0018\u001a\u0004\u0018\u00010\u0007\u0012\n\b\u0002\u0010\u0019\u001a\u0004\u0018\u00010\u000e\u0012\n\b\u0002\u0010\u001a\u001a\u0004\u0018\u00010\u0003\u0012\n\b\u0002\u0010\u001b\u001a\u0004\u0018\u00010\u0003\u0012\n\b\u0002\u0010\u001c\u001a\u0004\u0018\u00010\u000e\u0012\u0010\b\u0002\u0010\u001d\u001a\n\u0012\u0004\u0012\u00020\u0003\u0018\u00010\u001e\u0012\n\b\u0002\u0010\u001f\u001a\u0004\u0018\u00010\u0003\u0012\n\b\u0002\u0010 \u001a\u0004\u0018\u00010\u000e\u00a2\u0006\u0004\b!\u0010\"J\u000b\u0010D\u001a\u0004\u0018\u00010\u0003H\u00c6\u0003J\u000b\u0010E\u001a\u0004\u0018\u00010\u0003H\u00c6\u0003J\u000b\u0010F\u001a\u0004\u0018\u00010\u0003H\u00c6\u0003J\u0010\u0010G\u001a\u0004\u0018\u00010\u0007H\u00c6\u0003\u00a2\u0006\u0002\u0010(J\u0010\u0010H\u001a\u0004\u0018\u00010\u0007H\u00c6\u0003\u00a2\u0006\u0002\u0010(J\u0010\u0010I\u001a\u0004\u0018\u00010\u0007H\u00c6\u0003\u00a2\u0006\u0002\u0010(J\u0010\u0010J\u001a\u0004\u0018\u00010\u0007H\u00c6\u0003\u00a2\u0006\u0002\u0010(J\u000b\u0010K\u001a\u0004\u0018\u00010\u0003H\u00c6\u0003J\u000b\u0010L\u001a\u0004\u0018\u00010\u0003H\u00c6\u0003J\u0010\u0010M\u001a\u0004\u0018\u00010\u000eH\u00c6\u0003\u00a2\u0006\u0002\u00100J\u0010\u0010N\u001a\u0004\u0018\u00010\u000eH\u00c6\u0003\u00a2\u0006\u0002\u00100J\u000b\u0010O\u001a\u0004\u0018\u00010\u0003H\u00c6\u0003J\u000b\u0010P\u001a\u0004\u0018\u00010\u0003H\u00c6\u0003J\u0010\u0010Q\u001a\u0004\u0018\u00010\u000eH\u00c6\u0003\u00a2\u0006\u0002\u00100J\u0010\u0010R\u001a\u0004\u0018\u00010\u000eH\u00c6\u0003\u00a2\u0006\u0002\u00100J\u0010\u0010S\u001a\u0004\u0018\u00010\u000eH\u00c6\u0003\u00a2\u0006\u0002\u00100J\u0010\u0010T\u001a\u0004\u0018\u00010\u000eH\u00c6\u0003\u00a2\u0006\u0002\u00100J\u000b\u0010U\u001a\u0004\u0018\u00010\u0003H\u00c6\u0003J\u000b\u0010V\u001a\u0004\u0018\u00010\u0003H\u00c6\u0003J\u0010\u0010W\u001a\u0004\u0018\u00010\u0007H\u00c6\u0003\u00a2\u0006\u0002\u0010(J\u0010\u0010X\u001a\u0004\u0018\u00010\u000eH\u00c6\u0003\u00a2\u0006\u0002\u00100J\u000b\u0010Y\u001a\u0004\u0018\u00010\u0003H\u00c6\u0003J\u000b\u0010Z\u001a\u0004\u0018\u00010\u0003H\u00c6\u0003J\u0010\u0010[\u001a\u0004\u0018\u00010\u000eH\u00c6\u0003\u00a2\u0006\u0002\u00100J\u0011\u0010\\\u001a\n\u0012\u0004\u0012\u00020\u0003\u0018\u00010\u001eH\u00c6\u0003J\u000b\u0010]\u001a\u0004\u0018\u00010\u0003H\u00c6\u0003J\u0010\u0010^\u001a\u0004\u0018\u00010\u000eH\u00c6\u0003\u00a2\u0006\u0002\u00100J\u00d8\u0002\u0010_\u001a\u00020\u00002\n\b\u0002\u0010\u0002\u001a\u0004\u0018\u00010\u00032\n\b\u0002\u0010\u0004\u001a\u0004\u0018\u00010\u00032\n\b\u0002\u0010\u0005\u001a\u0004\u0018\u00010\u00032\n\b\u0002\u0010\u0006\u001a\u0004\u0018\u00010\u00072\n\b\u0002\u0010\b\u001a\u0004\u0018\u00010\u00072\n\b\u0002\u0010\t\u001a\u0004\u0018\u00010\u00072\n\b\u0002\u0010\n\u001a\u0004\u0018\u00010\u00072\n\b\u0002\u0010\u000b\u001a\u0004\u0018\u00010\u00032\n\b\u0002\u0010\f\u001a\u0004\u0018\u00010\u00032\n\b\u0002\u0010\r\u001a\u0004\u0018\u00010\u000e2\n\b\u0002\u0010\u000f\u001a\u0004\u0018\u00010\u000e2\n\b\u0002\u0010\u0010\u001a\u0004\u0018\u00010\u00032\n\b\u0002\u0010\u0011\u001a\u0004\u0018\u00010\u00032\n\b\u0002\u0010\u0012\u001a\u0004\u0018\u00010\u000e2\n\b\u0002\u0010\u0013\u001a\u0004\u0018\u00010\u000e2\n\b\u0002\u0010\u0014\u001a\u0004\u0018\u00010\u000e2\n\b\u0002\u0010\u0015\u001a\u0004\u0018\u00010\u000e2\n\b\u0002\u0010\u0016\u001a\u0004\u0018\u00010\u00032\n\b\u0002\u0010\u0017\u001a\u0004\u0018\u00010\u00032\n\b\u0002\u0010\u0018\u001a\u0004\u0018\u00010\u00072\n\b\u0002\u0010\u0019\u001a\u0004\u0018\u00010\u000e2\n\b\u0002\u0010\u001a\u001a\u0004\u0018\u00010\u00032\n\b\u0002\u0010\u001b\u001a\u0004\u0018\u00010\u00032\n\b\u0002\u0010\u001c\u001a\u0004\u0018\u00010\u000e2\u0010\b\u0002\u0010\u001d\u001a\n\u0012\u0004\u0012\u00020\u0003\u0018\u00010\u001e2\n\b\u0002\u0010\u001f\u001a\u0004\u0018\u00010\u00032\n\b\u0002\u0010 \u001a\u0004\u0018\u00010\u000eH\u00c6\u0001\u00a2\u0006\u0002\u0010`J\u0013\u0010a\u001a\u00020\u00072\b\u0010b\u001a\u0004\u0018\u00010\u0001H\u00d6\u0003J\t\u0010c\u001a\u00020\u000eH\u00d6\u0001J\t\u0010d\u001a\u00020\u0003H\u00d6\u0001R\u0018\u0010\u0002\u001a\u0004\u0018\u00010\u00038\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b#\u0010$R\u0018\u0010\u0004\u001a\u0004\u0018\u00010\u00038\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b%\u0010$R\u0018\u0010\u0005\u001a\u0004\u0018\u00010\u00038\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b&\u0010$R\u001a\u0010\u0006\u001a\u0004\u0018\u00010\u00078\u0006X\u0087\u0004\u00a2\u0006\n\n\u0002\u0010)\u001a\u0004\b\'\u0010(R\u001a\u0010\b\u001a\u0004\u0018\u00010\u00078\u0006X\u0087\u0004\u00a2\u0006\n\n\u0002\u0010)\u001a\u0004\b*\u0010(R\u001a\u0010\t\u001a\u0004\u0018\u00010\u00078\u0006X\u0087\u0004\u00a2\u0006\n\n\u0002\u0010)\u001a\u0004\b+\u0010(R\u001a\u0010\n\u001a\u0004\u0018\u00010\u00078\u0006X\u0087\u0004\u00a2\u0006\n\n\u0002\u0010)\u001a\u0004\b,\u0010(R\u0018\u0010\u000b\u001a\u0004\u0018\u00010\u00038\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b-\u0010$R\u0018\u0010\f\u001a\u0004\u0018\u00010\u00038\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b.\u0010$R\u001a\u0010\r\u001a\u0004\u0018\u00010\u000e8\u0006X\u0087\u0004\u00a2\u0006\n\n\u0002\u00101\u001a\u0004\b/\u00100R\u001a\u0010\u000f\u001a\u0004\u0018\u00010\u000e8\u0006X\u0087\u0004\u00a2\u0006\n\n\u0002\u00101\u001a\u0004\b2\u00100R\u0018\u0010\u0010\u001a\u0004\u0018\u00010\u00038\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b3\u0010$R\u0018\u0010\u0011\u001a\u0004\u0018\u00010\u00038\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b4\u0010$R\u001a\u0010\u0012\u001a\u0004\u0018\u00010\u000e8\u0006X\u0087\u0004\u00a2\u0006\n\n\u0002\u00101\u001a\u0004\b5\u00100R\u001a\u0010\u0013\u001a\u0004\u0018\u00010\u000e8\u0006X\u0087\u0004\u00a2\u0006\n\n\u0002\u00101\u001a\u0004\b6\u00100R\u001a\u0010\u0014\u001a\u0004\u0018\u00010\u000e8\u0006X\u0087\u0004\u00a2\u0006\n\n\u0002\u00101\u001a\u0004\b7\u00100R\u001a\u0010\u0015\u001a\u0004\u0018\u00010\u000e8\u0006X\u0087\u0004\u00a2\u0006\n\n\u0002\u00101\u001a\u0004\b8\u00100R\u0018\u0010\u0016\u001a\u0004\u0018\u00010\u00038\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b9\u0010$R\u0018\u0010\u0017\u001a\u0004\u0018\u00010\u00038\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b:\u0010$R\u001a\u0010\u0018\u001a\u0004\u0018\u00010\u00078\u0006X\u0087\u0004\u00a2\u0006\n\n\u0002\u0010)\u001a\u0004\b;\u0010(R\u001a\u0010\u0019\u001a\u0004\u0018\u00010\u000e8\u0006X\u0087\u0004\u00a2\u0006\n\n\u0002\u00101\u001a\u0004\b<\u00100R\u0018\u0010\u001a\u001a\u0004\u0018\u00010\u00038\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b=\u0010$R\u0018\u0010\u001b\u001a\u0004\u0018\u00010\u00038\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b>\u0010$R\u001a\u0010\u001c\u001a\u0004\u0018\u00010\u000e8\u0006X\u0087\u0004\u00a2\u0006\n\n\u0002\u00101\u001a\u0004\b?\u00100R\u001e\u0010\u001d\u001a\n\u0012\u0004\u0012\u00020\u0003\u0018\u00010\u001e8\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b@\u0010AR\u0018\u0010\u001f\u001a\u0004\u0018\u00010\u00038\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\bB\u0010$R\u001a\u0010 \u001a\u0004\u0018\u00010\u000e8\u0006X\u0087\u0004\u00a2\u0006\n\n\u0002\u00101\u001a\u0004\bC\u00100\u00a8\u0006e"}, d2 = {"Lcom/softland/callqtv/data/model/TvConfigPayload;", "", "audioLanguage", "", "orientation", "layoutType", "saveAudioExternal", "", "enableCounterAnnouncement", "enableTokenAnnouncement", "enableCounterPrefix", "tokenAudioUrl", "tokenMusicUrl", "displayRows", "", "displayColumns", "counterTextColor", "tokenTextColor", "tokenFontSize", "counterFontSize", "tokensPerCounter", "noOfCounters", "currentTokenColor", "previousTokenColor", "blinkCurrentToken", "blinkSeconds", "tokenFormat", "showAds", "adInterval", "adFiles", "", "adPlacement", "fontSize", "<init>", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Boolean;Ljava/lang/Boolean;Ljava/lang/Boolean;Ljava/lang/Boolean;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Boolean;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/util/List;Ljava/lang/String;Ljava/lang/Integer;)V", "getAudioLanguage", "()Ljava/lang/String;", "getOrientation", "getLayoutType", "getSaveAudioExternal", "()Ljava/lang/Boolean;", "Ljava/lang/Boolean;", "getEnableCounterAnnouncement", "getEnableTokenAnnouncement", "getEnableCounterPrefix", "getTokenAudioUrl", "getTokenMusicUrl", "getDisplayRows", "()Ljava/lang/Integer;", "Ljava/lang/Integer;", "getDisplayColumns", "getCounterTextColor", "getTokenTextColor", "getTokenFontSize", "getCounterFontSize", "getTokensPerCounter", "getNoOfCounters", "getCurrentTokenColor", "getPreviousTokenColor", "getBlinkCurrentToken", "getBlinkSeconds", "getTokenFormat", "getShowAds", "getAdInterval", "getAdFiles", "()Ljava/util/List;", "getAdPlacement", "getFontSize", "component1", "component2", "component3", "component4", "component5", "component6", "component7", "component8", "component9", "component10", "component11", "component12", "component13", "component14", "component15", "component16", "component17", "component18", "component19", "component20", "component21", "component22", "component23", "component24", "component25", "component26", "component27", "copy", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Boolean;Ljava/lang/Boolean;Ljava/lang/Boolean;Ljava/lang/Boolean;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Boolean;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/util/List;Ljava/lang/String;Ljava/lang/Integer;)Lcom/softland/callqtv/data/model/TvConfigPayload;", "equals", "other", "hashCode", "toString", "CallQTV_v1.0.0_CallQTVDebug"})
+public final class TvConfigPayload {
+    @com.google.gson.annotations.SerializedName(value = "audio_language")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.String audioLanguage = null;
+    @com.google.gson.annotations.SerializedName(value = "orientation")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.String orientation = null;
+    @com.google.gson.annotations.SerializedName(value = "layout_type")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.String layoutType = null;
+    @com.google.gson.annotations.SerializedName(value = "save_audio_external")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.Boolean saveAudioExternal = null;
+    @com.google.gson.annotations.SerializedName(value = "enable_counter_announcement")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.Boolean enableCounterAnnouncement = null;
+    @com.google.gson.annotations.SerializedName(value = "enable_token_announcement")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.Boolean enableTokenAnnouncement = null;
+    @com.google.gson.annotations.SerializedName(value = "enable_counter_prifix")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.Boolean enableCounterPrefix = null;
+    @com.google.gson.annotations.SerializedName(value = "token_audio_url")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.String tokenAudioUrl = null;
+    @com.google.gson.annotations.SerializedName(value = "token_music_url")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.String tokenMusicUrl = null;
+    @com.google.gson.annotations.SerializedName(value = "display_rows")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.Integer displayRows = null;
+    @com.google.gson.annotations.SerializedName(value = "display_columns")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.Integer displayColumns = null;
+    @com.google.gson.annotations.SerializedName(value = "counter_text_color")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.String counterTextColor = null;
+    @com.google.gson.annotations.SerializedName(value = "token_text_color")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.String tokenTextColor = null;
+    @com.google.gson.annotations.SerializedName(value = "token_font_size")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.Integer tokenFontSize = null;
+    @com.google.gson.annotations.SerializedName(value = "counter_font_size")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.Integer counterFontSize = null;
+    @com.google.gson.annotations.SerializedName(value = "tokens_per_counter")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.Integer tokensPerCounter = null;
+    @com.google.gson.annotations.SerializedName(value = "no_of_counters")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.Integer noOfCounters = null;
+    @com.google.gson.annotations.SerializedName(value = "current_token_color")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.String currentTokenColor = null;
+    @com.google.gson.annotations.SerializedName(value = "previous_token_color")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.String previousTokenColor = null;
+    @com.google.gson.annotations.SerializedName(value = "blink_current_token")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.Boolean blinkCurrentToken = null;
+    @com.google.gson.annotations.SerializedName(value = "blink_seconds")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.Integer blinkSeconds = null;
+    @com.google.gson.annotations.SerializedName(value = "token_format")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.String tokenFormat = null;
+    @com.google.gson.annotations.SerializedName(value = "show_ads")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.String showAds = null;
+    @com.google.gson.annotations.SerializedName(value = "ad_interval")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.Integer adInterval = null;
+    @com.google.gson.annotations.SerializedName(value = "ad_files")
+    @org.jetbrains.annotations.Nullable()
+    private final java.util.List<java.lang.String> adFiles = null;
+    @com.google.gson.annotations.SerializedName(value = "ad_placement")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.String adPlacement = null;
+    @com.google.gson.annotations.SerializedName(value = "font_size")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.Integer fontSize = null;
+    
+    public TvConfigPayload(@org.jetbrains.annotations.Nullable()
+    java.lang.String audioLanguage, @org.jetbrains.annotations.Nullable()
+    java.lang.String orientation, @org.jetbrains.annotations.Nullable()
+    java.lang.String layoutType, @org.jetbrains.annotations.Nullable()
+    java.lang.Boolean saveAudioExternal, @org.jetbrains.annotations.Nullable()
+    java.lang.Boolean enableCounterAnnouncement, @org.jetbrains.annotations.Nullable()
+    java.lang.Boolean enableTokenAnnouncement, @org.jetbrains.annotations.Nullable()
+    java.lang.Boolean enableCounterPrefix, @org.jetbrains.annotations.Nullable()
+    java.lang.String tokenAudioUrl, @org.jetbrains.annotations.Nullable()
+    java.lang.String tokenMusicUrl, @org.jetbrains.annotations.Nullable()
+    java.lang.Integer displayRows, @org.jetbrains.annotations.Nullable()
+    java.lang.Integer displayColumns, @org.jetbrains.annotations.Nullable()
+    java.lang.String counterTextColor, @org.jetbrains.annotations.Nullable()
+    java.lang.String tokenTextColor, @org.jetbrains.annotations.Nullable()
+    java.lang.Integer tokenFontSize, @org.jetbrains.annotations.Nullable()
+    java.lang.Integer counterFontSize, @org.jetbrains.annotations.Nullable()
+    java.lang.Integer tokensPerCounter, @org.jetbrains.annotations.Nullable()
+    java.lang.Integer noOfCounters, @org.jetbrains.annotations.Nullable()
+    java.lang.String currentTokenColor, @org.jetbrains.annotations.Nullable()
+    java.lang.String previousTokenColor, @org.jetbrains.annotations.Nullable()
+    java.lang.Boolean blinkCurrentToken, @org.jetbrains.annotations.Nullable()
+    java.lang.Integer blinkSeconds, @org.jetbrains.annotations.Nullable()
+    java.lang.String tokenFormat, @org.jetbrains.annotations.Nullable()
+    java.lang.String showAds, @org.jetbrains.annotations.Nullable()
+    java.lang.Integer adInterval, @org.jetbrains.annotations.Nullable()
+    java.util.List<java.lang.String> adFiles, @org.jetbrains.annotations.Nullable()
+    java.lang.String adPlacement, @org.jetbrains.annotations.Nullable()
+    java.lang.Integer fontSize) {
+        super();
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getAudioLanguage() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getOrientation() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getLayoutType() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Boolean getSaveAudioExternal() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Boolean getEnableCounterAnnouncement() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Boolean getEnableTokenAnnouncement() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Boolean getEnableCounterPrefix() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getTokenAudioUrl() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getTokenMusicUrl() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Integer getDisplayRows() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Integer getDisplayColumns() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getCounterTextColor() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getTokenTextColor() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Integer getTokenFontSize() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Integer getCounterFontSize() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Integer getTokensPerCounter() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Integer getNoOfCounters() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getCurrentTokenColor() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getPreviousTokenColor() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Boolean getBlinkCurrentToken() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Integer getBlinkSeconds() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getTokenFormat() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getShowAds() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Integer getAdInterval() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.util.List<java.lang.String> getAdFiles() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getAdPlacement() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Integer getFontSize() {
+        return null;
+    }
+    
+    public TvConfigPayload() {
+        super();
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String component1() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Integer component10() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Integer component11() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String component12() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String component13() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Integer component14() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Integer component15() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Integer component16() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Integer component17() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String component18() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String component19() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String component2() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Boolean component20() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Integer component21() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String component22() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String component23() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Integer component24() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.util.List<java.lang.String> component25() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String component26() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Integer component27() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String component3() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Boolean component4() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Boolean component5() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Boolean component6() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Boolean component7() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String component8() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String component9() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final com.softland.callqtv.data.model.TvConfigPayload copy(@org.jetbrains.annotations.Nullable()
+    java.lang.String audioLanguage, @org.jetbrains.annotations.Nullable()
+    java.lang.String orientation, @org.jetbrains.annotations.Nullable()
+    java.lang.String layoutType, @org.jetbrains.annotations.Nullable()
+    java.lang.Boolean saveAudioExternal, @org.jetbrains.annotations.Nullable()
+    java.lang.Boolean enableCounterAnnouncement, @org.jetbrains.annotations.Nullable()
+    java.lang.Boolean enableTokenAnnouncement, @org.jetbrains.annotations.Nullable()
+    java.lang.Boolean enableCounterPrefix, @org.jetbrains.annotations.Nullable()
+    java.lang.String tokenAudioUrl, @org.jetbrains.annotations.Nullable()
+    java.lang.String tokenMusicUrl, @org.jetbrains.annotations.Nullable()
+    java.lang.Integer displayRows, @org.jetbrains.annotations.Nullable()
+    java.lang.Integer displayColumns, @org.jetbrains.annotations.Nullable()
+    java.lang.String counterTextColor, @org.jetbrains.annotations.Nullable()
+    java.lang.String tokenTextColor, @org.jetbrains.annotations.Nullable()
+    java.lang.Integer tokenFontSize, @org.jetbrains.annotations.Nullable()
+    java.lang.Integer counterFontSize, @org.jetbrains.annotations.Nullable()
+    java.lang.Integer tokensPerCounter, @org.jetbrains.annotations.Nullable()
+    java.lang.Integer noOfCounters, @org.jetbrains.annotations.Nullable()
+    java.lang.String currentTokenColor, @org.jetbrains.annotations.Nullable()
+    java.lang.String previousTokenColor, @org.jetbrains.annotations.Nullable()
+    java.lang.Boolean blinkCurrentToken, @org.jetbrains.annotations.Nullable()
+    java.lang.Integer blinkSeconds, @org.jetbrains.annotations.Nullable()
+    java.lang.String tokenFormat, @org.jetbrains.annotations.Nullable()
+    java.lang.String showAds, @org.jetbrains.annotations.Nullable()
+    java.lang.Integer adInterval, @org.jetbrains.annotations.Nullable()
+    java.util.List<java.lang.String> adFiles, @org.jetbrains.annotations.Nullable()
+    java.lang.String adPlacement, @org.jetbrains.annotations.Nullable()
+    java.lang.Integer fontSize) {
+        return null;
+    }
+    
+    @java.lang.Override()
+    public boolean equals(@org.jetbrains.annotations.Nullable()
+    java.lang.Object other) {
+        return false;
+    }
+    
+    @java.lang.Override()
+    public int hashCode() {
+        return 0;
+    }
+    
+    @java.lang.Override()
+    @org.jetbrains.annotations.NotNull()
+    public java.lang.String toString() {
+        return null;
+    }
+}

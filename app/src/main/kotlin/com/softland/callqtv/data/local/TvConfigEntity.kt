@@ -115,5 +115,11 @@ data class TvConfigEntity(
     val noOfTextFields: Int?,
 
     @ColumnInfo(name = "scroll_text_lines_json")
-    val scrollTextLinesJson: String?
+    val scrollTextLinesJson: String?,
+
+    @ColumnInfo(name = "keypads_json")
+    val keypadsJson: String?,
+
+    @ColumnInfo(name = "scroll_text_color")
+    val scrollTextColor: String?
 )

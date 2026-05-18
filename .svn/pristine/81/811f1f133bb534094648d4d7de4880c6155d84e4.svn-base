@@ -1,0 +1,306 @@
+package com.softland.callqtv.data.model;
+
+@kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u0000\u001c\n\u0002\u0018\u0002\n\u0002\u0010\u0000\n\u0002\b\u0003\n\u0002\u0010\u000e\n\u0002\b\u0011\n\u0002\u0010\b\n\u0002\b:\u0018\u00002\u00020\u0001B\u0007\u00a2\u0006\u0004\b\u0002\u0010\u0003R\u001e\u0010\u0004\u001a\u00020\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u0006\u0010\u0007\"\u0004\b\b\u0010\tR\u001e\u0010\n\u001a\u00020\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u000b\u0010\u0007\"\u0004\b\f\u0010\tR\u001e\u0010\r\u001a\u00020\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u000e\u0010\u0007\"\u0004\b\u000f\u0010\tR\u001e\u0010\u0010\u001a\u00020\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u0011\u0010\u0007\"\u0004\b\u0012\u0010\tR\u001e\u0010\u0013\u001a\u00020\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u0014\u0010\u0007\"\u0004\b\u0015\u0010\tR\u001e\u0010\u0016\u001a\u00020\u00178\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u0018\u0010\u0019\"\u0004\b\u001a\u0010\u001bR\u001e\u0010\u001c\u001a\u00020\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u001d\u0010\u0007\"\u0004\b\u001e\u0010\tR\u001e\u0010\u001f\u001a\u00020\u00178\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b \u0010\u0019\"\u0004\b!\u0010\u001bR\u001e\u0010\"\u001a\u00020\u00178\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b#\u0010\u0019\"\u0004\b$\u0010\u001bR\u001e\u0010%\u001a\u00020\u00178\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b%\u0010\u0019\"\u0004\b&\u0010\u001bR\u001e\u0010\'\u001a\u00020\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b(\u0010\u0007\"\u0004\b)\u0010\tR\u001e\u0010*\u001a\u00020\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b+\u0010\u0007\"\u0004\b,\u0010\tR\u001e\u0010-\u001a\u00020\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b.\u0010\u0007\"\u0004\b/\u0010\tR\u001e\u00100\u001a\u00020\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b1\u0010\u0007\"\u0004\b2\u0010\tR\u001e\u00103\u001a\u00020\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b4\u0010\u0007\"\u0004\b5\u0010\tR\u001e\u00106\u001a\u00020\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b7\u0010\u0007\"\u0004\b8\u0010\tR \u00109\u001a\u0004\u0018\u00010\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b:\u0010\u0007\"\u0004\b;\u0010\tR\u001e\u0010<\u001a\u00020\u00178\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b=\u0010\u0019\"\u0004\b>\u0010\u001bR\u001e\u0010?\u001a\u00020\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b@\u0010\u0007\"\u0004\bA\u0010\tR\u001e\u0010B\u001a\u00020\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\bC\u0010\u0007\"\u0004\bD\u0010\tR\u001e\u0010E\u001a\u00020\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\bF\u0010\u0007\"\u0004\bG\u0010\tR\u001e\u0010H\u001a\u00020\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\bI\u0010\u0007\"\u0004\bJ\u0010\tR\u001e\u0010K\u001a\u00020\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\bL\u0010\u0007\"\u0004\bM\u0010\tR\u001e\u0010N\u001a\u00020\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\bO\u0010\u0007\"\u0004\bP\u0010\t\u00a8\u0006Q"}, d2 = {"Lcom/softland/callqtv/data/model/DeviceRegistrationRequest;", "", "<init>", "()V", "deviceModel", "", "getDeviceModel", "()Ljava/lang/String;", "setDeviceModel", "(Ljava/lang/String;)V", "uniqueIDentifier", "getUniqueIDentifier", "setUniqueIDentifier", "customerContactPerson", "getCustomerContactPerson", "setCustomerContactPerson", "customerCityId", "getCustomerCityId", "setCustomerCityId", "customerState", "getCustomerState", "setCustomerState", "createdBy", "", "getCreatedBy", "()I", "setCreatedBy", "(I)V", "customerCity", "getCustomerCity", "setCustomerCity", "deviceRegistrationId", "getDeviceRegistrationId", "setDeviceRegistrationId", "productRegistrationId", "getProductRegistrationId", "setProductRegistrationId", "isActive", "setActive", "deviceIdentifier5", "getDeviceIdentifier5", "setDeviceIdentifier5", "customerZip", "getCustomerZip", "setCustomerZip", "deviceIdentifier3", "getDeviceIdentifier3", "setDeviceIdentifier3", "customerContact", "getCustomerContact", "setCustomerContact", "deviceIdentifier4", "getDeviceIdentifier4", "setDeviceIdentifier4", "deviceIdentifier1", "getDeviceIdentifier1", "setDeviceIdentifier1", "deviceIdentifier2", "getDeviceIdentifier2", "setDeviceIdentifier2", "deviceType", "getDeviceType", "setDeviceType", "customerEmail", "getCustomerEmail", "setCustomerEmail", "customerURL", "getCustomerURL", "setCustomerURL", "phoneNumber", "getPhoneNumber", "setPhoneNumber", "customerAddress2", "getCustomerAddress2", "setCustomerAddress2", "customerName", "getCustomerName", "setCustomerName", "customerAddress", "getCustomerAddress", "setCustomerAddress", "CallQTV_v1.0.1_CallQTVDebug"})
+public final class DeviceRegistrationRequest {
+    @com.google.gson.annotations.SerializedName(value = "DeviceModel")
+    @com.google.gson.annotations.Expose()
+    @org.jetbrains.annotations.NotNull()
+    private java.lang.String deviceModel = "ANDROID";
+    @com.google.gson.annotations.SerializedName(value = "UniqueIDentifier")
+    @com.google.gson.annotations.Expose()
+    @org.jetbrains.annotations.NotNull()
+    private java.lang.String uniqueIDentifier = "";
+    @com.google.gson.annotations.SerializedName(value = "CustomerContactPerson")
+    @com.google.gson.annotations.Expose()
+    @org.jetbrains.annotations.NotNull()
+    private java.lang.String customerContactPerson = "";
+    @com.google.gson.annotations.SerializedName(value = "CustomerCityId")
+    @com.google.gson.annotations.Expose()
+    @org.jetbrains.annotations.NotNull()
+    private java.lang.String customerCityId = "";
+    @com.google.gson.annotations.SerializedName(value = "CustomerState")
+    @com.google.gson.annotations.Expose()
+    @org.jetbrains.annotations.NotNull()
+    private java.lang.String customerState = "";
+    @com.google.gson.annotations.SerializedName(value = "CreatedBy")
+    @com.google.gson.annotations.Expose()
+    private int createdBy = 1;
+    @com.google.gson.annotations.SerializedName(value = "CustomerCity")
+    @com.google.gson.annotations.Expose()
+    @org.jetbrains.annotations.NotNull()
+    private java.lang.String customerCity = "";
+    @com.google.gson.annotations.SerializedName(value = "DeviceRegistrationId")
+    @com.google.gson.annotations.Expose()
+    private int deviceRegistrationId = 0;
+    @com.google.gson.annotations.SerializedName(value = "ProductRegistrationId")
+    @com.google.gson.annotations.Expose()
+    private int productRegistrationId = 0;
+    @com.google.gson.annotations.SerializedName(value = "IsActive")
+    @com.google.gson.annotations.Expose()
+    private int isActive = 0;
+    @com.google.gson.annotations.SerializedName(value = "DeviceIdentifier5")
+    @com.google.gson.annotations.Expose()
+    @org.jetbrains.annotations.NotNull()
+    private java.lang.String deviceIdentifier5 = "";
+    @com.google.gson.annotations.SerializedName(value = "CustomerZip")
+    @com.google.gson.annotations.Expose()
+    @org.jetbrains.annotations.NotNull()
+    private java.lang.String customerZip = "";
+    @com.google.gson.annotations.SerializedName(value = "DeviceIdentifier3")
+    @com.google.gson.annotations.Expose()
+    @org.jetbrains.annotations.NotNull()
+    private java.lang.String deviceIdentifier3 = "";
+    @com.google.gson.annotations.SerializedName(value = "CustomerContact")
+    @com.google.gson.annotations.Expose()
+    @org.jetbrains.annotations.NotNull()
+    private java.lang.String customerContact = "";
+    @com.google.gson.annotations.SerializedName(value = "DeviceIdentifier4")
+    @com.google.gson.annotations.Expose()
+    @org.jetbrains.annotations.NotNull()
+    private java.lang.String deviceIdentifier4 = "";
+    @com.google.gson.annotations.SerializedName(value = "DeviceIdentifier1")
+    @com.google.gson.annotations.Expose()
+    @org.jetbrains.annotations.NotNull()
+    private java.lang.String deviceIdentifier1 = "";
+    @com.google.gson.annotations.SerializedName(value = "DeviceIdentifier2")
+    @com.google.gson.annotations.Expose()
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String deviceIdentifier2;
+    @com.google.gson.annotations.SerializedName(value = "DeviceType")
+    @com.google.gson.annotations.Expose()
+    private int deviceType = 1;
+    @com.google.gson.annotations.SerializedName(value = "CustomerEmail")
+    @com.google.gson.annotations.Expose()
+    @org.jetbrains.annotations.NotNull()
+    private java.lang.String customerEmail = "";
+    @com.google.gson.annotations.SerializedName(value = "CustomerURL")
+    @com.google.gson.annotations.Expose()
+    @org.jetbrains.annotations.NotNull()
+    private java.lang.String customerURL = "";
+    @com.google.gson.annotations.SerializedName(value = "PhoneNumber")
+    @com.google.gson.annotations.Expose()
+    @org.jetbrains.annotations.NotNull()
+    private java.lang.String phoneNumber = "";
+    @com.google.gson.annotations.SerializedName(value = "CustomerAddress2")
+    @com.google.gson.annotations.Expose()
+    @org.jetbrains.annotations.NotNull()
+    private java.lang.String customerAddress2 = "";
+    @com.google.gson.annotations.SerializedName(value = "CustomerName")
+    @com.google.gson.annotations.Expose()
+    @org.jetbrains.annotations.NotNull()
+    private java.lang.String customerName = "";
+    @com.google.gson.annotations.SerializedName(value = "CustomerAddress")
+    @com.google.gson.annotations.Expose()
+    @org.jetbrains.annotations.NotNull()
+    private java.lang.String customerAddress = "";
+    
+    public DeviceRegistrationRequest() {
+        super();
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getDeviceModel() {
+        return null;
+    }
+    
+    public final void setDeviceModel(@org.jetbrains.annotations.NotNull()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getUniqueIDentifier() {
+        return null;
+    }
+    
+    public final void setUniqueIDentifier(@org.jetbrains.annotations.NotNull()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getCustomerContactPerson() {
+        return null;
+    }
+    
+    public final void setCustomerContactPerson(@org.jetbrains.annotations.NotNull()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getCustomerCityId() {
+        return null;
+    }
+    
+    public final void setCustomerCityId(@org.jetbrains.annotations.NotNull()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getCustomerState() {
+        return null;
+    }
+    
+    public final void setCustomerState(@org.jetbrains.annotations.NotNull()
+    java.lang.String p0) {
+    }
+    
+    public final int getCreatedBy() {
+        return 0;
+    }
+    
+    public final void setCreatedBy(int p0) {
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getCustomerCity() {
+        return null;
+    }
+    
+    public final void setCustomerCity(@org.jetbrains.annotations.NotNull()
+    java.lang.String p0) {
+    }
+    
+    public final int getDeviceRegistrationId() {
+        return 0;
+    }
+    
+    public final void setDeviceRegistrationId(int p0) {
+    }
+    
+    public final int getProductRegistrationId() {
+        return 0;
+    }
+    
+    public final void setProductRegistrationId(int p0) {
+    }
+    
+    public final int isActive() {
+        return 0;
+    }
+    
+    public final void setActive(int p0) {
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getDeviceIdentifier5() {
+        return null;
+    }
+    
+    public final void setDeviceIdentifier5(@org.jetbrains.annotations.NotNull()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getCustomerZip() {
+        return null;
+    }
+    
+    public final void setCustomerZip(@org.jetbrains.annotations.NotNull()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getDeviceIdentifier3() {
+        return null;
+    }
+    
+    public final void setDeviceIdentifier3(@org.jetbrains.annotations.NotNull()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getCustomerContact() {
+        return null;
+    }
+    
+    public final void setCustomerContact(@org.jetbrains.annotations.NotNull()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getDeviceIdentifier4() {
+        return null;
+    }
+    
+    public final void setDeviceIdentifier4(@org.jetbrains.annotations.NotNull()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getDeviceIdentifier1() {
+        return null;
+    }
+    
+    public final void setDeviceIdentifier1(@org.jetbrains.annotations.NotNull()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getDeviceIdentifier2() {
+        return null;
+    }
+    
+    public final void setDeviceIdentifier2(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    public final int getDeviceType() {
+        return 0;
+    }
+    
+    public final void setDeviceType(int p0) {
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getCustomerEmail() {
+        return null;
+    }
+    
+    public final void setCustomerEmail(@org.jetbrains.annotations.NotNull()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getCustomerURL() {
+        return null;
+    }
+    
+    public final void setCustomerURL(@org.jetbrains.annotations.NotNull()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getPhoneNumber() {
+        return null;
+    }
+    
+    public final void setPhoneNumber(@org.jetbrains.annotations.NotNull()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getCustomerAddress2() {
+        return null;
+    }
+    
+    public final void setCustomerAddress2(@org.jetbrains.annotations.NotNull()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getCustomerName() {
+        return null;
+    }
+    
+    public final void setCustomerName(@org.jetbrains.annotations.NotNull()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getCustomerAddress() {
+        return null;
+    }
+    
+    public final void setCustomerAddress(@org.jetbrains.annotations.NotNull()
+    java.lang.String p0) {
+    }
+}

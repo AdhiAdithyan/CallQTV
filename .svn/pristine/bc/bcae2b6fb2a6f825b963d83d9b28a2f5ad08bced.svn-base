@@ -1,0 +1,17 @@
+package com.softland.callqtv.viewmodel;
+
+@kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u0000\"\n\u0002\u0018\u0002\n\u0002\u0018\u0002\n\u0002\b\u0003\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\u0010\u000b\n\u0000\n\u0002\u0018\u0002\n\u0000\u0018\u00002\u00020\u0001B\u0007\u00a2\u0006\u0004\b\u0002\u0010\u0003J\u0014\u0010\u0006\u001a\b\u0012\u0004\u0012\u00020\b0\u00072\u0006\u0010\t\u001a\u00020\nR\u0010\u0010\u0004\u001a\u0004\u0018\u00010\u0005X\u0082\u000e\u00a2\u0006\u0002\n\u0000\u00a8\u0006\u000b"}, d2 = {"Lcom/softland/callqtv/viewmodel/NetworkViewModel;", "Landroidx/lifecycle/ViewModel;", "<init>", "()V", "cachedNetworkLiveData", "Lcom/softland/callqtv/viewmodel/NetworkLiveData;", "getNetworkLiveData", "Landroidx/lifecycle/LiveData;", "", "context", "Landroid/content/Context;", "app"})
+public final class NetworkViewModel extends androidx.lifecycle.ViewModel {
+    @org.jetbrains.annotations.Nullable()
+    private com.softland.callqtv.viewmodel.NetworkLiveData cachedNetworkLiveData;
+    
+    public NetworkViewModel() {
+        super();
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final androidx.lifecycle.LiveData<java.lang.Boolean> getNetworkLiveData(@org.jetbrains.annotations.NotNull()
+    android.content.Context context) {
+        return null;
+    }
+}

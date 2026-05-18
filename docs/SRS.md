@@ -1,52 +1,155 @@
-# Software Requirements Specification (SRS) - CallQTV
+# CallQTV — Software Requirements Specification
 
-## 1. Introduction
-CallQTV is a specialized Android TV application designed for queue management and digital signage. It provides real-time token updates and high-quality advertisement playback.
+**Product:** CallQTV Android TV client (`com.softland.callqtv`)  
+**Audience:** Product, QA, integration  
+**Canonical reference:** [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md) (full behavior and architecture)
 
-## 2. Functional Requirements
+---
 
-### 2.1 Token Management
-- **FR1**: The system shall receive real-time token updates via MQTT from one or more brokers.
-- **FR2**: The system shall display the current token and counter information prominently on the screen.
-- **FR3**: The system shall play a notification chime and optional Text-to-Speech (TTS) announcement for every new token.
-- **FR4**: The system shall support "re-call" functionality, restarting the visual blink and audio announcement if the same token is called again after 10 seconds.
+## 1. Purpose
 
-### 2.2 Advertisement Playback
-- **FR5**: The system shall play a sequence of advertisements (Images, Videos, YouTube) in the designated Ad Area.
-- **FR6**: YouTube ads shall be displayed in a "Kiosk Mode" (clean UI, no headers/footers) and centered perfectly within the Ad Area.
-- **FR7**: YouTube ads shall play until natural end when possible; if no ended event is received, a long safety timeout shall advance to the next ad.
-- **FR8**: The system shall support offline ad synchronization, downloading remote assets to local storage for playback when the network is unstable.
-- **FR8a**: The Ad Area shall be display-only and shall not receive focus or click interaction.
-- **FR8b**: Ad audio control shall be unified: a single setting shall enable/disable sound for both normal video ads and YouTube ads.
-- **FR8c**: When more than one ad exists, ad rotation shall be strict round-robin and shall not repeatedly replay the same ad.
-- **FR8d**: Offscreen preloading shall be limited to image ads; YouTube/video ads shall use a single visible surface path for stability.
-- **FR8e**: On YouTube SSL/DNS failures, one fallback URL retry may be attempted before skipping the ad.
-- **FR8f**: YouTube ad playback shall remain pinned to the configured video id; main-frame navigation to a different YouTube video id shall be prevented or corrected.
-- **FR8g**: YouTube Kiosk Mode shall enforce full-Ad-Area video presentation and hide title/metadata/page chrome overlays during ad playback.
-- **FR8h**: Initial YouTube autoplay policy blocks shall be handled via muted retry logic without immediately failing the ad.
+CallQTV is an Android TV application for **real-time queue token display** and **digital signage** in clinics, banks, and service centers. It receives tokens over **MQTT**, loads layout and branding from a **REST** TV configuration API, plays **advertisements**, and announces tokens with **chime + TTS**.
 
-### 2.3 Connectivity & Status
-- **FR9**: The system shall display a "Connecting to BLUCON..." status badge when MQTT connection is lost.
-- **FR10**: The status badge shall show the current retry attempt (Try X) and a second-based timer.
-- **FR11**: The system shall perform a hard reconnect every 30 seconds if the connection remains lost.
-- **FR12**: In multi-broker setups, connectivity shall be treated as active when any configured broker is connected, or when recent MQTT traffic is observed.
-- **FR13**: The system shall trigger configuration refresh when a valid MQTT payload contains `CLR` for the mapped keypad serial.
-- **FR14**: Initial BLUCON connection retries shall use an aggressive early retry cadence to reduce first-connect delay.
-- **FR15**: Each counter-name tile shall show two connection indicators: left for dispense and right for keypad.
-- **FR16**: Indicator state shall be tracked per counter button index.
-- **FR17**: Indicators shall default RED and turn GREEN when relevant MQTT heartbeat/message is observed.
-- **FR18**: If no relevant MQTT signal is observed for 5 minutes, indicators shall revert to RED.
+---
 
-## 3. Non-Functional Requirements
+## 2. Functional requirements
 
-### 3.1 Performance
-- **NFR1**: The application shall load cached configuration within 2 seconds of launch to provide an "instant-on" feel.
-- **NFR2**: Ad transitions shall be smooth, minimizing black screens while avoiding excessive offscreen media surface churn.
+### 2.1 Startup and configuration
 
-### 3.2 Reliability
-- **NFR3**: The system shall handle background system service exceptions (e.g., Google Play Integrity) without crashing.
-- **NFR4**: The system shall gracefully handle network loss, failing over to cached content and local ads.
+| ID | Requirement |
+|----|-------------|
+| FR-01 | On launch, load cached TV config, counters, ads, and devices from Room before blocking the UI. |
+| FR-02 | If cache exists, render the main display immediately while background sync continues. |
+| FR-03 | If cache is absent, show a loading overlay until minimum data is available. |
+| FR-04 | Initialize TTS in a separate phase from config loading (“preparing voice engine”). |
+| FR-05 | Support device registration, customer ID, and license validation flows before main display. |
 
-### 3.3 UI/UX
-- **NFR5**: The UI shall be optimized for large screen Android TV displays, with clear typography and high-contrast elements.
-- **NFR6**: All interactive elements (e.g., Settings) shall be navigable via a standard TV remote D-pad.
+### 2.2 MQTT token display
+
+| ID | Requirement |
+|----|-------------|
+| FR-10 | Receive token updates from one or more MQTT brokers. |
+| FR-11 | Validate payloads by extracting keypad serial and matching DB-mapped keypad/device records. |
+| FR-12 | Route fixed payloads to UI by mapped **button index** first; persist tokens under canonical per-counter keys. |
+| FR-13 | Support fixed `$...*` payloads, **`000-` CLR** frames (variable token digits before `CLR`), and supported short-wrapper shapes. |
+| FR-14 | Fixed protocol index 4: **`A`/`E`** and transferred **`B`** → DB-only, **no** live token UI. |
+| FR-15 | Type **`C`** → special message replacing token area; blink; dedicated TTS path. |
+| FR-16 | Types **`D`**, **`-`**, normal → standard token flow; **`D`** may set VIP/emergency display. |
+| FR-17 | Display current and historical tokens per counter per server layout (`display_rows` / `display_columns`). |
+| FR-18 | When counter count **> 4**, use split grid layout (2 rows or columns). |
+| FR-19 | Suppress duplicate handling of **identical raw payload** within **10 seconds**. |
+| FR-20 | Allow **re-call** of same top token after **10 seconds** (fresh blink/chime/TTS per rules). |
+| FR-21 | Log payloads with **received** timestamp; set **displayed** when UI actually renders. |
+| FR-22 | Upload payload logs to backend; delete **uploaded** rows older than **2 days** only; never delete unuploaded rows. |
+
+### 2.3 CLR (clear)
+
+| ID | Requirement |
+|----|-------------|
+| FR-30 | On valid CLR, clear live token state and persisted `token_history` for resolved counter key set. |
+| FR-31 | Resolve route from digit **immediately before** `CLR` in `000-` frames; match `keypadsJson` `keypad_index` or `button_index`. |
+| FR-31a | For **normal** fixed/legacy token payloads, resolve counter from **keypad serial in the frame** only; **do not** treat fixed-frame index 18 (1-based) as `keypad_index`. |
+| FR-32 | If route match is ambiguous, clear **all counters** listed for that keypad SN in config. |
+| FR-33 | Always post `tokensPerCounter` after a CLR attempt. |
+| FR-34 | Trigger **immediate** full TV configuration fetch on CLR (same as Settings **Refresh**), bypassing 30s display-VM MQTT refresh throttle. |
+| FR-35 | Reset dedupe / queued-payload state for affected serial (route-aware when known). |
+
+### 2.4 Announcements (chime + TTS)
+
+| ID | Requirement |
+|----|-------------|
+| FR-40 | Serialize token UI events so chime/TTS do not overlap (`announcementMutex`). |
+| FR-41 | **`playCueUi`**: play notification chime, publish token snapshot, and blink when map/VIP changes or primary re-call after >10s. |
+| FR-42 | **`speakTokenAnnouncement`**: speak TTS only when primary-key announce rules pass and `enable_token_announcement` is on. |
+| FR-43 | Align UI update with **chime cue start**. |
+| FR-44 | Normal TTS: `Token`, optional spelled counter prefix, token label, optional counter name (`enable_counter_announcement`). |
+| FR-45 | Special TTS: message text then optional counter name (single space). |
+| FR-46 | When `enable_ad_sound` is on, duck ExoPlayer and YouTube WebView video during TTS; restore after speech. |
+| FR-47 | Support configurable notification chime (~51 system tones in `ThemeColorManager.notificationSoundOptions`). |
+| FR-48 | Optional per-counter or global custom chime URL before system tone. |
+| FR-49 | After chime **starts**, begin TTS after a short lead-in (**~80–180 ms**), not after the full chime duration. |
+
+### 2.5 Token display
+
+| ID | Requirement |
+|----|-------------|
+| FR-55 | Apply `token_format` for on-screen padding; patterns `T1`/`T2` must **not** insert a literal `T` before the number. |
+| FR-56 | When counter prefix is enabled, display `{counter.code}-{formattedToken}` (e.g. `NU-2`). |
+
+### 2.6 Connectivity and status
+
+| ID | Requirement |
+|----|-------------|
+| FR-60 | Treat connectivity as active if **any** broker is connected **or** recent MQTT traffic observed. |
+| FR-61 | Show reconnect badge with “Connecting to BLUCON…”, retry attempt, and timer (~30s cycle). |
+| FR-62 | Per counter tile: left dot = dispense, right dot = keypad; red default, green on activity, red after **5 min** idle. |
+
+### 2.7 Advertisements
+
+| ID | Requirement |
+|----|-------------|
+| FR-70 | Play **image** (jpg/png/gif/webp/bmp/svg), **video** (mp4, HLS `.m3u8`, DASH `.mpd`, …), **YouTube**, and generic **http(s) web** URLs in the ad area (`AdMediaType`). |
+| FR-71 | Ad area is display-only (non-interactive). |
+| FR-72 | Strict **round-robin** when multiple ads configured. |
+| FR-73 | Support offline ad sync (`AdDownloader` → `CALLQTV_ADV`). |
+| FR-74 | Single setting controls ad sound for video and YouTube. |
+| FR-75 | Scale decode/playback to **measured ad pane** (`AdViewportSizing`, `MediaEngine.updateViewport`); Coil images at pane size with preload. |
+| FR-76 | Video track selection and bitrate capped to pane area (not fixed 1080×1920); faster buffer for first-frame start. |
+| FR-77 | Ad pane uses **40%** (or **50%** when ≤2 counters) of main body; placement via `ad_placement`. |
+
+### 2.8 Local settings (`ThemePrefs`)
+
+| ID | Requirement |
+|----|-------------|
+| FR-80 | Persist on device: app theme, counter background, token background (solid or `GRADIENT:#…`), notification sound, 24h clock, blink style, ad/YouTube toggles. |
+| FR-81 | Material3 `primary` from first gradient stop when theme is `GRADIENT:`; counter/token use full vertical gradient brushes. |
+| FR-82 | Scrolling footer background follows `theme_color` via horizontal `getTickerStripBackgroundBrush`. |
+| FR-83 | Token blink: whole tile vs text-only (`token_blink_mode`), gated by server `blink_current_token`. |
+| FR-84 | Settings color pickers: grid of presets; TV D-pad focus on current selection; gold focus ring; white marker for saved selection; no ANR on open. |
+| FR-85 | Settings notification sound picker: preview chime; focus on current selection. |
+
+### 2.9 Diagnostics
+
+| ID | Requirement |
+|----|-------------|
+| FR-90 | Export logs/config snapshot ZIP from Settings → System. |
+| FR-91 | Prefer removable storage `Android/data/.../Download/CALLQTV_EXPORT/`, else MediaStore Downloads, else app-scoped fallback. |
+
+---
+
+## 3. Non-functional requirements
+
+| ID | Requirement |
+|----|-------------|
+| NFR-01 | **minSdk** 26, **targetSdk** 35, Kotlin/Java **17**. |
+| NFR-02 | Main display optimized for **landscape** Android TV. |
+| NFR-03 | Cached-first startup; usable on intermittent network. |
+| NFR-04 | MQTT processing off main thread; UI must remain responsive during color picker open (throttled brush warm). |
+| NFR-05 | `KEEP_SCREEN_ON` during main display. |
+| NFR-06 | Large heap enabled where configured for media/WebView. |
+
+---
+
+## 4. Server configuration dependencies
+
+- **`tv_config`**: counters, layout, ads, MQTT brokers, announcement flags, scroll text, etc.
+- **`keypadsJson`**: keypad SN → `counters[]` with `keypad_index` / `button_index` — required for reliable CLR and routing.
+- **UI resolution**: `MqttViewModel` maps **keypad SN** → storage key (prefer `button_index`); **CLR** may use route digit before `CLR`. `findCounterEntityForMqttRoute` binds UI rows by `button_index` then `keypad_index`.
+- **`token_format`**: `T1`/`T2` pad digits only (no literal `T` on screen); combine with counter code prefix when enabled.
+- **Room v17**: `mqtt_payload_logs` for received/displayed/upload audit; see `MqttPayloadLogRepository`.
+- **Tests**: JVM suite includes `MqttCounterRoutingTest`, `KeypadPayloadParserTest`, `SemanticMqttParserTest` — run `./gradlew test`.
+- Misconfigured keypad SN or empty `counters[]` may cause CLR to log “no map keys”; fix on server.
+
+---
+
+## 5. Out of scope (client)
+
+- Editing MQTT broker credentials without config API (read from server).
+- Interactive ad area (touch/click on ads).
+- DRM-protected streams, exotic codecs, or blocked YouTube embeds (may skip after timeout).
+- Fixed required creative resolution (app accepts any size; scales with fit + viewport decode).
+- Custom user-defined hex entry in pickers (preset grids only).
+
+---
+
+*Derived from CallQTV May 2026 source. Update when [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md) changes.*

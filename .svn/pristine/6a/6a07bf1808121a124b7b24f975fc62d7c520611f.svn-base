@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base Colors -->
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="red">#B71C1C</color>
+    <color name="green">#2E7D32</color>
+    <color name="blue">#0D47A1</color>
+    <color name="gray">#BFBDBD</color>
+    <color name="transparent">#00FFFFFF</color>
+
+    <!-- Theme Colors -->
+    <color name="primaryColor">#0D47A1</color>
+    <color name="primaryDark">#002171</color>
+    <color name="secondaryColor">#B71C1C</color>
+    <color name="primaryText">#FFFFFF</color>
+    <color name="textColor">#FFFFFF</color> <!-- Added to fix AAPT error -->
+    <color name="secondaryText">#BFBDBD</color>
+    <color name="success">#2E7D32</color>
+    <color name="error">#B71C1C</color>
+
+    <color name="background_gradient_start">#000000</color>
+    <color name="background_gradient_end">#0D47A1</color>
+
+    <!-- UI Component Colors -->
+    <color name="pendingStatusBackground">#37474F</color>
+    <color name="pendingStatusText">#FFFFFF</color>
+
+    <color name="inProgressStatusBackground">#0D47A1</color>
+    <color name="inProgressStatusText">#FFFFFF</color>
+
+    <color name="completedStatusBackground">#2E7D32</color>
+    <color name="completedStatusText">#FFFFFF</color>
+
+    <color name="chipBackground">#212121</color>
+    <color name="chipText">#FFFFFF</color>
+    <color name="circle_bg1_color">#E0E0E0</color>
+</resources>

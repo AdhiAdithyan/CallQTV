@@ -31,7 +31,10 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -40,6 +43,8 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -73,15 +78,21 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -90,10 +101,14 @@ import com.google.gson.reflect.TypeToken
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import coil.imageLoader
 import coil.request.ImageRequest
 import com.softland.callqtv.R
 import com.softland.callqtv.utils.*
 import com.softland.callqtv.viewmodel.MqttViewModel
+import com.softland.callqtv.viewmodel.findCounterEntityForMqttRoute
+import com.softland.callqtv.viewmodel.mqttRouteMatchesButtonIndex
+import com.softland.callqtv.viewmodel.mqttRouteMatchesKeypadIndex
 import com.softland.callqtv.viewmodel.TokenDisplayViewModel
 import com.softland.callqtv.data.local.AdFileEntity
 import com.softland.callqtv.data.local.AppSharedPreferences
@@ -106,7 +121,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 import android.graphics.Color as AndroidColor
+import android.graphics.SurfaceTexture
+import android.view.TextureView
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -119,6 +137,8 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DataSource
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.common.MimeTypes
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
@@ -144,20 +164,36 @@ import kotlin.coroutines.resume
 import java.net.URLConnection
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.lang.ref.WeakReference
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+
+private const val SPECIAL_MSG_PREFIX = "__MSG__:"
+/** Multiline special counter messages: line height vs font size (reduces cramped / clipped lines). */
+private const val SPECIAL_COUNTER_MSG_LINE_HEIGHT_EM = 1.42f
+/** Fixed-protocol index-4 `D` (VIP / emergency): counter prefix when prefix mode is on. */
+private const val VIP_EMERGENCY_COUNTER_PREFIX = "ER"
+
+private fun encodeSpecialMessageToken(value: String): String = SPECIAL_MSG_PREFIX + value
+private fun isSpecialMessageToken(value: String?): Boolean =
+    value?.contains("__MSG__", ignoreCase = false) == true
+
+private fun decodeSpecialMessageToken(value: String?): String? {
+    val raw = value?.trim().orEmpty()
+    if (raw.isEmpty()) return null
+    return when {
+        raw.contains("__MSG__:") -> raw.substringAfter("__MSG__:").trim()
+        raw.contains("__MSG__") -> raw.substringAfter("__MSG__").trimStart(':', '-', ' ')
+        else -> raw
+    }.ifBlank { null }
+}
 
 class TokenDisplayActivity : ComponentActivity() {
 
     private lateinit var viewModel: TokenDisplayViewModel
     private lateinit var mqttViewModel: MqttViewModel
     private var launchInstanceId: Long = 0L
-
-    override fun onStart() {
-        super.onStart()
-        TokenAnnouncer.initialize(this)
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -210,8 +246,8 @@ class TokenDisplayActivity : ComponentActivity() {
                 }
             }
             
-            val themeColor = remember(currentThemeHex) { 
-                try { Color(AndroidColor.parseColor(currentThemeHex)) } catch (e: Exception) { Color(0xFF2196F3) }
+            val themeColor = remember(currentThemeHex) {
+                ThemeColorManager.colorForMaterialPrimary(currentThemeHex)
             }
             val colorScheme = remember(themeColor) { ThemeColorManager.createDarkColorScheme(themeColor) }
             
@@ -225,6 +261,7 @@ class TokenDisplayActivity : ComponentActivity() {
                         mqttViewModel,
                         counterBgHex = counterBgHex,
                         tokenBgHex = tokenBgHex,
+                        appThemeHex = currentThemeHex,
                         onThemeChange = { newHex ->
                             ThemeColorManager.setThemeColor(this, newHex)
                             currentThemeHex = newHex
@@ -250,7 +287,10 @@ class TokenDisplayActivity : ComponentActivity() {
         )
         super.onDestroy()
         MediaEngine.shutdown()
-        TokenAnnouncer.shutdown()
+        // Avoid cold TTS after transient activity teardown; full shutdown only when leaving the app.
+        if (isFinishing) {
+            TokenAnnouncer.shutdown()
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -342,31 +382,50 @@ private object UiPerfProbe {
     }
 }
 
+private const val MAX_CUSTOM_CHIME_STARTUP_MS = 1200L
+private const val MAX_CUSTOM_CHIME_PLAYBACK_MS = 1500L
+
 // Play a short built-in chime or a custom audio URL before announcing a token.
+// Returns as soon as the cue starts; chime tail may overlap token TTS.
 suspend fun playTokenChime(
     context: Context,
     soundKey: String,
     tokenAudioUrl: String? = null,
-    counterAudioUrl: String? = null
+    counterAudioUrl: String? = null,
+    onAudioStart: (() -> Unit)? = null
 ) {
-    withContext(Dispatchers.Default) {
-        // 1. Play counter-specific audio if provided (highest priority)
-        if (!counterAudioUrl.isNullOrBlank()) {
-            playMediaUrl(context, counterAudioUrl)
+    withContext(Dispatchers.Main.immediate) {
+        // Use only one pre-announcement cue. Stacking multiple remote chimes can delay speech noticeably.
+        val playedCustomCue = when {
+            !counterAudioUrl.isNullOrBlank() -> playMediaUrl(context, counterAudioUrl, onAudioStart)
+            !tokenAudioUrl.isNullOrBlank() -> playMediaUrl(context, tokenAudioUrl, onAudioStart)
+            else -> false
         }
 
-        // 2. Play token-specific chime if provided, otherwise system tone
-        if (!tokenAudioUrl.isNullOrBlank()) {
-            playMediaUrl(context, tokenAudioUrl)
-        } else {
-            playSystemTone(soundKey)
+        if (!playedCustomCue) {
+            playSystemTone(soundKey, onAudioStart)
         }
     }
 }
 
-private suspend fun playMediaUrl(context: Context, url: String) {
-    withContext(Dispatchers.IO) {
+private suspend fun playMediaUrl(
+    context: Context,
+    url: String,
+    onAudioStart: (() -> Unit)? = null
+): Boolean {
+    return withContext(Dispatchers.IO) {
         val mediaPlayer = android.media.MediaPlayer()
+        var playbackDelayMs = 250L
+        var releaseAfterPlayback = false
+        val releasePlayer: (android.media.MediaPlayer) -> Unit = { mp ->
+            runCatching {
+                mp.setOnPreparedListener(null)
+                mp.setOnCompletionListener(null)
+                mp.setOnErrorListener(null)
+                if (mp.isPlaying) mp.stop()
+                mp.release()
+            }
+        }
         try {
             mediaPlayer.setDataSource(context, Uri.parse(url))
             mediaPlayer.setAudioAttributes(
@@ -375,19 +434,57 @@ private suspend fun playMediaUrl(context: Context, url: String) {
                     .setUsage(android.media.AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
                     .build()
             )
-            mediaPlayer.prepare()
-            mediaPlayer.start()
-            val duration = mediaPlayer.duration.toLong()
-            delay(duration.coerceAtMost(3000L)) 
+
+            val started = withTimeoutOrNull(MAX_CUSTOM_CHIME_STARTUP_MS) {
+                suspendCancellableCoroutine<Boolean> { continuation ->
+                    mediaPlayer.setOnPreparedListener { preparedPlayer ->
+                        playbackDelayMs = preparedPlayer.duration
+                            .takeIf { it > 0 }
+                            ?.toLong()
+                            ?.coerceAtMost(MAX_CUSTOM_CHIME_PLAYBACK_MS)
+                            ?: 250L
+                        try {
+                            preparedPlayer.setOnCompletionListener { releasePlayer(it) }
+                            preparedPlayer.setOnErrorListener { mp, _, _ ->
+                                releasePlayer(mp)
+                                true
+                            }
+                            preparedPlayer.start()
+                            releaseAfterPlayback = true
+                            onAudioStart?.invoke()
+                            if (continuation.isActive) continuation.resume(true)
+                        } catch (e: Exception) {
+                            Log.e("TokenChime", "Failed starting chime URL: $url", e)
+                            if (continuation.isActive) continuation.resume(false)
+                        }
+                    }
+                    mediaPlayer.setOnErrorListener { _, what, extra ->
+                        Log.w("TokenChime", "Error preparing chime URL: $url what=$what extra=$extra")
+                        if (continuation.isActive) continuation.resume(false)
+                        true
+                    }
+                    mediaPlayer.prepareAsync()
+                }
+            } ?: false
+
+            if (!started) {
+                Log.w("TokenChime", "Timed out starting chime URL: $url")
+                return@withContext false
+            }
+
+            true
         } catch (e: Exception) {
             Log.e("TokenChime", "Error playing chime URL: $url", e)
+            false
         } finally {
-            mediaPlayer.release()
+            if (!releaseAfterPlayback) {
+                releasePlayer(mediaPlayer)
+            }
         }
     }
 }
 
-private suspend fun playSystemTone(soundKey: String) {
+private fun playSystemTone(soundKey: String, onAudioStart: (() -> Unit)? = null) {
     val (tone, durationMs) = when (soundKey) {
         // Dings
         "ding"   -> ToneGenerator.TONE_PROP_BEEP2 to 120
@@ -459,11 +556,16 @@ private suspend fun playSystemTone(soundKey: String) {
     val toneGen = ToneGenerator(AudioManager.STREAM_MUSIC, 80)
     try {
         toneGen.startTone(tone, durationMs)
-        delay(durationMs + 5L)
+        onAudioStart?.invoke()
     } catch (_: Exception) {
-    } finally {
+        onAudioStart?.invoke()
         toneGen.release()
+        return
     }
+    Handler(Looper.getMainLooper()).postDelayed(
+        { runCatching { toneGen.release() } },
+        durationMs.toLong() + 50L,
+    )
 }
 
 @Composable
@@ -472,6 +574,7 @@ fun TokenDisplayScreen(
     mqttViewModel: MqttViewModel, 
     counterBgHex: String,
     tokenBgHex: String,
+    appThemeHex: String,
     onThemeChange: (String) -> Unit,
     onCounterBgChange: (String) -> Unit,
     onTokenBgChange: (String) -> Unit
@@ -481,8 +584,6 @@ fun TokenDisplayScreen(
     // Warm up ExoPlayer instances/cache on a background dispatcher.
     // This reduces first-ad stutter/ANR during initial player/cache initialization.
     LaunchedEffect(Unit) {
-        // Let first frame settle before expensive subsystem warm-up.
-        delay(1200)
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 MediaEngine.warmUp(context)
@@ -601,8 +702,8 @@ fun TokenDisplayScreen(
             while (!stableBrokerConnected && !showMqttRetryDialog) {
                 delay(1000)
                 reconnectUiSeconds += 1
-                if (reconnectUiSeconds >= 30) {
-                    // Hard cap retry window at 30s; trigger fresh retry immediately.
+                if (reconnectUiSeconds >= 15) {
+                    // Trigger a fresh reconnect if still offline after 15s.
                     mqttViewModel.retryConnect()
                     reconnectDisplayTry += 1
                     reconnectUiSeconds = 0
@@ -648,17 +749,26 @@ fun TokenDisplayScreen(
         }
     }
 
-    // Initialize TTS in a separate phase after config loading completes, so it does not
-    // appear as "API/config loading" time to users.
-    LaunchedEffect(config?.audioLanguage, isLoading) {
+    // TTS only when token announcement is enabled in TV config; otherwise release the engine.
+    LaunchedEffect(config?.enableTokenAnnouncement, config?.audioLanguage, isLoading) {
         val cfg = config ?: return@LaunchedEffect
         if (isLoading) return@LaunchedEffect
 
-        val lang = cfg.audioLanguage
-        if (lastInitializedTtsLanguage == lang) return@LaunchedEffect
+        val announcementEnabled = cfg.enableTokenAnnouncement == true
+        TokenAnnouncer.setAnnouncementsEnabled(announcementEnabled)
 
-        showTtsLoading = true
-        TokenAnnouncer.initialize(context, lang) {
+        if (!announcementEnabled) {
+            showTtsLoading = false
+            lastInitializedTtsLanguage = null
+            return@LaunchedEffect
+        }
+
+        val lang = cfg.audioLanguage
+        val languageChanged = lastInitializedTtsLanguage != lang
+        if (languageChanged) {
+            showTtsLoading = true
+        }
+        TokenAnnouncer.warmUp(context, lang) {
             Handler(Looper.getMainLooper()).post {
                 showTtsLoading = false
             }
@@ -677,73 +787,70 @@ fun TokenDisplayScreen(
 
             launch(Dispatchers.Default) {
                 try {
-                    val (counterIdOrName, tokenLabel) = pair
+                    val counterIdOrName = pair.counter
+                    val tokenLabel = pair.token
+                    val sourcePayload = pair.payload
 
-                    // 1. Drop any tokens whose counter does NOT match a buttonIndex
-                    val mqttCounterIdx = counterIdOrName.toIntOrNull()
-                    val actualCounter = currentCounters.find {
-                        it.buttonIndex != null && it.buttonIndex == mqttCounterIdx
-                    }
-
+                    val buttonIndexKey = counterIdOrName.trim()
+                    val actualCounter = findCounterEntityForMqttRoute(currentCounters, buttonIndexKey)
                     if (actualCounter == null) {
                         android.util.Log.d(
                             "TokenDisplay",
-                            "Dropping token '$tokenLabel' for unknown counter '$counterIdOrName'"
+                            "Dropping token '$tokenLabel' — no counter with button_index '$buttonIndexKey'"
                         )
                         return@launch
                     }
 
-                    // 2. Use a canonical storage key so the same physical counter always shares history,
-                    //    even if MQTT uses different identifiers (id, name, button index).
-                    val storageKey =
-                        actualCounter.counterId?.trim()?.takeIf { it.isNotBlank() }
-                            ?: actualCounter.name?.trim()?.takeIf { it.isNotBlank() }
-                            ?: actualCounter.defaultName?.trim()?.takeIf { it.isNotBlank() }
-                            ?: actualCounter.buttonIndex?.toString()
-                            ?: counterIdOrName.trim()
-                    val btnKey = actualCounter.buttonIndex?.toString()?.trim()
-
-                    // Rule: If this exact token is already at first position and the last same
-                    // announcement is within 10s, skip BOTH announcement and UI update.
-                    if (mqttViewModel.shouldSkipTopTokenWithin10s(storageKey, tokenLabel)) {
-                        return@launch
+                    val storageKey = actualCounter.buttonIndex?.toString()?.trim()?.takeIf { it.isNotBlank() }
+                        ?: buttonIndexKey
+                    val keypadFallback = actualCounter.keypadIndex?.trim()?.takeIf {
+                        it.isNotBlank() && it != storageKey
                     }
 
-                    // Deduplicate: skip chime/TTS if we already announced this token call recently
-                    if (mqttViewModel.isAlreadyAnnounced(storageKey, tokenLabel)) {
-                        return@launch
-                    }
-
-                    // Mark before playing any sound so duplicate messages don't re-play
-                    mqttViewModel.markAsAnnounced(storageKey, tokenLabel)
-                    if (btnKey != null) mqttViewModel.markAsAnnounced(btnKey, tokenLabel)
-
-                    // Token list update is independent from ad/player pipeline.
-                    val isNewOrMoved =
-                        mqttViewModel.processTokenUpdateForKeys(storageKey, tokenLabel, btnKey)
-                    if (!isNewOrMoved) return@launch
-
-                    withContext(Dispatchers.Main.immediate) {
-                        // Signal re-call by updating timestamp (blink restart) at update time.
-                        blinkTriggers[storageKey] = System.currentTimeMillis()
-                    }
-                    UiPerfProbe.markTokenUiUpdated(storageKey, tokenLabel)
-
-                    // Keep audio announcements sequential, but do not block token population.
                     announcementMutex.withLock {
-                        delay(50)
+                        val tokenOutcome =
+                            mqttViewModel.processTokenUpdateForKeys(
+                                storageKey,
+                                tokenLabel,
+                                fallbackKey = keypadFallback,
+                                publishImmediately = false,
+                                isVipEmergency = pair.isVipEmergency,
+                            )
+                        if (!tokenOutcome.playCueUi) return@withLock
+
+                        val publishedAtCueStart = java.util.concurrent.atomic.AtomicBoolean(false)
+                        val publishVisualStateAtCueStart = publish@{
+                            if (!publishedAtCueStart.compareAndSet(false, true)) return@publish
+                            mqttViewModel.publishTokensSnapshot()
+                            mqttViewModel.markAsAnnounced(storageKey, tokenLabel)
+                            mqttViewModel.markPayloadDisplayed(sourcePayload)
+                            UiPerfProbe.markTokenUiUpdated(storageKey, tokenLabel)
+                            Handler(Looper.getMainLooper()).post {
+                                blinkTriggers[storageKey] = System.currentTimeMillis()
+                            }
+                        }
+
+                        if (currentConfig?.enableTokenAnnouncement == true && tokenOutcome.speakTokenAnnouncement) {
+                            TokenAnnouncer.warmUp(
+                                context,
+                                currentConfig.audioLanguage,
+                                performPoke = false,
+                            )
+                        }
 
                         val soundKey = ThemeColorManager.getNotificationSoundKey(context)
-                        withContext(Dispatchers.Main.immediate) {
+                        launch(Dispatchers.Main.immediate) {
                             playTokenChime(
                                 context = context,
                                 soundKey = soundKey,
                                 tokenAudioUrl = currentConfig?.tokenAudioUrl,
-                                counterAudioUrl = actualCounter.audioUrl
+                                counterAudioUrl = actualCounter.audioUrl,
+                                onAudioStart = publishVisualStateAtCueStart,
                             )
                         }
+                        publishVisualStateAtCueStart()
 
-                        if (currentConfig?.enableTokenAnnouncement == true) {
+                        if (currentConfig?.enableTokenAnnouncement == true && tokenOutcome.speakTokenAnnouncement) {
                             val displayName =
                                 (actualCounter.name?.takeIf { it.isNotBlank() }
                                     ?: actualCounter.defaultName?.takeIf { it.isNotBlank() }
@@ -756,20 +863,163 @@ fun TokenDisplayScreen(
                                 actualCounter.defaultCode.orEmpty().trim()
                             }
                             val usePrefix = currentConfig.enableCounterPrefix != false
-                            val tokenLabelWithCode =
-                                if (usePrefix && counterCode.isNotBlank()) "$counterCode-$tokenLabel" else tokenLabel
+                            val effectiveSpeechCounterCode = when {
+                                pair.isVipEmergency && usePrefix -> VIP_EMERGENCY_COUNTER_PREFIX
+                                else -> counterCode
+                            }
+                            // When prefix is enabled (same as on-screen "CODE-token"), spell the code for TTS.
+                            val spokenPrefix =
+                                if (usePrefix && effectiveSpeechCounterCode.isNotBlank()) {
+                                    effectiveSpeechCounterCode.toCharArray().joinToString(" ")
+                                } else {
+                                    ""
+                                }
 
-                            withTimeoutOrNull(6000) {
-                                suspendCancellableCoroutine<Unit> { continuation ->
-                                    TokenAnnouncer.announceToken(
-                                        context = context,
-                                        audioLanguage = currentConfig.audioLanguage,
-                                        counterName = announcementCounterName,
-                                        tokenLabel = tokenLabelWithCode,
-                                        onDone = {
-                                            if (continuation.isActive) continuation.resume(Unit)
+                            val isSpecial = isSpecialMessageToken(tokenLabel)
+                            val decodedSpecial = decodeSpecialMessageToken(tokenLabel)
+
+                            runWithAdvertisementAudioDuckedForSpeech(context) { restore ->
+                                withTimeoutOrNull(6000) {
+                                    suspendCancellableCoroutine<Unit> { continuation ->
+                                        continuation.invokeOnCancellation { restore() }
+                                        if (isSpecial && decodedSpecial != null) {
+                                            val spokenAnnouncement = buildString {
+                                                append(decodedSpecial)
+                                                if (announcementCounterName.isNotBlank()) {
+                                                    append(' ')
+                                                    append(announcementCounterName)
+                                                }
+                                            }
+                                            TokenAnnouncer.announceMessage(
+                                                context = context,
+                                                audioLanguage = currentConfig.audioLanguage,
+                                                message = spokenAnnouncement,
+                                                onDone = {
+                                                    restore()
+                                                    if (continuation.isActive) continuation.resume(Unit)
+                                                },
+                                            )
+                                        } else {
+                                            val tokenText = TokenAnnouncer.sanitizeTokenLabelForSpeech(tokenLabel)
+                                            TokenAnnouncer.announceTokenCall(
+                                                context = context,
+                                                audioLanguage = currentConfig.audioLanguage,
+                                                spelledCounterPrefix = if (usePrefix) spokenPrefix else "",
+                                                tokenText = tokenText,
+                                                counterDisplayName = announcementCounterName,
+                                                onDone = {
+                                                    restore()
+                                                    if (continuation.isActive) continuation.resume(Unit)
+                                                },
+                                            )
                                         }
-                                    )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } finally {
+                    mqttViewModel.announcementQueueSize.decrementAndGet()
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        mqttViewModel.tokenReplaceChannel.receiveAsFlow().collect { pair ->
+            val currentConfig = latestConfigState.value
+            val currentCounters = latestCountersState.value
+
+            launch(Dispatchers.Default) {
+                try {
+                    val counterIdOrName = pair.counter
+                    val tokenLabel = pair.token
+                    val sourcePayload = pair.payload
+
+                    val buttonIndexKey = counterIdOrName.trim()
+                    val actualCounter = findCounterEntityForMqttRoute(currentCounters, buttonIndexKey)
+                        ?: return@launch
+
+                    val storageKey = actualCounter.buttonIndex?.toString()?.trim()?.takeIf { it.isNotBlank() }
+                        ?: buttonIndexKey
+                    val keypadFallback = actualCounter.keypadIndex?.trim()?.takeIf {
+                        it.isNotBlank() && it != storageKey
+                    }
+
+                    announcementMutex.withLock {
+                        val specialToken = encodeSpecialMessageToken(tokenLabel)
+                        val replaced = mqttViewModel.replaceTokenForKeys(
+                            storageKey,
+                            specialToken,
+                            fallbackKey = keypadFallback,
+                            publishImmediately = false
+                        )
+                        if (!replaced) return@withLock
+
+                        val publishedAtCueStart = java.util.concurrent.atomic.AtomicBoolean(false)
+                        val publishVisualStateAtCueStart = publish@{
+                            if (!publishedAtCueStart.compareAndSet(false, true)) return@publish
+                            mqttViewModel.publishTokensSnapshot()
+                            mqttViewModel.markAsAnnounced(storageKey, tokenLabel)
+                            mqttViewModel.markPayloadDisplayed(sourcePayload)
+                            UiPerfProbe.markTokenUiUpdated(storageKey, tokenLabel)
+                            Handler(Looper.getMainLooper()).post {
+                                blinkTriggers[storageKey] = System.currentTimeMillis()
+                            }
+                        }
+
+                        if (currentConfig?.enableTokenAnnouncement == true) {
+                            TokenAnnouncer.warmUp(
+                                context,
+                                currentConfig.audioLanguage,
+                                performPoke = false,
+                            )
+                        }
+
+                        val soundKey = ThemeColorManager.getNotificationSoundKey(context)
+                        launch(Dispatchers.Main.immediate) {
+                            playTokenChime(
+                                context = context,
+                                soundKey = soundKey,
+                                tokenAudioUrl = currentConfig?.tokenAudioUrl,
+                                counterAudioUrl = actualCounter.audioUrl,
+                                onAudioStart = publishVisualStateAtCueStart,
+                            )
+                        }
+                        publishVisualStateAtCueStart()
+
+                        if (currentConfig?.enableTokenAnnouncement == true) {
+                            val displayName =
+                                (actualCounter.name?.takeIf { it.isNotBlank() }
+                                    ?: actualCounter.defaultName?.takeIf { it.isNotBlank() }
+                                    ?: "Counter ${actualCounter.buttonIndex}")
+
+                            val announcementCounterName =
+                                if (currentConfig.enableCounterAnnouncement == true) displayName else ""
+
+                            // For index-4='C' special message, announce message without prefix.
+                            val specialAnnouncement = buildString {
+                                append(tokenLabel)
+                                if (announcementCounterName.isNotBlank()) {
+                                    append(' ')
+                                    append(announcementCounterName)
+                                }
+                            }
+
+                            runWithAdvertisementAudioDuckedForSpeech(context) { restore ->
+                                withTimeoutOrNull(6000) {
+                                    suspendCancellableCoroutine<Unit> { continuation ->
+                                        continuation.invokeOnCancellation { restore() }
+                                        TokenAnnouncer.announceMessage(
+                                            context = context,
+                                            audioLanguage = currentConfig.audioLanguage,
+                                            message = specialAnnouncement,
+                                            onDone = {
+                                                restore()
+                                                if (continuation.isActive) continuation.resume(Unit)
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -815,6 +1065,7 @@ fun TokenDisplayScreen(
                     dateTime = currentDateTime,
                     counterBgHex = counterBgHex,
                     tokenBgHex = tokenBgHex,
+                    appThemeHex = appThemeHex,
                     onThemeChange = onThemeChange,
                     onCounterBgChange = onCounterBgChange,
                     onTokenBgChange = onTokenBgChange,
@@ -879,12 +1130,14 @@ fun TokenDisplayScreen(
             errorMessage = errorMessage,
             onRefresh = { viewModel.loadData(mqttViewModel, forceShowOverlay = true) }
         )
-    } else if (!errorMessage.isNullOrBlank() && !isAutoRetryExhausted) {
-        // Do not show any Configuration Error dialog; just log the error once per value.
-        LaunchedEffect(errorMessage) {
-            android.util.Log.w("TokenDisplay", "Configuration error (UI suppressed): $errorMessage")
-            viewModel.clearConfigurationError()
-        }
+    } else if (config == null) {
+        TvConfigurationUnavailableScreen(
+            macAddress = macAddress,
+            appVersion = appVersion,
+            isNetworkAvailable = isNetworkAvailable,
+            errorMessage = errorMessage,
+            onRetry = { viewModel.loadData(mqttViewModel, forceShowOverlay = true) },
+        )
     }
 
     // MQTT Retry Dialog - Move to the end so it always appears on top
@@ -1065,6 +1318,7 @@ private fun TokenDisplayContent(
     dateTime: String,
     counterBgHex: String,
     tokenBgHex: String,
+    appThemeHex: String,
     onThemeChange: (String) -> Unit,
     onCounterBgChange: (String) -> Unit,
     onTokenBgChange: (String) -> Unit,
@@ -1077,6 +1331,7 @@ private fun TokenDisplayContent(
 ) {
     val viewModel = viewModel<com.softland.callqtv.viewmodel.TokenDisplayViewModel>()
     val mqttViewModel = viewModel<MqttViewModel>()
+    val vipTopTokenByKey by mqttViewModel.getVipEmergencyTopTokenByKey().observeAsState(emptyMap())
     val context = LocalContext.current
     var is24HourPref by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) {
@@ -1088,6 +1343,10 @@ private fun TokenDisplayContent(
     
     LaunchedEffect(is24HourPref) {
         viewModel.setTimeFormat(is24HourPref)
+    }
+
+    var tokenBlinkMode by remember {
+        mutableStateOf(ThemeColorManager.getTokenBlinkMode(context))
     }
 
     // Removed blinkTriggers definition from here as it is now passed down from TokenDisplayScreen
@@ -1124,9 +1383,14 @@ private fun TokenDisplayContent(
 
     val responsivePadding = remember(scale) { (8.dp * scale).coerceAtLeast(2.dp) }
     
-    val countersToDisplay = remember(counters, config.noOfCounters) {
-        val limit = config.noOfCounters ?: counters.size
-        counters.take(limit)
+    val countersToDisplay = remember(
+        counters,
+        config.noOfCounters,
+        config.layoutType,
+        config.displayRows,
+        config.displayColumns
+    ) {
+        resolveCountersToDisplay(counters, config)
     }
 
     val showAds = config.showAds?.equals("on", ignoreCase = true) == true
@@ -1171,7 +1435,9 @@ private fun TokenDisplayContent(
             onClearTokenHistoryAndRefresh = {
                 mqttViewModel.clearTokenHistory()
                 viewModel.loadData(mqttViewModel, forceShowOverlay = true)
-            }
+            },
+            tokenBlinkMode = tokenBlinkMode,
+            onTokenBlinkModeChange = { tokenBlinkMode = it },
         )
 
         Spacer(modifier = Modifier.height(responsivePadding))
@@ -1193,6 +1459,8 @@ private fun TokenDisplayContent(
                     usePortraitLayout = usePortraitLayout,
                     adPlacement = adPlacement,
                     blinkTriggers = blinkTriggers,
+                    tokenBlinkMode = tokenBlinkMode,
+                    vipTopTokenByKey = vipTopTokenByKey,
                     showReconnectBadge = false,
                     reconnectRetryAttempt = reconnectRetryAttempt,
                     reconnectUiSeconds = reconnectUiSeconds,
@@ -1202,7 +1470,8 @@ private fun TokenDisplayContent(
                     config = config,
                     responsivePadding = responsivePadding,
                     scale = scale,
-                    deviceIsPortrait = deviceIsPortrait
+                    deviceIsPortrait = deviceIsPortrait,
+                    appThemeHex = appThemeHex,
                 )
             }
 
@@ -1241,23 +1510,32 @@ private fun TokenDisplayBody(
     usePortraitLayout: Boolean,
     adPlacement: String,
     blinkTriggers: Map<String, Long>,
+    tokenBlinkMode: TokenBlinkMode = TokenBlinkMode.WHOLE_TILE,
+    vipTopTokenByKey: Map<String, String> = emptyMap(),
     showReconnectBadge: Boolean,
     reconnectRetryAttempt: Int,
     reconnectUiSeconds: Int
 ) {
     val showAds = config.showAds?.equals("on", ignoreCase = true) == true
     val hasAds = showAds && adFiles.isNotEmpty()
-    val baseLayoutType = config.layoutType ?: "1"
+    val baseLayoutType = when (config.layoutType?.trim()?.lowercase()) {
+        null, "", "default" -> "1"
+        else -> config.layoutType!!.trim()
+    }
     val layoutType = if (usePortraitLayout) "2" else baseLayoutType
     val counterCount = countersToDisplay.size
-    val configuredCounterLimit = config.noOfCounters ?: counterCount
+    val configuredCounterLimit = if (config.layoutType.equals("full", ignoreCase = true)) {
+        counterCount
+    } else {
+        config.noOfCounters ?: counterCount
+    }
     val adWeight = remember(showAds, configuredCounterLimit) {
         if (!showAds) 0f else if (configuredCounterLimit <= 2) 0.5f else 0.4f
     }
     val countersWeight = remember(adWeight) { if (adWeight > 0f) 1f - adWeight else 1f }
     val adAreaContent: @Composable () -> Unit = {
         key(adAreaReloadToken) {
-            AdArea(adFiles, config)
+            AdArea(adFiles, config, counterBgHex)
         }
     }
 
@@ -1273,11 +1551,11 @@ private fun TokenDisplayBody(
                         if (isTop) {
                             Box(modifier = Modifier.weight(adWeight).fillMaxWidth().clipToBounds()) { adAreaContent() }
                             Box(modifier = Modifier.weight(countersWeight).fillMaxWidth()) {
-                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers)
+                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers, tokenBlinkMode = tokenBlinkMode, vipTopTokenByKey = vipTopTokenByKey)
                             }
                         } else {
                             Box(modifier = Modifier.weight(countersWeight).fillMaxWidth()) {
-                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers)
+                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers, tokenBlinkMode = tokenBlinkMode, vipTopTokenByKey = vipTopTokenByKey)
                             }
                             Box(modifier = Modifier.weight(adWeight).fillMaxWidth().clipToBounds()) { adAreaContent() }
                         }
@@ -1287,13 +1565,13 @@ private fun TokenDisplayBody(
                     Row(modifier = Modifier.fillMaxSize()) {
                         if (isRight) {
                             Box(modifier = Modifier.weight(countersWeight).fillMaxHeight()) {
-                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers)
+                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers, tokenBlinkMode = tokenBlinkMode, vipTopTokenByKey = vipTopTokenByKey)
                             }
                             Box(modifier = Modifier.weight(adWeight).fillMaxHeight().clipToBounds()) { adAreaContent() }
                         } else {
                             Box(modifier = Modifier.weight(adWeight).fillMaxHeight().clipToBounds()) { adAreaContent() }
                             Box(modifier = Modifier.weight(countersWeight).fillMaxHeight()) {
-                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers)
+                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers, tokenBlinkMode = tokenBlinkMode, vipTopTokenByKey = vipTopTokenByKey)
                             }
                         }
                     }
@@ -1311,7 +1589,9 @@ private fun TokenDisplayBody(
                     tokenBgHex,
                     isPortrait = usePortraitLayout,
                     hasAds = hasAds,
-                    blinkTriggers = blinkTriggers
+                    blinkTriggers = blinkTriggers,
+                    tokenBlinkMode = tokenBlinkMode,
+                    vipTopTokenByKey = vipTopTokenByKey,
                 )
             }
         } else {
@@ -1320,17 +1600,17 @@ private fun TokenDisplayBody(
                     if (adPlacement.equals("left", ignoreCase = true)) {
                         Box(modifier = Modifier.weight(adWeight).fillMaxHeight().clipToBounds()) { adAreaContent() }
                         Box(modifier = Modifier.weight(countersWeight).fillMaxHeight()) {
-                            CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers)
+                            CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers, tokenBlinkMode = tokenBlinkMode, vipTopTokenByKey = vipTopTokenByKey)
                         }
                     } else {
                         Box(modifier = Modifier.weight(countersWeight).fillMaxHeight()) {
-                            CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers)
+                            CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers, tokenBlinkMode = tokenBlinkMode, vipTopTokenByKey = vipTopTokenByKey)
                         }
                         Box(modifier = Modifier.weight(adWeight).fillMaxHeight().clipToBounds()) { adAreaContent() }
                     }
                 }
             } else {
-                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers)
+                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers, tokenBlinkMode = tokenBlinkMode, vipTopTokenByKey = vipTopTokenByKey)
             }
         }
 
@@ -1342,7 +1622,8 @@ private fun TokenDisplayFooter(
     config: TvConfigEntity,
     responsivePadding: androidx.compose.ui.unit.Dp,
     scale: Float,
-    deviceIsPortrait: Boolean
+    deviceIsPortrait: Boolean,
+    appThemeHex: String,
 ) {
     val scrollEnabled = config.scrollEnabled?.equals("on", ignoreCase = true) == true
     val noOfTextFields = config.noOfTextFields ?: 0
@@ -1369,7 +1650,9 @@ private fun TokenDisplayFooter(
         ScrollingFooter(
             textLines = scrollLines,
             scale = scale,
-            isPortrait = deviceIsPortrait
+            isPortrait = deviceIsPortrait,
+            appThemeHex = appThemeHex,
+            scrollTextColorHex = config.scrollTextColor,
         )
     }
 }
@@ -1393,7 +1676,9 @@ fun HeaderArea(
     isCounterAnnouncementEnabled: Boolean?,
     isCounterPrefixEnabled: Boolean?,
     onRefresh: () -> Unit,
-    onClearTokenHistoryAndRefresh: () -> Unit
+    onClearTokenHistoryAndRefresh: () -> Unit,
+    tokenBlinkMode: TokenBlinkMode = TokenBlinkMode.WHOLE_TILE,
+    onTokenBlinkModeChange: (TokenBlinkMode) -> Unit = {},
 ) {
     // Fallback local clock so DateTime display stays live even if upstream updates stall.
     val use24Hour = remember(dateTime) { !dateTime.contains("AM") && !dateTime.contains("PM") }
@@ -1429,7 +1714,9 @@ fun HeaderArea(
             isTokenAnnouncementEnabled = isTokenAnnouncementEnabled,
             isCounterAnnouncementEnabled = isCounterAnnouncementEnabled,
             isCounterPrefixEnabled = isCounterPrefixEnabled,
-            companyName = companyName
+            companyName = companyName,
+            tokenBlinkMode = tokenBlinkMode,
+            onTokenBlinkModeChange = onTokenBlinkModeChange,
         )
     }
 
@@ -1582,8 +1869,9 @@ fun NetworkStatusIndicator(isOnline: Boolean, isPortrait: Boolean, scale: Float)
 }
 
 @Composable
-fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
+fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity, counterBgHex: String) {
     val orderedAds = remember(adFiles) { adFiles.sortedBy { it.position } }
+    val adAreaBgBrush = remember(counterBgHex) { ThemeColorManager.getBackgroundBrush(counterBgHex) }
     val context = LocalContext.current
     val allowYoutubeAds = context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
         .getBoolean("allow_youtube_ads", true)
@@ -1601,10 +1889,8 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
     val adSwitchScope = rememberCoroutineScope()
     val transitionHoldMs = 180L
     var visibleAdReady by remember(orderedAds) { mutableStateOf(false) }
-    val visibleReadyTimeoutMs = 20_000L
-    // Keep one stable player instance active; alternating players without true preloading
-    // can add handoff delay on constrained TV devices.
-    val activePlayerIdx = 0
+    // Double-buffer: front slot is visible; back slot preloads next video without a black handoff.
+    var frontPlayerSlot by remember(orderedAds) { mutableIntStateOf(0) }
     val mediaTypeCache = remember { mutableStateMapOf<String, AdMediaType>() }
     val sharedYoutubeWebView = remember(context) {
         buildBaseYoutubeWebView(context)
@@ -1613,8 +1899,12 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
         buildSharedAdTextureView(context)
     }
 
+    // Off-screen Exo preload uses a second MediaCodec and often hangs on TV SoCs with HQ files.
+
     DisposableEffect(sharedYoutubeWebView) {
+        TokenAnnouncementAdAudio.setYoutubeWebView(sharedYoutubeWebView)
         onDispose {
+            TokenAnnouncementAdAudio.setYoutubeWebView(null)
             releaseYouTubeWebView(sharedYoutubeWebView, destroy = true)
         }
     }
@@ -1667,13 +1957,6 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
         }
     }
 
-    fun isWmvUnsupportedVideo(path: String): Boolean {
-        val lc = path.lowercase()
-        // ExoPlayer may not have a decoder/extractor for WMV on all TV SoCs.
-        // Your log shows: "Unsupported mime video/x-ms-wmv".
-        return lc.contains(".wmv") || lc.contains("x-ms-wmv") || lc.endsWith("/wmv")
-    }
-
     fun fastInferMediaType(path: String): AdMediaType {
         val lc = path.lowercase()
         return when {
@@ -1688,11 +1971,74 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
         }
     }
 
-    fun isUhdPortraitU25UnsupportedVideo(path: String): Boolean {
-        val lc = path.lowercase()
-        return lc.contains("uhd_2160_3840") ||
-            lc.contains("uhd_2160x3840") ||
-            (lc.contains("2160x3840") || lc.contains("2160_3840")) && lc.endsWith(".mp4")
+    fun visibleReadyTimeoutFor(ad: AdFileEntity): Long {
+        val type = mediaTypeCache[ad.filePath] ?: fastInferMediaType(ad.filePath)
+        return when (type) {
+            AdMediaType.Video, AdMediaType.YouTube -> 45_000L
+            AdMediaType.Web -> if (isLikelyLiveStreamUrl(ad.filePath)) 90_000L else 30_000L
+            else -> 25_000L
+        }
+    }
+
+    fun applyVisibleAd(ad: AdFileEntity, idx: Int, reason: String) {
+        Log.i(
+            "AdLoop",
+            "applyVisibleAd reason=$reason idx=$idx url=${ad.filePath.take(90)}"
+        )
+        visibleAd = ad
+        visibleAdIdx = idx.coerceAtLeast(0)
+        visibleAdReady = false
+        visibleReplayToken += 1
+        candidateAd = null
+        candidateAdIdx = -1
+        candidateLoadToken += 1
+    }
+
+    /** Immediately advance away from a failed or unsupported visible ad (does not wait for preload). */
+    fun skipVisibleAd(failedAd: AdFileEntity?) {
+        if (orderedAds.isEmpty()) return
+        if (failedAd != null) {
+            val stillSame = visibleAd?.id == failedAd.id &&
+                visibleAd?.position == failedAd.position
+            if (!stillSame) return
+        }
+        val fromIdx = failedAd?.let { ad ->
+            orderedAds.indexOfFirst { it.id == ad.id && it.position == ad.position }
+                .takeIf { it >= 0 }
+        } ?: visibleAdIdx.coerceIn(0, orderedAds.lastIndex.coerceAtLeast(0))
+
+        if (orderedAds.size == 1) {
+            visibleAdReady = false
+            candidateAd = null
+            candidateAdIdx = -1
+            candidateLoadToken += 1
+            visibleReplayToken += 1
+            Log.w(
+                "AdLoop",
+                "Single ad unplayable/failed; remounting player token=$visibleReplayToken path=${orderedAds[0].filePath.take(90)}"
+            )
+            return
+        }
+
+        val nextIdx = (fromIdx + 1) % orderedAds.size
+        applyVisibleAd(orderedAds[nextIdx], nextIdx, "skip_failed")
+    }
+
+    fun promoteCandidateAfterHold(preloadTokenSnapshot: Int, nextAd: AdFileEntity, nextIdx: Int) {
+        adSwitchScope.launch {
+            delay(transitionHoldMs)
+            if (preloadTokenSnapshot != candidateLoadToken) return@launch
+            candidateAd = null
+            candidateAdIdx = -1
+            // Let preload composables dispose before the shared TextureView is reattached.
+            delay(48)
+            if (preloadTokenSnapshot != candidateLoadToken) return@launch
+            frontPlayerSlot = 1 - frontPlayerSlot
+            visibleAd = nextAd
+            visibleAdIdx = nextIdx.coerceAtLeast(0)
+            visibleAdReady = true
+            visibleReplayToken += 1
+        }
     }
 
     fun triggerNext(expectedCurrentAd: AdFileEntity? = null) {
@@ -1715,6 +2061,19 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
         candidateLoadToken += 1
         candidateAd = next
         candidateAdIdx = nextIdx
+        val nextType = mediaTypeCache[next.filePath] ?: fastInferMediaType(next.filePath)
+        if (nextType == AdMediaType.YouTube) {
+            val token = candidateLoadToken
+            adSwitchScope.launch {
+                delay(transitionHoldMs)
+                if (candidateAd?.id == next.id &&
+                    candidateAd?.position == next.position &&
+                    token == candidateLoadToken
+                ) {
+                    promoteCandidateAfterHold(token, next, nextIdx)
+                }
+            }
+        }
     }
 
     fun triggerNextFrom(ad: AdFileEntity, expectedCurrentAd: AdFileEntity? = null) {
@@ -1730,18 +2089,6 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
         candidateLoadToken += 1
         candidateAd = orderedAds[nextIdx]
         candidateAdIdx = nextIdx
-    }
-
-    fun promoteCandidateAfterHold(preloadTokenSnapshot: Int, nextAd: AdFileEntity, nextIdx: Int) {
-        adSwitchScope.launch {
-            delay(transitionHoldMs)
-            if (preloadTokenSnapshot != candidateLoadToken) return@launch
-            visibleAd = nextAd
-            visibleAdIdx = nextIdx.coerceAtLeast(0)
-            candidateAd = null
-            candidateAdIdx = -1
-            visibleReplayToken = 0
-        }
     }
 
     // Ensure non-ended media types always advance by configured interval so the full ad list
@@ -1767,138 +2114,226 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity) {
         triggerNext(expectedCurrentAd = current)
     }
 
-    // Black-screen watchdog: if a visible ad never becomes ready, skip it quickly.
+    // Watchdog: if a visible ad never becomes ready, skip to the next item.
     LaunchedEffect(visibleAd?.id, visibleAd?.position) {
         visibleAdReady = false
     }
-    LaunchedEffect(visibleAd?.id, visibleAd?.position, visibleAdReady) {
+    LaunchedEffect(visibleAd?.id, visibleAd?.position, visibleAdReady, visibleReplayToken) {
         val current = visibleAd ?: return@LaunchedEffect
         if (visibleAdReady) return@LaunchedEffect
-        delay(visibleReadyTimeoutMs)
+        val timeoutMs = visibleReadyTimeoutFor(current)
+        delay(timeoutMs)
         val stillSame = visibleAd?.id == current.id && visibleAd?.position == current.position
         if (stillSame && !visibleAdReady) {
             Log.w(
                 "AdLoop",
-                "Visible ad not ready within ${visibleReadyTimeoutMs / 1000}s; skipping ${current.filePath.take(120)}"
+                "Visible ad not ready within ${timeoutMs / 1000}s; skipping ${current.filePath.take(120)}"
             )
-            triggerNext(expectedCurrentAd = current)
+            skipVisibleAd(current)
         }
     }
 
-    Box(
+    val density = LocalDensity.current
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .clipToBounds()
             .focusProperties { canFocus = false }
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .background(adAreaBgBrush)
             .padding(4.dp),
-        contentAlignment = Alignment.Center
     ) {
+        val viewportPx = remember(maxWidth, maxHeight, density) {
+            AdViewportSizing.fromConstraints(
+                with(density) { maxWidth.roundToPx() },
+                with(density) { maxHeight.roundToPx() },
+                context,
+            )
+        }
+        LaunchedEffect(viewportPx.width, viewportPx.height) {
+            delay(350)
+            MediaEngine.updateViewport(context, viewportPx.width, viewportPx.height)
+        }
+        LaunchedEffect(orderedAds, viewportPx) {
+            if (!viewportPx.isValid()) return@LaunchedEffect
+            val loader = context.imageLoader
+            orderedAds.forEach { ad ->
+                val type = mediaTypeCache[ad.filePath] ?: fastInferMediaType(ad.filePath)
+                if (type == AdMediaType.Image) {
+                    loader.enqueue(
+                        AdViewportSizing.coilImageRequestBuilder(context, ad.filePath, viewportPx).build()
+                    )
+                }
+            }
+        }
+        LaunchedEffect(candidateAd?.id, candidateAd?.filePath, viewportPx) {
+            val ad = candidateAd ?: return@LaunchedEffect
+            if (!viewportPx.isValid()) return@LaunchedEffect
+            val type = mediaTypeCache[ad.filePath] ?: fastInferMediaType(ad.filePath)
+            if (type == AdMediaType.Image) {
+                context.imageLoader.enqueue(
+                    AdViewportSizing.coilImageRequestBuilder(context, ad.filePath, viewportPx).build()
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
         if (orderedAds.isEmpty()) {
             Text("No Ads", color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
-            // Main display: keep currently visible ad until the next candidate is ready.
-            Crossfade(
-                targetState = Pair(visibleAd, visibleReplayToken),
-                animationSpec = tween(0),
-                modifier = Modifier.fillMaxSize().clipToBounds(),
-                label = "ad_fade"
-            ) { state ->
-                val ad = state.first
-                if (ad != null) {
-                    val mediaType = mediaTypeCache[ad.filePath] ?: fastInferMediaType(ad.filePath)
-                    Log.i(
-                        "AdClassifier",
-                        "VISIBLE type=$mediaType url=${ad.filePath.take(140)}"
-                    )
-                    AdUnifiedPlayer(
-                        ad = ad,
-                        mediaType = mediaType,
-                        allowYoutubeAds = allowYoutubeAds,
-                        sharedYoutubeWebView = sharedYoutubeWebView,
-                        sharedVideoTextureView = sharedAdTextureView,
-                        activePlayerIdx = activePlayerIdx,
-                        isWmvUnsupportedVideo = ::isWmvUnsupportedVideo,
-                        onReady = {
-                            visibleAdReady = true
-                            UiPerfProbe.logAdEvent("READY", ad.filePath)
-                        },
-                        onEnded = {
-                            UiPerfProbe.logAdEvent("ENDED", ad.filePath)
-                            triggerNext(expectedCurrentAd = ad)
-                            // Only replay when there is a single ad configured.
-                            // For multiple ads, enforce round-robin without repeating same ad.
-                            if (orderedAds.size <= 1) {
-                                visibleReplayToken += 1
-                            }
-                        },
-                        onError = {
-                            UiPerfProbe.logAdEvent("ERROR", ad.filePath)
-                            triggerNext(expectedCurrentAd = ad)
-                        }
+            val frontSlot = frontPlayerSlot
+            val backSlot = 1 - frontSlot
+            val visibleAdSnapshot = visibleAd
+            val preloadAd = candidateAd
+            val visibleType = visibleAdSnapshot?.let { ad ->
+                mediaTypeCache[ad.filePath] ?: fastInferMediaType(ad.filePath)
+            }
+            val preloadType = preloadAd?.let { ad ->
+                mediaTypeCache[ad.filePath] ?: fastInferMediaType(ad.filePath)
+            }
+            val showVideoSurface =
+                (visibleAdSnapshot != null &&
+                    usesExoTexturePlayback(visibleType!!, visibleAdSnapshot.filePath)) ||
+                (preloadAd != null && preloadType != null &&
+                    usesExoTexturePlayback(preloadType, preloadAd.filePath))
+
+            Box(Modifier.fillMaxSize()) {
+                var sharedSurfaceGeneration by remember { mutableIntStateOf(0) }
+                if (showVideoSurface) {
+                    AdTextureSurfaceHost(
+                        textureView = sharedAdTextureView,
+                        onSurfaceReady = { sharedSurfaceGeneration += 1 },
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
-            }
 
-            // Hidden preloader: keep this image-only.
-            // Offscreen WebView/Player surfaces can exhaust RTS IDs on some IMG GPUs.
-            val preloadAd = candidateAd
-            if (preloadAd != null && (visibleAd == null || preloadAd.filePath != visibleAd?.filePath || preloadAd.id != visibleAd?.id)) {
-                val preloadTokenSnapshot = candidateLoadToken
-                val preloadType = mediaTypeCache[preloadAd.filePath] ?: fastInferMediaType(preloadAd.filePath)
-                Log.i(
-                    "AdClassifier",
-                    "PRELOAD type=$preloadType url=${preloadAd.filePath.take(140)}"
-                )
-                if (preloadType == AdMediaType.Image) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .alpha(0.01f)
-                            .clipToBounds()
-                    ) {
+                if (visibleAdSnapshot != null && visibleType != null) {
+                    key(visibleAdSnapshot.id, visibleAdSnapshot.position, visibleReplayToken, frontSlot) {
+                        Log.i(
+                            "AdClassifier",
+                            "VISIBLE slot=$frontSlot type=$visibleType url=${visibleAdSnapshot.filePath.take(140)}"
+                        )
                         AdUnifiedPlayer(
-                            ad = preloadAd,
-                            mediaType = preloadType,
+                            ad = visibleAdSnapshot,
+                            mediaType = visibleType,
                             allowYoutubeAds = allowYoutubeAds,
+                            viewport = viewportPx,
                             sharedYoutubeWebView = sharedYoutubeWebView,
-                            sharedVideoTextureView = sharedAdTextureView,
-                            activePlayerIdx = activePlayerIdx,
-                            isWmvUnsupportedVideo = ::isWmvUnsupportedVideo,
+                            sharedVideoTextureView = if (usesExoTexturePlayback(visibleType, visibleAdSnapshot.filePath)) {
+                                sharedAdTextureView
+                            } else {
+                                null
+                            },
+                            activePlayerIdx = frontSlot,
+                            videoAttachToTexture = true,
+                            videoSurfaceReadySignal = sharedSurfaceGeneration,
                             onReady = {
-                                if (preloadTokenSnapshot == candidateLoadToken) {
-                                    UiPerfProbe.logAdEvent("PRELOAD_READY", preloadAd.filePath)
-                                    promoteCandidateAfterHold(
-                                        preloadTokenSnapshot = preloadTokenSnapshot,
-                                        nextAd = preloadAd,
-                                        nextIdx = candidateAdIdx
-                                    )
+                                visibleAdReady = true
+                                UiPerfProbe.logAdEvent("READY", visibleAdSnapshot.filePath)
+                            },
+                            onEnded = {
+                                UiPerfProbe.logAdEvent("ENDED", visibleAdSnapshot.filePath)
+                                triggerNext(expectedCurrentAd = visibleAdSnapshot)
+                                if (orderedAds.size <= 1) {
+                                    visibleReplayToken += 1
                                 }
                             },
-                            onEnded = { },
                             onError = {
-                                if (preloadTokenSnapshot == candidateLoadToken) {
-                                    UiPerfProbe.logAdEvent("PRELOAD_ERROR", preloadAd.filePath)
-                                    triggerNextFrom(preloadAd, expectedCurrentAd = visibleAd)
-                                }
+                                UiPerfProbe.logAdEvent("ERROR", visibleAdSnapshot.filePath)
+                                skipVisibleAd(visibleAdSnapshot)
                             }
                         )
                     }
-                } else {
-                    // Single-surface strategy for YouTube/video: avoid offscreen playback surfaces.
-                    if (preloadTokenSnapshot == candidateLoadToken) {
-                        promoteCandidateAfterHold(
-                            preloadTokenSnapshot = preloadTokenSnapshot,
-                            nextAd = preloadAd,
-                            nextIdx = candidateAdIdx
-                        )
+                }
+
+                // Preload next item off-screen; video uses headless ExoPlayer (no second TextureView).
+                if (preloadAd != null && preloadType != null &&
+                    (visibleAd == null ||
+                        preloadAd.filePath != visibleAd?.filePath ||
+                        preloadAd.id != visibleAd?.id)
+                ) {
+                    val preloadTokenSnapshot = candidateLoadToken
+                    val preloadUsesExo = usesExoTexturePlayback(preloadType, preloadAd.filePath)
+                    if (preloadType == AdMediaType.YouTube) {
+                        // Shared YouTube WebView cannot dual-buffer; triggerNext handles handoff.
+                    } else if (preloadUsesExo) {
+                        // Skip second Exo decoder preload — prevents hangs and grainy reconfigure on MTK TVs.
+                        Log.d("AdLoop", "Skipping off-screen Exo preload for ${preloadAd.filePath.take(90)}")
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .alpha(0.01f)
+                                .clipToBounds()
+                        ) {
+                            Log.i(
+                                "AdClassifier",
+                                "PRELOAD slot=$backSlot type=$preloadType url=${preloadAd.filePath.take(140)}"
+                            )
+                            AdUnifiedPlayer(
+                                ad = preloadAd,
+                                mediaType = preloadType,
+                                allowYoutubeAds = allowYoutubeAds,
+                                viewport = viewportPx,
+                                sharedYoutubeWebView = sharedYoutubeWebView,
+                                sharedVideoTextureView = null,
+                                activePlayerIdx = backSlot,
+                                videoAttachToTexture = true,
+                                onReady = {
+                                    if (preloadTokenSnapshot == candidateLoadToken) {
+                                        UiPerfProbe.logAdEvent("PRELOAD_READY", preloadAd.filePath)
+                                        promoteCandidateAfterHold(
+                                            preloadTokenSnapshot = preloadTokenSnapshot,
+                                            nextAd = preloadAd,
+                                            nextIdx = candidateAdIdx
+                                        )
+                                    }
+                                },
+                                onEnded = { },
+                                onError = {
+                                    if (preloadTokenSnapshot == candidateLoadToken) {
+                                        UiPerfProbe.logAdEvent("PRELOAD_ERROR", preloadAd.filePath)
+                                        triggerNextFrom(preloadAd, expectedCurrentAd = visibleAd)
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }
-            
-            // Candidate preloader keeps current ad visible and avoids black-frame switches.
+        }
         }
     }
+}
+
+@Composable
+private fun AdTextureSurfaceHost(
+    textureView: TextureView,
+    onSurfaceReady: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    AndroidView(
+        factory = {
+            detachViewFromParent(textureView)
+            bindAdTextureSurfaceOnly(
+                texture = textureView,
+                onSurfaceReady = onSurfaceReady,
+            )
+            textureView
+        },
+        update = { view ->
+            detachViewFromParent(view)
+            bindAdTextureSurfaceOnly(texture = view, onSurfaceReady = onSurfaceReady)
+        },
+        modifier = modifier.focusProperties { canFocus = false }
+    )
+}
+
+private fun usesExoTexturePlayback(type: AdMediaType, path: String): Boolean {
+    return type == AdMediaType.Video ||
+        (type == AdMediaType.Web && isLikelyLiveStreamUrl(path))
 }
 
 // YouTube components replaced by direct WebView implementation per user request to use exact links.
@@ -2331,7 +2766,7 @@ fun YouTubeAdPlayer(
                         """.trimIndent()
                     ) { result ->
                         val token = result.trim().trim('"')
-                        if (view != null) handleYouTubeRestrictionToken(view, token)
+                        view?.let { handleYouTubeRestrictionToken(it, token) }
                     }
                     Log.i(
                         "YouTubeAdPerf",
@@ -2944,11 +3379,49 @@ internal fun isAdLowBandwidthNetwork(context: Context): Boolean {
 }
 
 
+/** Stops playback and clears the queue so the next ad can bind a fresh decoder (avoids MTK NO_MEMORY). */
+private fun releaseExoVideoDecoder(player: ExoPlayer) {
+    try {
+        player.playWhenReady = false
+        player.stop()
+        player.clearMediaItems()
+    } catch (_: Exception) {
+    }
+}
+
+private fun prepareAdVideoOnPlayer(
+    player: ExoPlayer,
+    texture: TextureView?,
+    attachToTexture: Boolean,
+    mediaItem: MediaItem,
+    videoUrl: String,
+    isLowBandwidth: Boolean,
+    context: Context,
+    viewport: AdViewportPx,
+) {
+    if (attachToTexture && texture != null) {
+        player.setVideoTextureView(texture)
+    }
+    applyAdaptiveVideoTrackCap(
+        player = player,
+        videoUrl = videoUrl,
+        isLowBandwidth = isLowBandwidth,
+        context = context,
+        viewport = viewport,
+    )
+    player.setMediaItem(mediaItem)
+    player.prepare()
+    player.playWhenReady = true
+}
+
 @Composable
 fun AdVideoPlayer(
     videoUrl: String,
     player: ExoPlayer,
-    sharedTextureView: android.view.TextureView? = null,
+    viewport: AdViewportPx = AdViewportSizing.lastViewport,
+    sharedTextureView: TextureView? = null,
+    attachToTexture: Boolean = true,
+    videoSurfaceReadySignal: Int = 0,
     onVideoEnded: () -> Unit,
     onReady: () -> Unit = {},
     onError: () -> Unit = {}
@@ -2960,8 +3433,11 @@ fun AdVideoPlayer(
     val latestOnError by rememberUpdatedState(onError)
 
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
-    val scope = rememberCoroutineScope()
-    val videoTextureRef = remember(sharedTextureView) { mutableStateOf<android.view.TextureView?>(sharedTextureView) }
+    val externallyHosted = sharedTextureView != null && attachToTexture
+    val videoTextureRef = remember(sharedTextureView, attachToTexture) {
+        mutableStateOf(if (externallyHosted) sharedTextureView else null)
+    }
+    var textureSurfaceGeneration by remember { mutableIntStateOf(0) }
     var latestVideoSize by remember { mutableStateOf(androidx.media3.common.VideoSize.UNKNOWN) }
 
     var readyReported by remember(videoUrl) { mutableStateOf(false) }
@@ -2974,12 +3450,14 @@ fun AdVideoPlayer(
             override fun onPlaybackStateChanged(state: Int) {
                 when (state) {
                     Player.STATE_READY -> {
-                        readyReported = true
                         Log.i(
                             "AdVideoPerf",
                             "STATE_READY in ${System.currentTimeMillis() - loadStartedAtMs} ms for url=${videoUrl.take(120)}"
                         )
-                        mainHandler.post { latestOnReady() }
+                        if (!readyReported) {
+                            readyReported = true
+                            mainHandler.post { latestOnReady() }
+                        }
                     }
                     Player.STATE_ENDED -> {
                         terminalEventReported = true
@@ -3012,108 +3490,107 @@ fun AdVideoPlayer(
                     applyFitCenterTransform(videoTextureRef.value, videoSize)
                 }
             }
+
+            override fun onRenderedFirstFrame() {
+                if (!readyReported) {
+                    readyReported = true
+                    Log.i(
+                        "AdVideoPerf",
+                        "FIRST_FRAME in ${System.currentTimeMillis() - loadStartedAtMs} ms for url=${videoUrl.take(120)}"
+                    )
+                    mainHandler.post { latestOnReady() }
+                }
+            }
         }
         
         player.addListener(listener)
         onDispose {
             player.removeListener(listener)
-            // Detach texture host and pause playback, but keep decoder session warm.
-            // Using TextureView avoids repeated SurfaceView lifecycle churn on IMG GPUs.
+            // Pause only — clearing the decoder on every Compose dispose caused black frames
+            // when the shared TextureView was rebound (prepare ran before surface was ready).
             try {
-                // Keep player operations on main thread to avoid Media3 thread violations.
-                if (Looper.myLooper() == Looper.getMainLooper()) {
-                    val activeTexture = videoTextureRef.value
-                    if (sharedTextureView == null) {
-                        activeTexture?.let { texture ->
-                            player.clearVideoTextureView(texture)
-                            (texture.parent as? android.view.ViewGroup)?.removeView(texture)
-                        }
-                    }
-                    if (sharedTextureView == null) {
-                        videoTextureRef.value = null
-                    } else {
-                        videoTextureRef.value = sharedTextureView
-                    }
+                val pauseOnly: () -> Unit = {
                     player.playWhenReady = false
                     player.pause()
+                }
+                val detachTexture: () -> Unit = {
+                    videoTextureRef.value?.let { texture ->
+                        player.clearVideoTextureView(texture)
+                        if (!externallyHosted) {
+                            detachViewFromParent(texture)
+                            videoTextureRef.value = null
+                        }
+                    }
+                }
+                if (Looper.myLooper() == Looper.getMainLooper()) {
+                    pauseOnly()
+                    detachTexture()
                 } else {
                     mainHandler.post {
                         try {
-                            val activeTexture = videoTextureRef.value
-                            if (sharedTextureView == null) {
-                                activeTexture?.let { texture ->
-                                    player.clearVideoTextureView(texture)
-                                    (texture.parent as? android.view.ViewGroup)?.removeView(texture)
-                                }
-                            }
-                            if (sharedTextureView == null) {
-                                videoTextureRef.value = null
-                            } else {
-                                videoTextureRef.value = sharedTextureView
-                            }
-                            player.playWhenReady = false
-                            player.pause()
+                            pauseOnly()
+                            detachTexture()
                         } catch (_: Exception) {
-                            // Ignore; pause may still throw on some TV device states.
                         }
                     }
                 }
             } catch (_: Exception) {
-                // Ignore; pause may still throw on some TV device states.
             }
         }
     }
-    
-    LaunchedEffect(videoUrl, player) {
+
+    LaunchedEffect(viewport.width, viewport.height, latestVideoSize) {
+        videoTextureRef.value?.post {
+            applyFitCenterTransform(videoTextureRef.value, latestVideoSize)
+        }
+    }
+
+    LaunchedEffect(videoUrl, player, textureSurfaceGeneration, attachToTexture, externallyHosted, videoSurfaceReadySignal) {
         readyReported = false
         terminalEventReported = false
         loadStartedAtMs = System.currentTimeMillis()
-        // Media3 requires player method calls on the main thread.
-        // We only keep lightweight work off-main (MediaItem creation).
-        scope.launch(Dispatchers.Default) {
-            val mediaItem = try {
-                val lower = videoUrl.lowercase()
-                val mimeType = when {
-                    lower.contains(".m3u8") || lower.contains("format=m3u8") -> androidx.media3.common.MimeTypes.APPLICATION_M3U8
-                    lower.contains(".mpd") -> androidx.media3.common.MimeTypes.APPLICATION_MPD
-                    else -> null
-                }
-                if (mimeType != null) {
-                    MediaItem.Builder()
-                        .setUri(videoUrl)
-                        .setMimeType(mimeType)
-                        .build()
-                } else {
-                    MediaItem.fromUri(videoUrl)
-                }
-            } catch (e: Exception) {
-                Log.e("AdVideoPlayer", "Failed to create media item: $videoUrl", e)
-                null
+        val loadUrl = videoUrl
+        val texture = when {
+            !attachToTexture -> null
+            externallyHosted -> sharedTextureView
+            else -> videoTextureRef.value
+        }
+        if (attachToTexture && (texture == null || !texture.isAvailable)) {
+            return@LaunchedEffect
+        }
+        val mediaItem = try {
+            withContext(Dispatchers.Default) {
+                buildAdVideoMediaItem(loadUrl)
             }
-            if (mediaItem == null) {
-                mainHandler.post {
-                    terminalEventReported = true
-                    latestOnError()
-                }
-                return@launch
-            }
-
-            mainHandler.post {
-                try {
-                    applyAdaptiveVideoTrackCap(
-                        player = player,
-                        videoUrl = videoUrl,
-                        isLowBandwidth = isLowBandwidth
-                    )
-                    player.setMediaItem(mediaItem)
-                    player.prepare()
-                    player.playWhenReady = true
-                } catch (e: Exception) {
-                    Log.e("AdVideoPlayer", "Failed to prepare video: $videoUrl", e)
-                    terminalEventReported = true
-                    latestOnError()
-                }
-            }
+        } catch (e: Exception) {
+            Log.e("AdVideoPlayer", "Failed to create media item: $loadUrl", e)
+            null
+        }
+        if (mediaItem == null) {
+            terminalEventReported = true
+            latestOnError()
+            return@LaunchedEffect
+        }
+        try {
+            releaseExoVideoDecoder(player)
+            prepareAdVideoOnPlayer(
+                player = player,
+                texture = texture,
+                attachToTexture = attachToTexture,
+                mediaItem = mediaItem,
+                videoUrl = loadUrl,
+                isLowBandwidth = isLowBandwidth,
+                context = context,
+                viewport = viewport,
+            )
+            Log.i(
+                "AdVideoPerf",
+                "Prepared ${if (attachToTexture) "with" else "without"} surface url=${loadUrl.take(120)}"
+            )
+        } catch (e: Exception) {
+            Log.e("AdVideoPlayer", "Failed to prepare video: $loadUrl", e)
+            terminalEventReported = true
+            latestOnError()
         }
     }
 
@@ -3126,8 +3603,8 @@ fun AdVideoPlayer(
         val timeoutMs = when {
             isLikelyLive && isLowBandwidth -> 120_000L
             isLikelyLive -> 90_000L
-            isLowBandwidth -> 80_000L
-            else -> 60_000L
+            isLowBandwidth -> 45_000L
+            else -> 35_000L
         }
         delay(timeoutMs)
         if (!readyReported && !terminalEventReported) {
@@ -3138,39 +3615,143 @@ fun AdVideoPlayer(
         }
     }
 
-    AndroidView(
-        factory = {
-            val texture = sharedTextureView ?: buildSharedAdTextureView(context)
-            (texture.parent as? android.view.ViewGroup)?.removeView(texture)
-            if (texture.tag != "callqtv_ad_texture_bound") {
-                texture.tag = "callqtv_ad_texture_bound"
-                texture.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-                    applyFitCenterTransform(texture, latestVideoSize)
+    if (externallyHosted || !attachToTexture) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .focusProperties { canFocus = false }
+        )
+    } else {
+        AndroidView(
+            factory = {
+                val texture = buildSharedAdTextureView(context)
+                detachViewFromParent(texture)
+                bindAdVideoTextureView(
+                    texture = texture,
+                    player = player,
+                    onSurfaceReady = { textureSurfaceGeneration += 1 },
+                    onLayout = { applyFitCenterTransform(texture, latestVideoSize) }
+                )
+                videoTextureRef.value = texture
+                texture
+            },
+            update = { view ->
+                detachViewFromParent(view)
+                if (videoTextureRef.value !== view) {
+                    videoTextureRef.value?.let { oldTexture ->
+                        if (oldTexture !== view) player.clearVideoTextureView(oldTexture)
+                    }
+                    videoTextureRef.value = view
                 }
-            }
-            videoTextureRef.value = texture
-            player.setVideoTextureView(texture)
-            texture
-        },
-        update = { view ->
-            if (videoTextureRef.value !== view) {
-                videoTextureRef.value?.let { oldTexture ->
-                    if (oldTexture !== view) player.clearVideoTextureView(oldTexture)
-                }
-                videoTextureRef.value = view
-                player.setVideoTextureView(view)
-            }
-            applyFitCenterTransform(view, latestVideoSize)
-        },
-        modifier = Modifier
-            .fillMaxSize()
-            .focusProperties { canFocus = false }
-    )
+                bindAdVideoTextureView(
+                    texture = view,
+                    player = player,
+                    onSurfaceReady = { textureSurfaceGeneration += 1 },
+                    onLayout = { applyFitCenterTransform(view, latestVideoSize) }
+                )
+            },
+            modifier = Modifier
+                .fillMaxSize()
+                .focusProperties { canFocus = false }
+        )
+    }
 }
 
-private fun buildSharedAdTextureView(context: Context): android.view.TextureView {
-    return android.view.TextureView(context).apply {
-        setOpaque(false)
+private fun buildAdVideoMediaItem(loadUrl: String): MediaItem {
+    val lower = loadUrl.lowercase()
+    val mimeType = when {
+        lower.contains(".m3u8") || lower.contains("format=m3u8") -> androidx.media3.common.MimeTypes.APPLICATION_M3U8
+        lower.contains(".mpd") -> androidx.media3.common.MimeTypes.APPLICATION_MPD
+        else -> null
+    }
+    return if (mimeType != null) {
+        MediaItem.Builder()
+            .setUri(loadUrl)
+            .setMimeType(mimeType)
+            .build()
+    } else {
+        MediaItem.fromUri(loadUrl)
+    }
+}
+
+/**
+ * Binds ExoPlayer to [texture] when the surface exists. Many TV GPUs report decoder READY
+ * while the TextureView surface is still unavailable — preparing earlier shows a black panel.
+ */
+private fun bindAdTextureSurfaceOnly(
+    texture: TextureView,
+    onSurfaceReady: () -> Unit,
+) {
+    fun notify() {
+        if (texture.isAvailable) onSurfaceReady()
+    }
+    if (texture.isAvailable) {
+        notify()
+        return
+    }
+    texture.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+        override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
+            texture.surfaceTextureListener = null
+            notify()
+        }
+
+        override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) = Unit
+
+        override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+            texture.surfaceTextureListener = null
+            return true
+        }
+
+        override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
+    }
+}
+
+private fun bindAdVideoTextureView(
+    texture: TextureView,
+    player: ExoPlayer,
+    onSurfaceReady: () -> Unit,
+    onLayout: () -> Unit,
+) {
+    if (texture.tag != "callqtv_ad_texture_bound") {
+        texture.tag = "callqtv_ad_texture_bound"
+        val layoutHandler = Handler(Looper.getMainLooper())
+        var layoutRunnable: Runnable? = null
+        texture.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            layoutRunnable?.let { layoutHandler.removeCallbacks(it) }
+            layoutRunnable = Runnable { onLayout() }
+            layoutHandler.postDelayed(layoutRunnable!!, 32L)
+        }
+    }
+    fun notifySurfaceReady() {
+        player.setVideoTextureView(texture)
+        onSurfaceReady()
+    }
+    if (texture.isAvailable) {
+        notifySurfaceReady()
+        return
+    }
+    texture.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+        override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
+            texture.surfaceTextureListener = null
+            notifySurfaceReady()
+        }
+
+        override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
+            onLayout()
+        }
+
+        override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+            texture.surfaceTextureListener = null
+            return true
+        }
+
+        override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
+    }
+}
+
+private fun buildSharedAdTextureView(context: Context): TextureView {
+    return TextureView(context).apply {
+        setOpaque(true)
         isFocusable = false
         isFocusableInTouchMode = false
         isClickable = false
@@ -3185,33 +3766,21 @@ private fun buildSharedAdTextureView(context: Context): android.view.TextureView
 private fun applyAdaptiveVideoTrackCap(
     player: ExoPlayer,
     videoUrl: String,
-    isLowBandwidth: Boolean
+    isLowBandwidth: Boolean,
+    context: Context,
+    viewport: AdViewportPx = AdViewportSizing.lastViewport,
 ) {
-    val lower = videoUrl.lowercase()
-    val isLikelyLive = lower.contains(".m3u8") || lower.contains(".mpd") || lower.contains("live")
-    val maxBitrate = when {
-        // Keep adaptive/live streams conservative to avoid bitrate oscillation stutter.
-        isLowBandwidth && isLikelyLive -> 900_000
-        isLowBandwidth -> 1_800_000
-        else -> 5_000_000
-    }
-    try {
-        val current = player.trackSelectionParameters
-        val updated = current.buildUpon()
-            .setMaxVideoBitrate(maxBitrate)
-            .build()
-        player.trackSelectionParameters = updated
-        Log.i(
-            "AdVideoPerf",
-            "Track cap applied bitrate=${maxBitrate}bps lowBandwidth=$isLowBandwidth live=$isLikelyLive url=${videoUrl.take(120)}"
-        )
-    } catch (e: Exception) {
-        Log.w("AdVideoPerf", "Failed applying adaptive track cap for ${videoUrl.take(120)}: ${e.message}")
-    }
+    AdViewportSizing.applyVideoTrackConstraints(
+        player = player,
+        viewport = viewport,
+        context = context,
+        videoUrl = videoUrl,
+        isLowBandwidth = isLowBandwidth,
+    )
 }
 
 private fun applyFitCenterTransform(
-    textureView: android.view.TextureView?,
+    textureView: TextureView?,
     videoSize: androidx.media3.common.VideoSize
 ) {
     if (textureView == null) return
@@ -3299,12 +3868,120 @@ private object WebViewWarmup {
     }
 }
 
+/**
+ * Lowers ExoPlayer-based ad audio and the shared YouTube WebView video element while token TTS runs,
+ * then restores prior levels. YouTube reference is registered from [AdArea].
+ */
+private object TokenAnnouncementAdAudio {
+    @Volatile
+    private var youtubeRef: WeakReference<WebView>? = null
+
+    fun setYoutubeWebView(webView: WebView?) {
+        youtubeRef = webView?.let { WeakReference(it) }
+    }
+
+    fun applyYoutubeDuck(duck: Boolean) {
+        val wv = youtubeRef?.get() ?: return
+        val js = if (duck) {
+            """
+            (function(){try{
+              var v=document.querySelector('video');
+              if(!v) return;
+              if(!window._callqtv_tts_duck_saved){
+                window._callqtv_tts_duck_saved={vol:v.volume,muted:v.muted};
+              }
+              v.muted=false;
+              v.volume=0.1;
+            }catch(e){}})();
+            """.trimIndent()
+        } else {
+            """
+            (function(){try{
+              var v=document.querySelector('video');
+              var s=window._callqtv_tts_duck_saved;
+              window._callqtv_tts_duck_saved=null;
+              if(!v||!s) return;
+              v.volume=s.vol;
+              v.muted=s.muted;
+            }catch(e){}})();
+            """.trimIndent()
+        }
+        try {
+            wv.evaluateJavascript(js, null)
+        } catch (_: Exception) {
+        }
+    }
+}
+
+private class AdAnnouncementRestoreOnce(private val appContext: Context) {
+    private val finished = AtomicBoolean(false)
+
+    fun run() {
+        if (!finished.compareAndSet(false, true)) return
+        Handler(Looper.getMainLooper()).post {
+            MediaEngine.restoreAfterAnnouncement(appContext)
+            TokenAnnouncementAdAudio.applyYoutubeDuck(false)
+        }
+    }
+}
+
+private suspend fun runWithAdvertisementAudioDuckedForSpeech(
+    context: Context,
+    block: suspend (restore: () -> Unit) -> Unit,
+) {
+    val prefs = context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
+    if (!prefs.getBoolean("enable_ad_sound", false)) {
+        block { }
+        return
+    }
+    val restore = AdAnnouncementRestoreOnce(context.applicationContext)
+    withContext(Dispatchers.Main.immediate) {
+        MediaEngine.duckForAnnouncement()
+        TokenAnnouncementAdAudio.applyYoutubeDuck(true)
+    }
+    try {
+        block { restore.run() }
+    } finally {
+        restore.run()
+    }
+}
+
+/**
+ * On some MediaTek devices `c2.mtk.*` Codec2 components fail allocation with NO_MEMORY when
+ * graphic/ION memory is already under pressure (WebView, multiple surfaces, another decoder).
+ * Prefer other decoders first so ExoPlayer avoids a doomed init + noisy stack traces; MTK
+ * remains in the list as a last resort when no alternative exists.
+ */
+private object DeprioritizeMtkCodecSelector : MediaCodecSelector {
+    override fun getDecoderInfos(
+        mimeType: String,
+        requiresSecureDecoder: Boolean,
+        requiresTunnelingDecoder: Boolean
+    ) = MediaCodecSelector.DEFAULT.getDecoderInfos(
+        mimeType,
+        requiresSecureDecoder,
+        requiresTunnelingDecoder
+    ).let { base ->
+        if (mimeType != MimeTypes.VIDEO_H264 && mimeType != MimeTypes.VIDEO_H265) {
+            return@let base
+        }
+        val nonMtk = base.filterNot { it.name.contains("mtk", ignoreCase = true) }
+        val mtk = base.filter { it.name.contains("mtk", ignoreCase = true) }
+        if (nonMtk.isNotEmpty() && mtk.isNotEmpty()) nonMtk + mtk else base
+    }
+}
+
 @UnstableApi
 object MediaEngine {
     private var player1: ExoPlayer? = null
     private var player2: ExoPlayer? = null
     private var simpleCache: androidx.media3.datasource.cache.Cache? = null
     private var cacheFactory: DataSource.Factory? = null
+
+    /** Snapshot of Exo volumes before ducking for token speech (null = not ducked). */
+    private var announcementDuckSavedVolumes: Pair<Float, Float>? = null
+
+    private const val ANNOUNCEMENT_DUCK_VOLUME = 0.12f
 
     private fun createPlayer(context: Context): ExoPlayer {
         // Large/remote ad videos can be slow to establish connections on TV networks.
@@ -3335,9 +4012,8 @@ object MediaEngine {
         }
 
         val loadControl = DefaultLoadControl.Builder()
-            // Favor smoother playback over fastest possible start:
-            // Min 8s, Max 40s, start at 1.5s, rebuffer at 3s.
-            .setBufferDurationsMs(8_000, 40_000, 1_500, 3_000)
+            // Enough buffer for high-bitrate files; reduces rebuffer stutter / apparent "hangs".
+            .setBufferDurationsMs(4_000, 45_000, 1_500, 2_500)
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
 
@@ -3345,17 +4021,18 @@ object MediaEngine {
         // Some devices fail MediaCodec.configure() for certain AVC streams; fallback lets ExoPlayer
         // try alternative initialization paths instead of getting stuck on a single codec.
         val renderersFactory = androidx.media3.exoplayer.DefaultRenderersFactory(context.applicationContext)
+            .setMediaCodecSelector(DeprioritizeMtkCodecSelector)
             .setEnableDecoderFallback(true)
 
-        // Strictly enforce safe decoder bounds.
-        // Without strict enforcement, ExoPlayer may still pick the 2160x3840@25 track and crash with:
-        // "NoSupport sizeAndRate ... 2160x3840@25.0"
+        // Cap to the measured ad viewport (updated from [AdArea]); avoids decoding 4K into a narrow strip.
+        val initialTarget = AdViewportSizing.decodeTarget(AdViewportSizing.lastViewport, context)
         val trackSelector = DefaultTrackSelector(context.applicationContext).apply {
             val params: androidx.media3.exoplayer.trackselection.DefaultTrackSelector.Parameters =
                 ParametersBuilder(context.applicationContext)
-                    .setMaxVideoSize(1080, 1920)
-                    .setMaxVideoFrameRate(30)
-                    .setExceedVideoConstraintsIfNecessary(false)
+                    .setMaxVideoSize(initialTarget.width, initialTarget.height)
+                    .setMaxVideoFrameRate(60)
+                    .setExceedVideoConstraintsIfNecessary(true)
+                    .setExceedRendererCapabilitiesIfNecessary(true)
                     .build()
             this.parameters = params
         }
@@ -3367,6 +4044,7 @@ object MediaEngine {
             .setLoadControl(loadControl)
             .build().apply {
                 repeatMode = Player.REPEAT_MODE_OFF
+                videoScalingMode = androidx.media3.common.C.VIDEO_SCALING_MODE_SCALE_TO_FIT
                 val isAdSoundEnabled = context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
                     .getBoolean("enable_ad_sound", false)
                 volume = if (isAdSoundEnabled) 1f else 0f
@@ -3384,17 +4062,35 @@ object MediaEngine {
     }
 
     /**
-     * Pre-initialize players/cache to avoid heavy work on the first ad composition.
-     * Safe to call multiple times.
+     * Pre-initialize the active ad player and cache to avoid heavy work on the first ad.
+     * Only player index 0 is used in production (`AdArea`); avoid allocating a second decoder
+     * on memory-constrained TV SoCs (MTK c2.mtk.avc.decoder NO_MEMORY).
      */
     fun warmUp(context: Context) {
-        if (simpleCache == null) {
-            // Ensure cacheFactory is initialized as part of first player creation.
-            // (createPlayer() lazily initializes cacheFactory.)
-        }
         if (player1 == null) player1 = createPlayer(context)
+    }
+
+    /** Second player for off-screen preload (avoids black handoff between video ads). */
+    fun ensureSecondPlayer(context: Context) {
         if (player2 == null) player2 = createPlayer(context)
-        // No return; players are now ready to be used by AdVideoPlayer.
+    }
+
+    /**
+     * Called when the ad pane is laid out. Track caps are applied only while [ExoPlayer] is idle
+     * so a resize mid-playback does not reconfigure the decoder (grain / crack / freeze).
+     */
+    fun updateViewport(context: Context, widthPx: Int, heightPx: Int) {
+        val viewport = AdViewportSizing.fromConstraints(widthPx, heightPx, context)
+        listOfNotNull(player1, player2).forEach { player ->
+            if (player.playbackState != Player.STATE_IDLE) return@forEach
+            AdViewportSizing.applyVideoTrackConstraints(
+                player = player,
+                viewport = viewport,
+                context = context.applicationContext,
+                videoUrl = "",
+                isLowBandwidth = isAdLowBandwidthNetwork(context),
+            )
+        }
     }
 
     fun updateVolume(context: Context) {
@@ -3405,12 +4101,45 @@ object MediaEngine {
         player2?.volume = vol
     }
 
+    fun duckForAnnouncement() {
+        val a = player1?.volume ?: 1f
+        val b = player2?.volume ?: 1f
+        announcementDuckSavedVolumes = a to b
+        player1?.volume = ANNOUNCEMENT_DUCK_VOLUME
+        player2?.volume = ANNOUNCEMENT_DUCK_VOLUME
+    }
+
+    fun restoreAfterAnnouncement(context: Context) {
+        val saved = announcementDuckSavedVolumes
+        announcementDuckSavedVolumes = null
+        val wantSound = context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
+            .getBoolean("enable_ad_sound", false)
+        val target = when {
+            saved == null -> if (wantSound) 1f else 0f
+            wantSound -> saved.first
+            else -> 0f
+        }
+        player1?.volume = target
+        player2?.volume = target
+    }
+
     fun shutdown() {
+        announcementDuckSavedVolumes = null
         player1?.release()
         player2?.release()
         player1 = null
         player2 = null
     }
+}
+
+private fun counterStorageLookupKey(counter: CounterEntity): String {
+    val btn = counter.buttonIndex?.toString()?.trim()?.takeIf { it.isNotBlank() }
+    if (!btn.isNullOrBlank()) return btn
+    return counter.keypadIndex?.trim()?.takeIf { it.isNotBlank() }
+        ?: counter.counterId?.trim()?.takeIf { it.isNotBlank() }
+        ?: counter.name?.trim()?.takeIf { it.isNotBlank() }
+        ?: counter.defaultName?.trim()?.takeIf { it.isNotBlank() }
+        ?: ""
 }
 
 @Composable
@@ -3426,7 +4155,9 @@ fun CountersArea(
     tokenBgHex: String,
     isPortrait: Boolean = false,
     hasAds: Boolean = false,
-    blinkTriggers: Map<String, Long> = emptyMap()
+    blinkTriggers: Map<String, Long> = emptyMap(),
+    tokenBlinkMode: TokenBlinkMode = TokenBlinkMode.WHOLE_TILE,
+    vipTopTokenByKey: Map<String, String> = emptyMap(),
 ) {
     Box(modifier = Modifier.fillMaxSize().padding(1.dp)) {
         val numCounters = counters.size
@@ -3435,8 +4166,8 @@ fun CountersArea(
         // type "1" (default) = automated split
         // type "2" = force no split (single grid/column)
         // type "3" = force split even for few counters
-        val splitThreshold = when (layoutType) {
-            "2" -> 999 
+        val splitThreshold = when (layoutType.trim().lowercase()) {
+            "2", "full" -> 999
             "3" -> 0
             else -> if (isPortrait) 4 else 2
         }
@@ -3451,15 +4182,18 @@ fun CountersArea(
                 Column(modifier = Modifier.fillMaxSize().padding(1.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                     Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
                         firstHalf.forEach { counter ->
+                            val sk = counterStorageLookupKey(counter)
                             val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
-                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, layoutType = layoutType)
+                            val vipTok = vipTopTokenByKey[sk]?.takeIf { it.isNotBlank() }
+                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sk] ?: 0L, tokenBlinkMode = tokenBlinkMode, layoutType = layoutType, vipDisplayTopToken = vipTok)
                         }
                     }
                     Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
                         secondHalf.forEach { counter ->
-                            val sKey = counter.counterId?.trim() ?: counter.name?.trim() ?: counter.defaultName?.trim() ?: counter.buttonIndex?.toString() ?: ""
+                            val sk = counterStorageLookupKey(counter)
                             val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
-                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sKey] ?: 0L, layoutType = layoutType)
+                            val vipTok = vipTopTokenByKey[sk]?.takeIf { it.isNotBlank() }
+                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sk] ?: 0L, tokenBlinkMode = tokenBlinkMode, layoutType = layoutType, vipDisplayTopToken = vipTok)
                         }
                         if (secondHalf.size < firstHalf.size) {
                             Spacer(modifier = Modifier.weight(1f))
@@ -3471,16 +4205,18 @@ fun CountersArea(
                 Row(modifier = Modifier.fillMaxSize().padding(1.dp), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                         firstHalf.forEach { counter ->
-                            val sKey = counter.counterId?.trim() ?: counter.name?.trim() ?: counter.defaultName?.trim() ?: counter.buttonIndex?.toString() ?: ""
+                            val sk = counterStorageLookupKey(counter)
                             val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
-                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sKey] ?: 0L, layoutType = layoutType)
+                            val vipTok = vipTopTokenByKey[sk]?.takeIf { it.isNotBlank() }
+                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sk] ?: 0L, tokenBlinkMode = tokenBlinkMode, layoutType = layoutType, vipDisplayTopToken = vipTok)
                         }
                     }
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                         secondHalf.forEach { counter ->
-                            val sKey = counter.counterId?.trim() ?: counter.name?.trim() ?: counter.defaultName?.trim() ?: counter.buttonIndex?.toString() ?: ""
+                            val sk = counterStorageLookupKey(counter)
                             val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
-                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sKey] ?: 0L, layoutType = layoutType)
+                            val vipTok = vipTopTokenByKey[sk]?.takeIf { it.isNotBlank() }
+                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sk] ?: 0L, tokenBlinkMode = tokenBlinkMode, layoutType = layoutType, vipDisplayTopToken = vipTok)
                         }
                         if (secondHalf.size < firstHalf.size) {
                             Spacer(modifier = Modifier.weight(1f))
@@ -3493,23 +4229,145 @@ fun CountersArea(
                 // Portrait: single vertical stack of counters
                 Column(modifier = Modifier.fillMaxSize().padding(1.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                     counters.forEach { counter ->
-                        val sKey = counter.counterId?.trim() ?: counter.name?.trim() ?: counter.defaultName?.trim() ?: counter.buttonIndex?.toString() ?: ""
+                        val sk = counterStorageLookupKey(counter)
                         val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
-                        CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sKey] ?: 0L, layoutType = layoutType)
+                        val vipTok = vipTopTokenByKey[sk]?.takeIf { it.isNotBlank() }
+                        CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sk] ?: 0L, tokenBlinkMode = tokenBlinkMode, layoutType = layoutType, vipDisplayTopToken = vipTok)
                     }
                 }
             } else {
                 // Landscape: single horizontal row of counters
                 Row(modifier = Modifier.fillMaxSize().padding(1.dp), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
                     counters.forEach { counter ->
-                        val sKey = counter.counterId?.trim() ?: counter.name?.trim() ?: counter.defaultName?.trim() ?: counter.buttonIndex?.toString() ?: ""
+                        val sk = counterStorageLookupKey(counter)
                         val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
-                        CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sKey] ?: 0L, layoutType = layoutType)
+                        val vipTok = vipTopTokenByKey[sk]?.takeIf { it.isNotBlank() }
+                        CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sk] ?: 0L, tokenBlinkMode = tokenBlinkMode, layoutType = layoutType, vipDisplayTopToken = vipTok)
                     }
                 }
             }
         }
     }
+}
+
+/**
+ * Fills the token area with a fixed grid: each cell gets equal width/height so no empty
+ * space remains inside the counter token region (slots scale with [totalSlots] and [columns]).
+ */
+@Composable
+private fun CounterTokenSlotsGrid(
+    modifier: Modifier = Modifier,
+    totalSlots: Int,
+    columns: Int,
+    tokens: List<String>,
+    usePrefix: Boolean,
+    counterCode: String,
+    config: TvConfigEntity,
+    scale: Float,
+    tokenFontSize: Float,
+    currentTokenTextColor: Color,
+    previousTokenTextColor: Color,
+    tokenBgBrush: Brush,
+    shouldBlink: Boolean,
+    isInverted: Boolean,
+    tokenBlinkMode: TokenBlinkMode = TokenBlinkMode.WHOLE_TILE,
+    vipEmergencyTopRawToken: String? = null,
+) {
+    val cols = columns.coerceAtLeast(1)
+    if (totalSlots <= 0) {
+        Box(modifier = modifier.fillMaxSize())
+        return
+    }
+    val rowCount = (totalSlots + cols - 1) / cols
+    Column(
+        modifier = modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(1.dp)
+    ) {
+        for (r in 0 until rowCount) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(1.dp)
+            ) {
+                for (c in 0 until cols) {
+                    val index = r * cols + c
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                    ) {
+                        if (index < totalSlots) {
+                            CounterTokenSlot(
+                                index = index,
+                                tokens = tokens,
+                                usePrefix = usePrefix,
+                                counterCode = counterCode,
+                                config = config,
+                                scale = scale,
+                                tokenFontSize = tokenFontSize,
+                                currentTokenTextColor = currentTokenTextColor,
+                                previousTokenTextColor = previousTokenTextColor,
+                                tokenBgBrush = tokenBgBrush,
+                                shouldBlink = shouldBlink,
+                                isInverted = isInverted,
+                                tokenBlinkMode = tokenBlinkMode,
+                                vipEmergencyTopRawToken = vipEmergencyTopRawToken,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CounterTokenSlot(
+    index: Int,
+    tokens: List<String>,
+    usePrefix: Boolean,
+    counterCode: String,
+    config: TvConfigEntity,
+    scale: Float,
+    tokenFontSize: Float,
+    currentTokenTextColor: Color,
+    previousTokenTextColor: Color,
+    tokenBgBrush: Brush,
+    shouldBlink: Boolean,
+    isInverted: Boolean,
+    tokenBlinkMode: TokenBlinkMode = TokenBlinkMode.WHOLE_TILE,
+    vipEmergencyTopRawToken: String? = null,
+) {
+    val token = tokens.getOrNull(index)
+    val isFirst = index == 0
+    val formattedToken = remember(token, config.tokenFormat) {
+        formatTokenByPattern(token, config.tokenFormat)
+    }
+    val prefixForSlot = when {
+        usePrefix && isFirst &&
+            !vipEmergencyTopRawToken.isNullOrBlank() &&
+            token?.trim().orEmpty() == vipEmergencyTopRawToken.trim() -> VIP_EMERGENCY_COUNTER_PREFIX
+        else -> counterCode
+    }
+    val displayToken = when {
+        formattedToken == null -> null
+        isSpecialMessageToken(formattedToken) -> decodeSpecialMessageToken(formattedToken)
+        usePrefix && prefixForSlot.isNotBlank() -> "$prefixForSlot-$formattedToken"
+        else -> formattedToken
+    }
+    val textColorToUse = if (isFirst) currentTokenTextColor else previousTokenTextColor
+    TokenCard(
+        token = displayToken,
+        isPrimary = isFirst,
+        scale = scale,
+        textColor = textColorToUse,
+        bgBrush = tokenBgBrush,
+        fontSize = tokenFontSize,
+        isInverted = if (isFirst && shouldBlink && token != null) isInverted else false,
+        blinkMode = tokenBlinkMode,
+        fullSize = true,
+    )
 }
 
 @Composable
@@ -3526,7 +4384,9 @@ fun CounterBoard(
     isPortrait: Boolean,
     hasAds: Boolean,
     blinkTrigger: Long = 0L,
-    layoutType: String = "1"
+    tokenBlinkMode: TokenBlinkMode = TokenBlinkMode.WHOLE_TILE,
+    layoutType: String = "1",
+    vipDisplayTopToken: String? = null,
 ) {
     val counterName = remember(counter.name, counter.defaultName) { 
         (counter.name.orEmpty().ifBlank { counter.defaultName.orEmpty().ifBlank { "Counter" } }).uppercase()
@@ -3594,6 +4454,9 @@ fun CounterBoard(
     ) {
         Box(modifier = Modifier.fillMaxSize().background(counterBgBrush)) {
             val usePrefix = config.enableCounterPrefix != false
+            val primaryRawToken = tokens.firstOrNull()
+            val isSpecialMessage = isSpecialMessageToken(primaryRawToken)
+            val specialMessage = decodeSpecialMessageToken(primaryRawToken)
             if (isPortrait) {
                 Row(modifier = Modifier.fillMaxSize().padding(1.dp)) {
                     // If ads exist, use 30% for name and 70% for tokens.
@@ -3601,7 +4464,7 @@ fun CounterBoard(
                     val nameWeight = if (hasAds) 0.30f else 0.2f
                     val tokenWeight = if (hasAds) 0.70f else 0.8f
 
-                    // Counter name area
+                    // Counter name area (same layout for normal tokens and __MSG__ / protocol C)
                     BoxWithConstraints(
                         modifier = Modifier
                             .weight(nameWeight)
@@ -3626,41 +4489,43 @@ fun CounterBoard(
                             .weight(tokenWeight)
                             .fillMaxHeight()
                     ) {
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(columns),
-                            modifier = Modifier.fillMaxSize(),
-                            horizontalArrangement = Arrangement.spacedBy(1.dp),
-                            verticalArrangement = Arrangement.spacedBy(1.dp),
-                            userScrollEnabled = false
-                        ) {
+                        if (isSpecialMessage) {
+                            TokenCard(
+                                modifier = Modifier.fillMaxSize(),
+                                token = specialMessage,
+                                isPrimary = true,
+                                scale = scale,
+                                textColor = currentTokenTextColor,
+                                bgBrush = tokenBgBrush,
+                                fontSize = tokenFontSize,
+                                isInverted = shouldBlink && blinkActive && specialMessage != null && isInverted,
+                                blinkMode = tokenBlinkMode,
+                                fullSize = true,
+                                multiline = true,
+                                specialCounterMessage = true,
+                            )
+                        } else {
                             val totalSlots = config.tokensPerCounter ?: (rows * columns)
-                            items(totalSlots) { index ->
-                                val token = tokens.getOrNull(index)
-                                val isFirst = index == 0
-                                val formattedToken = remember(token, config.tokenFormat) {
-                                    formatTokenByPattern(token, config.tokenFormat)
-                                }
-                                val displayToken = when {
-                                    formattedToken == null -> null
-                                    usePrefix && counterCode.isNotBlank() -> "$counterCode-$formattedToken"
-                                    else -> formattedToken
-                                }
-                                val currentFontSize = if (isFirst) tokenFontSize else tokenFontSize
-                                val textColorToUse = if (isFirst) currentTokenTextColor else previousTokenTextColor
-                                TokenCard(
-                                    token = displayToken,
-                                    isPrimary = isFirst,
-                                    scale = scale,
-                                    textColor = textColorToUse,
-                                    bgBrush = tokenBgBrush,
-                                    fontSize = currentFontSize,
-                                    isInverted = if (isFirst && shouldBlink && token != null) isInverted else false
-                                )
-                            }
+                            CounterTokenSlotsGrid(
+                                modifier = Modifier.fillMaxSize(),
+                                totalSlots = totalSlots,
+                                columns = columns,
+                                tokens = tokens,
+                                usePrefix = usePrefix,
+                                counterCode = counterCode,
+                                config = config,
+                                scale = scale,
+                                tokenFontSize = tokenFontSize,
+                                currentTokenTextColor = currentTokenTextColor,
+                                previousTokenTextColor = previousTokenTextColor,
+                                tokenBgBrush = tokenBgBrush,
+                                shouldBlink = shouldBlink,
+                                isInverted = isInverted,
+                                tokenBlinkMode = tokenBlinkMode,
+                                vipEmergencyTopRawToken = vipDisplayTopToken,
+                            )
                         }
                     }
-
-                    // No extra spacer needed; nameWeight + tokenWeight should be <= 1f
                 }
             } else {
                 Column(modifier = Modifier.fillMaxSize().padding(1.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -3681,37 +4546,44 @@ fun CounterBoard(
                     }
                     Spacer(modifier = Modifier.height(1.dp))
 
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(columns),
-                        modifier = Modifier.fillMaxWidth().weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(1.dp),
-                        verticalArrangement = Arrangement.spacedBy(1.dp),
-                        userScrollEnabled = false
-                    ) {
+                    if (isSpecialMessage) {
+                        TokenCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                                .fillMaxHeight(),
+                            token = specialMessage,
+                            isPrimary = true,
+                            scale = scale,
+                            textColor = currentTokenTextColor,
+                            bgBrush = tokenBgBrush,
+                            fontSize = tokenFontSize,
+                            isInverted = shouldBlink && blinkActive && specialMessage != null && isInverted,
+                            blinkMode = tokenBlinkMode,
+                            fullSize = true,
+                            multiline = true,
+                            specialCounterMessage = true,
+                        )
+                    } else {
                         val totalSlots = config.tokensPerCounter ?: (rows * columns)
-                        items(totalSlots) { index ->
-                            val token = tokens.getOrNull(index)
-                            val isFirst = index == 0
-                            val formattedToken = remember(token, config.tokenFormat) {
-                                formatTokenByPattern(token, config.tokenFormat)
-                            }
-                            val displayToken = when {
-                                formattedToken == null -> null
-                                usePrefix && counterCode.isNotBlank() -> "$counterCode-$formattedToken"
-                                else -> formattedToken
-                            }
-                            val currentFontSize = if (isFirst) tokenFontSize else tokenFontSize
-                            val textColorToUse = if (isFirst) currentTokenTextColor else previousTokenTextColor
-                                TokenCard(
-                                    token = displayToken,
-                                    isPrimary = isFirst,
-                                    scale = scale,
-                                    textColor = textColorToUse,
-                                    bgBrush = tokenBgBrush,
-                                    fontSize = currentFontSize,
-                                    isInverted = if (isFirst && shouldBlink && token != null) isInverted else false
-                                )
-                        }
+                        CounterTokenSlotsGrid(
+                            modifier = Modifier.fillMaxWidth().weight(1f),
+                            totalSlots = totalSlots,
+                            columns = columns,
+                            tokens = tokens,
+                            usePrefix = usePrefix,
+                            counterCode = counterCode,
+                            config = config,
+                            scale = scale,
+                            tokenFontSize = tokenFontSize,
+                            currentTokenTextColor = currentTokenTextColor,
+                            previousTokenTextColor = previousTokenTextColor,
+                            tokenBgBrush = tokenBgBrush,
+                            shouldBlink = shouldBlink,
+                            isInverted = isInverted,
+                            tokenBlinkMode = tokenBlinkMode,
+                            vipEmergencyTopRawToken = vipDisplayTopToken,
+                        )
                     }
                 }
             }
@@ -3719,58 +4591,189 @@ fun CounterBoard(
     }
 }
 
+/**
+ * Largest font size in **sp** (given [maxSp] cap) so measured text fits in [maxW]×[maxH] px.
+ */
+private fun measureTokenAutoFitSp(
+    textMeasurer: TextMeasurer,
+    text: String,
+    maxW: Float,
+    maxH: Float,
+    maxSp: Float,
+    minSp: Float,
+    multiline: Boolean,
+    maxMultilineLines: Int = 4,
+    /** When > 1, used for [TextStyle.lineHeight] so auto-fit height matches on-screen multiline text. */
+    lineHeightEm: Float = 1f,
+): Float {
+    if (text.isEmpty()) return maxSp.coerceAtLeast(minSp)
+    if (maxW <= 0f || maxH <= 0f) return minSp
+    var lo = minSp
+    var hi = maxSp
+    if (hi <= lo) return lo
+    var best = lo
+    // Do not pass huge raw Ints — Constraints packs dimensions and rejects values like Int.MAX_VALUE ushr 2.
+    // Defaults use Compose's internal Infinity, which encodes correctly.
+    val measureConstraints = if (multiline) {
+        Constraints(maxWidth = maxW.toInt().coerceAtLeast(1))
+    } else {
+        Constraints()
+    }
+    fun styleFor(mid: Float): TextStyle {
+        val base = TextStyle(
+            fontWeight = FontWeight.Bold,
+            fontSize = mid.sp,
+        )
+        return if (lineHeightEm > 1.02f) {
+            base.copy(lineHeight = (mid * lineHeightEm).sp)
+        } else {
+            base
+        }
+    }
+    repeat(24) {
+        val mid = (lo + hi) / 2f
+        val layout = textMeasurer.measure(
+            text = AnnotatedString(text),
+            style = styleFor(mid),
+            overflow = TextOverflow.Clip,
+            softWrap = multiline,
+            maxLines = if (multiline) maxMultilineLines else 1,
+            constraints = measureConstraints,
+        )
+        val w = layout.size.width.toFloat()
+        val h = layout.size.height.toFloat()
+        val fits = w <= maxW && h <= maxH
+        if (fits) {
+            best = mid
+            lo = mid
+        } else {
+            hi = mid
+        }
+    }
+    return best
+}
+
 @Composable
 fun TokenCard(
-    token: String?, 
-    isPrimary: Boolean, 
-    scale: Float, 
+    token: String?,
+    isPrimary: Boolean,
+    scale: Float,
     textColor: Color,
     bgBrush: Brush,
     fontSize: Float,
-    isInverted: Boolean = false
+    isInverted: Boolean = false,
+    blinkMode: TokenBlinkMode = TokenBlinkMode.WHOLE_TILE,
+    fullSize: Boolean = false,
+    multiline: Boolean = false,
+    /** Full-bleed layout for protocol `C` / `__MSG__` counter messages (fills token region, no code prefix). */
+    specialCounterMessage: Boolean = false,
+    modifier: Modifier = Modifier,
 ) {
     // Dynamic height based on font size to prevent clipping
     // Reduced height multiplier to tighten padding around the text
     val cardHeight = (fontSize * 1.6f * scale).coerceIn(32f, 120f).dp
+    val textMeasurer = rememberTextMeasurer()
+    val maxMultilineLines = if (specialCounterMessage) 24 else 4
+    val lineHeightEm =
+        if (specialCounterMessage && multiline) SPECIAL_COUNTER_MSG_LINE_HEIGHT_EM else 1f
+    // Extra insets so multiline protocol C / __MSG__ text is not clipped and lines are not cramped.
+    val outerPad = if (specialCounterMessage) (4f * scale).dp.coerceIn(3.dp, 8.dp) else 1.dp
+    val innerPadH = if (specialCounterMessage) (12f * scale).dp.coerceIn(8.dp, 20.dp) else 4.dp
+    val innerPadV = if (specialCounterMessage) (10f * scale).dp.coerceIn(8.dp, 18.dp) else 2.dp
 
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .height(cardHeight)
-            .padding(1.dp),
-        shape = RoundedCornerShape(8.dp),
+            .then(if (fullSize) Modifier.fillMaxHeight() else Modifier.height(cardHeight))
+            .padding(outerPad),
+        shape = RoundedCornerShape(if (specialCounterMessage) 10.dp else 8.dp),
         elevation = CardDefaults.cardElevation(2.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent)
     ) {
-        // Swap colors if inverted
-        val finalBg = if (isInverted) {
-            // If we swap, text color becomes background. 
-            // Since bg is Brush, we'll use SolidColor for simplicity when inverted
+        // Swap colors if inverted (whole tile), or pulse text only while keeping the tile background.
+        val invertWholeTile = isInverted && blinkMode == TokenBlinkMode.WHOLE_TILE
+        val invertTextOnly = isInverted && blinkMode == TokenBlinkMode.TEXT_ONLY
+        val finalBg = if (invertWholeTile) {
             SolidColor(textColor)
         } else {
             bgBrush
         }
-        
-        // Attempt to find a suitable text color when inverted (the old background).
-        // If the background is a brush, we might need a default or extract a primary color.
-        // For now, if inverted, we'll try to pick a fallback (e.g. white or black) or 
-        // if we have a counterBgHex, use that.
-        // A simple approach: Inverted mode = White text on original TextColor background
-        val finalTextColor = if (isInverted) Color.White else textColor
+
+        val finalTextColor = when {
+            invertWholeTile -> Color.White
+            invertTextOnly -> textColor.copy(alpha = 0.4f)
+            else -> textColor
+        }
 
         Box(
             modifier = Modifier.fillMaxSize().background(finalBg),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = token ?: "",
-                fontWeight = FontWeight.Bold,
-                fontSize = (fontSize * scale).sp,
-                color = finalTextColor,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                softWrap = false
-            )
+            if (fullSize) {
+                val density = LocalDensity.current
+                BoxWithConstraints(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = innerPadH, vertical = innerPadV),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val maxWpx = with(density) { maxWidth.toPx() }.coerceAtLeast(1f)
+                    val maxHpx = with(density) { maxHeight.toPx() }.coerceAtLeast(1f)
+                    val display = token ?: ""
+                    val maxFontSp = fontSize * scale
+                    val minFontSp = 6f
+                    val fittedSp = remember(
+                        display,
+                        maxWpx,
+                        maxHpx,
+                        maxFontSp,
+                        multiline,
+                        maxMultilineLines,
+                        lineHeightEm,
+                        textMeasurer,
+                    ) {
+                        measureTokenAutoFitSp(
+                            textMeasurer,
+                            display,
+                            maxWpx,
+                            maxHpx,
+                            maxFontSp,
+                            minFontSp,
+                            multiline,
+                            maxMultilineLines,
+                            lineHeightEm = lineHeightEm,
+                        )
+                    }
+                    val messageStyle = TextStyle(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = fittedSp.sp,
+                        color = finalTextColor,
+                        textAlign = TextAlign.Center,
+                        lineHeight = if (lineHeightEm > 1.02f) {
+                            (fittedSp * lineHeightEm).sp
+                        } else {
+                            TextUnit.Unspecified
+                        },
+                    )
+                    Text(
+                        text = display,
+                        style = messageStyle,
+                        maxLines = if (multiline) maxMultilineLines else 1,
+                        softWrap = multiline,
+                        overflow = TextOverflow.Clip,
+                    )
+                }
+            } else {
+                Text(
+                    text = token ?: "",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = (fontSize * scale).sp,
+                    color = finalTextColor,
+                    textAlign = TextAlign.Center,
+                    maxLines = if (multiline) maxMultilineLines else 1,
+                    softWrap = multiline
+                )
+            }
         }
     }
 }
@@ -3843,6 +4846,15 @@ private fun parseColorOrDefault(colorString: String?, default: Color): Color {
     }
 }
 
+private fun parseHexColorOrNull(colorString: String?): Int? {
+    if (colorString.isNullOrBlank()) return null
+    return try {
+        AndroidColor.parseColor(colorString.trim())
+    } catch (_: Exception) {
+        null
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppearanceSettingsDialog(
@@ -3858,7 +4870,9 @@ fun AppearanceSettingsDialog(
     isTokenAnnouncementEnabled: Boolean?,
     isCounterAnnouncementEnabled: Boolean?,
     isCounterPrefixEnabled: Boolean?,
-    companyName: String
+    companyName: String,
+    tokenBlinkMode: TokenBlinkMode = TokenBlinkMode.WHOLE_TILE,
+    onTokenBlinkModeChange: (TokenBlinkMode) -> Unit = {},
 ) {
     // Fixed Settings palette (independent from app theme)
     val settingsPrimary = Color(0xFF4FC3F7)
@@ -3952,34 +4966,41 @@ fun AppearanceSettingsDialog(
             onDismiss = { showSoundPicker = false }
         )
     } else if (showThemeColorPicker) {
-        PresetThemeColorDialog(
+        PresetColorDialog(
             title = "App Theme",
+            options = ThemeColorManager.themeColorOptions,
+            selectedHex = currentThemeHex,
+            selectedBorderWidth = 5.dp,
             onColorSelected = {
                 onThemeSelected(it)
                 currentThemeHex = it
                 showThemeColorPicker = false
             },
-            onDismiss = { showThemeColorPicker = false }
+            onDismiss = { showThemeColorPicker = false },
         )
     } else if (showCounterColorPicker) {
         PresetColorDialog(
             title = "Counter Background",
+            options = ThemeColorManager.backgroundOptions,
+            selectedHex = currentCounterHex,
             onColorSelected = {
                 onCounterBgChange(it)
                 currentCounterHex = it
                 showCounterColorPicker = false
             },
-            onDismiss = { showCounterColorPicker = false }
+            onDismiss = { showCounterColorPicker = false },
         )
     } else if (showTokenColorPicker) {
         PresetColorDialog(
             title = "Token Background",
+            options = ThemeColorManager.backgroundOptions,
+            selectedHex = currentTokenHex,
             onColorSelected = {
                 onTokenBgChange(it)
                 currentTokenHex = it
                 showTokenColorPicker = false
             },
-            onDismiss = { showTokenColorPicker = false }
+            onDismiss = { showTokenColorPicker = false },
         )
     } else if (showOfflineConfirmDialog) {
         AlertDialog(
@@ -4196,6 +5217,73 @@ fun AppearanceSettingsDialog(
                                         onClick = { showTokenColorPicker = true }
                                     )
                                 }
+                                item(span = { GridItemSpan(2) }) {
+                                    GridSettingsItem(
+                                        title = "Token blink",
+                                        helpText = "When your TV configuration enables blinking on the current token, choose whether the entire token tile flashes or only the token text pulses.",
+                                        onClick = null,
+                                        titleColor = settingsPrimary,
+                                        cardColor = settingsCard,
+                                        borderColor = settingsBorder,
+                                    ) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable {
+                                                        ThemeColorManager.setTokenBlinkMode(context, TokenBlinkMode.WHOLE_TILE)
+                                                        onTokenBlinkModeChange(TokenBlinkMode.WHOLE_TILE)
+                                                    },
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                RadioButton(
+                                                    selected = tokenBlinkMode == TokenBlinkMode.WHOLE_TILE,
+                                                    onClick = {
+                                                        ThemeColorManager.setTokenBlinkMode(context, TokenBlinkMode.WHOLE_TILE)
+                                                        onTokenBlinkModeChange(TokenBlinkMode.WHOLE_TILE)
+                                                    },
+                                                    colors = RadioButtonDefaults.colors(
+                                                        selectedColor = settingsPrimary,
+                                                        unselectedColor = settingsMutedText
+                                                    )
+                                                )
+                                                Text(
+                                                    "Whole tile blinks",
+                                                    fontSize = 15.sp,
+                                                    color = settingsText,
+                                                    modifier = Modifier.padding(start = 4.dp)
+                                                )
+                                            }
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable {
+                                                        ThemeColorManager.setTokenBlinkMode(context, TokenBlinkMode.TEXT_ONLY)
+                                                        onTokenBlinkModeChange(TokenBlinkMode.TEXT_ONLY)
+                                                    },
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                RadioButton(
+                                                    selected = tokenBlinkMode == TokenBlinkMode.TEXT_ONLY,
+                                                    onClick = {
+                                                        ThemeColorManager.setTokenBlinkMode(context, TokenBlinkMode.TEXT_ONLY)
+                                                        onTokenBlinkModeChange(TokenBlinkMode.TEXT_ONLY)
+                                                    },
+                                                    colors = RadioButtonDefaults.colors(
+                                                        selectedColor = settingsPrimary,
+                                                        unselectedColor = settingsMutedText
+                                                    )
+                                                )
+                                                Text(
+                                                    "Text only blinks",
+                                                    fontSize = 15.sp,
+                                                    color = settingsText,
+                                                    modifier = Modifier.padding(start = 4.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                         1 -> { // Audios Tab
@@ -4206,8 +5294,8 @@ fun AppearanceSettingsDialog(
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                                 contentPadding = PaddingValues(top = 4.dp, bottom = 4.dp)
                             ) {
-                                val soundOptions = listOf("ding" to "Ding", "soft" to "Soft", "alert" to "Alert", "bell" to "Bell", "ping" to "Ping")
-                                val currentSoundLabel = soundOptions.firstOrNull { it.first == notificationSoundKey }?.second ?: notificationSoundKey.replaceFirstChar { it.uppercase() }
+                                val currentSoundLabel =
+                                    ThemeColorManager.notificationSoundLabel(notificationSoundKey)
                                 
                                 item {
                                     GridSettingsItem(
@@ -4473,7 +5561,7 @@ fun AppearanceSettingsDialog(
                                     }
                                 }
                                 HorizontalDivider(modifier = Modifier.padding(vertical = 1.dp))
-                                InfoRow("Company ID", String.format("%04d", customerId))
+                                InfoRow("Company ID", String.format(java.util.Locale.ROOT, "%04d", customerId))
                                 InfoRow("Device ID", macAddress)
                                 InfoRow("App Version", appVersion)
                                 if (daysUntilExpiry != null) {
@@ -4586,6 +5674,99 @@ fun InfoRow(label: String, value: String, valueColor: Color = MaterialTheme.colo
                 .weight(1f)
                 .padding(start = 8.dp)
         )
+    }
+}
+
+@Composable
+fun TvConfigurationUnavailableScreen(
+    macAddress: String,
+    appVersion: String,
+    isNetworkAvailable: Boolean,
+    errorMessage: String?,
+    onRetry: () -> Unit,
+) {
+    val guidance = when {
+        !isNetworkAvailable ->
+            "No internet connection detected.\n\nConnect this TV to Wi‑Fi or Ethernet, then tap Retry."
+        !errorMessage.isNullOrBlank() ->
+            errorMessage.trim()
+        else ->
+            "TV configuration could not be loaded from the server.\n\n" +
+                "• Confirm the device is registered and approved in the portal\n" +
+                "• Verify customer ID and MAC address assignment\n" +
+                "• Check that the config API is reachable, then tap Retry"
+    }
+
+    Dialog(
+        onDismissRequest = {},
+        properties = DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false,
+            usePlatformDefaultWidth = false,
+        ),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF121212)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .fillMaxWidth(0.88f)
+                    .padding(horizontal = 28.dp, vertical = 24.dp),
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_network_unavailable),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(56.dp),
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = if (!isNetworkAvailable) "No network connection" else "TV configuration not loaded",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Color.White,
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = guidance,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFFE0E0E0),
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+                Text(
+                    text = "Device ID: $macAddress",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    textAlign = TextAlign.Center,
+                )
+                Text(
+                    text = "App version: $appVersion",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF9E9E9E),
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(
+                    onClick = onRetry,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                    ),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Retry")
+                }
+            }
+        }
     }
 }
 
@@ -4726,46 +5907,208 @@ fun GridSettingsItem(
     }
 }
 
+private val PresetPickerFocusRing = Color(0xFFFFD600)
+private val PresetPickerFocusOutline = Color(0xFF000000)
+private val PresetPickerSelectedRing = Color.White
+
+/**
+ * TV-friendly color swatch: [clickable] + [focusable] on one node so D-pad focus updates reliably.
+ * [focusedIndex] in the parent grid is updated from [onFocusChanged] for visible focus ring.
+ */
+@Composable
+private fun PresetColorSwatchTile(
+    brush: Brush,
+    isSelected: Boolean,
+    isFocused: Boolean,
+    selectedBorderWidth: androidx.compose.ui.unit.Dp,
+    focusRequester: FocusRequester?,
+    onClick: () -> Unit,
+    onFocused: () -> Unit,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val interactionFocused by interactionSource.collectIsFocusedAsState()
+    val showFocus = isFocused || interactionFocused
+    val shape = RoundedCornerShape(8.dp)
+
+    Box(
+        modifier = Modifier
+            .aspectRatio(1f)
+            .padding(2.dp)
+            .then(focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
+            .onFocusChanged { state ->
+                if (state.isFocused) onFocused()
+            }
+            .focusable(interactionSource = interactionSource)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                role = Role.Button,
+                onClick = onClick,
+            )
+            .scale(if (showFocus) 1.16f else 1f)
+            .then(
+                if (showFocus) {
+                    Modifier.border(3.dp, PresetPickerFocusOutline, RoundedCornerShape(10.dp))
+                } else {
+                    Modifier
+                },
+            )
+            .border(
+                width = when {
+                    showFocus -> 5.dp
+                    isSelected -> selectedBorderWidth
+                    else -> 1.dp
+                },
+                color = when {
+                    showFocus -> PresetPickerFocusRing
+                    isSelected -> PresetPickerSelectedRing
+                    else -> Color.Gray.copy(alpha = 0.55f)
+                },
+                shape = if (showFocus) RoundedCornerShape(10.dp) else shape,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(if (showFocus) 2.dp else 0.dp)
+                .clip(shape)
+                .background(brush),
+        )
+        if (showFocus) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(3.dp)
+                    .border(2.dp, Color.White.copy(alpha = 0.85f), shape),
+            )
+        }
+        if (isSelected && !showFocus) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(4.dp)
+                    .size(10.dp)
+                    .background(PresetPickerSelectedRing, CircleShape)
+                    .border(1.dp, PresetPickerFocusOutline, CircleShape),
+            )
+        }
+    }
+}
+
 @Composable
 fun PresetColorDialog(
     title: String,
+    options: List<ThemeOption>,
+    selectedHex: String,
     onColorSelected: (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    selectedBorderWidth: androidx.compose.ui.unit.Dp = 3.dp,
 ) {
+    val gridState = rememberLazyGridState()
+    val selectedIndex = remember(options, selectedHex) {
+        val trimmed = selectedHex.trim()
+        val idx = options.indexOfFirst { it.hexCode.trim() == trimmed }
+        if (idx >= 0) idx else 0
+    }
+    val selectedFocusRequester = remember { FocusRequester() }
+    var focusedIndex by remember { mutableIntStateOf(-1) }
+
+    var brushesReady by remember(options) { mutableStateOf(false) }
+    LaunchedEffect(options) {
+        // Warm brushes in a throttled way to avoid CPU starvation/ANR on low-end TVs.
+        brushesReady = false
+
+        val initialWarmCount = minOf(options.size, 35)
+        withContext(Dispatchers.Default) {
+            for (i in 0 until initialWarmCount) {
+                ThemeColorManager.getBackgroundBrush(options[i].hexCode)
+                // Give Compose/main thread a chance between batches.
+                if (i % 7 == 6) kotlinx.coroutines.yield()
+            }
+        }
+
+        brushesReady = true
+
+        // Continue warming the remaining swatches in the background.
+        // This prevents first-scroll stutter without blocking dialog open.
+        if (initialWarmCount < options.size) {
+            withContext(Dispatchers.Default) {
+                for (i in initialWarmCount until options.size) {
+                    ThemeColorManager.getBackgroundBrush(options[i].hexCode)
+                    if (i % 7 == 6) {
+                        kotlinx.coroutines.yield()
+                        delay(1)
+                    }
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(brushesReady, selectedIndex) {
+        if (!brushesReady) return@LaunchedEffect
+        delay(150)
+        gridState.animateScrollToItem(selectedIndex)
+        delay(80)
+        focusedIndex = selectedIndex
+        try {
+            selectedFocusRequester.requestFocus()
+        } catch (_: IllegalStateException) {
+        }
+    }
+
     AlertDialog(
         modifier = Modifier.fillMaxWidth(0.98f),
         onDismissRequest = onDismiss,
         title = { Text(title, style = MaterialTheme.typography.titleSmall) },
         text = {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(7),
-                horizontalArrangement = Arrangement.spacedBy(1.dp), // Minimal spacing
-                verticalArrangement = Arrangement.spacedBy(1.dp), // Minimal spacing
-                modifier = Modifier.heightIn(max = 300.dp)
-            ) {
-                items(ThemeColorManager.backgroundOptions) { option ->
-                    var focused by remember { mutableStateOf(false) }
-                    Surface(
-                         onClick = { onColorSelected(option.hexCode) },
-                         modifier = Modifier
-                             .aspectRatio(1f)
-                             .onFocusChanged { focused = it.isFocused },
-                         shape = RoundedCornerShape(8.dp),
-                         border = if (focused) BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else BorderStroke(1.dp, Color.Gray)
-                     ) {
-                         Box(
-                            modifier = Modifier.fillMaxSize().background(ThemeColorManager.getBackgroundBrush(option.hexCode))
-                         )
-                     }
+            if (!brushesReady) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 200.dp, max = 300.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(36.dp))
+                }
+            } else {
+                LazyVerticalGrid(
+                    state = gridState,
+                    columns = GridCells.Fixed(7),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    modifier = Modifier
+                        .heightIn(max = 300.dp)
+                        .focusGroup(),
+                ) {
+                    itemsIndexed(
+                        items = options,
+                        key = { index, option -> "${option.name}_$index" },
+                    ) { index, option ->
+                        val swatchBrush = remember(option.hexCode) {
+                            ThemeColorManager.getBackgroundBrush(option.hexCode)
+                        }
+                        val isSelected = index == selectedIndex
+                        val isFocused = index == focusedIndex
+                        PresetColorSwatchTile(
+                            brush = swatchBrush,
+                            isSelected = isSelected,
+                            isFocused = isFocused,
+                            selectedBorderWidth = selectedBorderWidth,
+                            focusRequester = if (isSelected) selectedFocusRequester else null,
+                            onClick = { onColorSelected(option.hexCode) },
+                            onFocused = { focusedIndex = index },
+                        )
+                    }
                 }
             }
         },
         confirmButton = {},
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text("Close")
             }
-        }
+        },
     )
 }
 
@@ -4777,90 +6120,72 @@ fun NotificationSoundDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    val soundOptions = listOf(
-        "ding"      to "Ding",
-        "ding2"     to "Ding 2",
-        "ding3"     to "Ding 3",
-        "ding4"     to "Ding 4",
-        "ding5"     to "Ding 5",
-        "double"    to "Double beep",
-        "double2"   to "Double beep 2",
-        "double3"   to "Double beep 3",
-        "double4"   to "Double beep 4",
-        "soft"      to "Soft beep",
-        "soft2"     to "Soft beep 2",
-        "soft3"     to "Soft beep 3",
-        "soft4"     to "Soft beep 4",
-        "alert"     to "Alert",
-        "alert2"    to "Alert 2",
-        "alert3"    to "Alert 3",
-        "alert4"    to "Alert 4",
-        "bell"      to "Bell",
-        "bell2"     to "Bell 2",
-        "bell3"     to "Bell 3",
-        "bell4"     to "Bell 4",
-        "church1"   to "Church bell 1",
-        "church2"   to "Church bell 2",
-        "church3"   to "Church bell 3",
-        "ping"      to "Ping",
-        "ping2"     to "Ping 2",
-        "ping3"     to "Ping 3",
-        "ping4"     to "Ping 4",
-        "long"      to "Long tone",
-        "long2"     to "Long tone 2",
-        "long3"     to "Long tone 3",
-        "long4"     to "Long tone 4",
-        "chime1"    to "Chime 1",
-        "chime2"    to "Chime 2",
-        "chime3"    to "Chime 3",
-        "chime4"    to "Chime 4",
-        "hi1"       to "High beep 1",
-        "hi2"       to "High beep 2",
-        "hi3"       to "High beep 3",
-        "hi4"       to "High beep 4",
-        "low1"      to "Low beep 1",
-        "low2"      to "Low beep 2",
-        "low3"      to "Low beep 3",
-        "low4"      to "Low beep 4",
-        "tone1"     to "Tone 1",
-        "tone2"     to "Tone 2",
-        "tone3"     to "Tone 3",
-        "tone4"     to "Tone 4",
-        "tone5"     to "Tone 5",
-        "tone6"     to "Tone 6",
-        "tone7"     to "Tone 7"
-    )
+    val soundOptions = ThemeColorManager.notificationSoundOptions
     val scope = rememberCoroutineScope()
+    val gridState = rememberLazyGridState()
+    val selectedIndex = remember(soundOptions, selectedKey) {
+        soundOptions.indexOfFirst { it.first == selectedKey }.let { if (it >= 0) it else 0 }
+    }
+    val selectedFocusRequester = remember { FocusRequester() }
+    var focusedIndex by remember { mutableIntStateOf(-1) }
+
+    LaunchedEffect(selectedIndex) {
+        delay(150)
+        gridState.animateScrollToItem(selectedIndex)
+        delay(80)
+        focusedIndex = selectedIndex
+        try {
+            selectedFocusRequester.requestFocus()
+        } catch (_: IllegalStateException) {
+        }
+    }
 
     AlertDialog(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth(0.98f),
         onDismissRequest = onDismiss,
         title = { Text(title, style = MaterialTheme.typography.titleSmall) },
         text = {
             LazyVerticalGrid(
+                state = gridState,
                 columns = GridCells.Fixed(2),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.heightIn(max = 340.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .heightIn(max = 420.dp)
+                    .focusGroup(),
             ) {
-                items(soundOptions.size) { index ->
-                    val (key, label) = soundOptions[index]
-                    val isSelected = key == selectedKey
+                itemsIndexed(soundOptions, key = { index, item -> "${item.first}_$index" }) { index, (key, label) ->
+                    val isSelected = index == selectedIndex
+                    val isFocused = index == focusedIndex
+                    val interactionSource = remember { MutableInteractionSource() }
+                    val interactionFocused by interactionSource.collectIsFocusedAsState()
+                    val showFocus = isFocused || interactionFocused
                     OutlinedButton(
                         onClick = {
                             onSoundSelected(key)
                             scope.launch { playTokenChime(context, key) }
                         },
-                        modifier = Modifier.fillMaxWidth(),
-                        border = if (isSelected)
-                            BorderStroke(5.dp, MaterialTheme.colorScheme.primary)
-                        else
-                            BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                        interactionSource = interactionSource,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(
+                                if (isSelected) Modifier.focusRequester(selectedFocusRequester) else Modifier,
+                            )
+                            .onFocusChanged { state ->
+                                if (state.isFocused) focusedIndex = index
+                            }
+                            .scale(if (showFocus) 1.06f else 1f),
+                        border = when {
+                            showFocus -> BorderStroke(5.dp, PresetPickerFocusRing)
+                            isSelected -> BorderStroke(3.dp, MaterialTheme.colorScheme.primary)
+                            else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                        },
                     ) {
                         Text(
                             label,
                             style = MaterialTheme.typography.bodySmall,
-                            maxLines = 1
+                            maxLines = 1,
+                            color = if (showFocus) PresetPickerFocusRing else MaterialTheme.colorScheme.onSurface,
                         )
                     }
                 }
@@ -4871,55 +6196,7 @@ fun NotificationSoundDialog(
             TextButton(onClick = onDismiss) {
                 Text("Close")
             }
-        }
-    )
-}
-
-@Composable
-fun PresetThemeColorDialog(
-    title: String,
-    onColorSelected: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        modifier = Modifier.fillMaxWidth(0.98f),
-        onDismissRequest = onDismiss,
-        title = { Text(title, style = MaterialTheme.typography.titleSmall) },
-        text = {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(7),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.heightIn(max = 300.dp)
-            ) {
-                items(ThemeColorManager.themeColorOptions) { option ->
-                    var focused by remember { mutableStateOf(false) }
-                    Surface(
-                        onClick = { onColorSelected(option.hexCode) },
-                        modifier = Modifier
-                            .aspectRatio(1f)
-                            .onFocusChanged { focused = it.isFocused },
-                        shape = RoundedCornerShape(8.dp),
-                        border = if (focused)
-                            BorderStroke(5.dp, MaterialTheme.colorScheme.primary)
-                        else
-                            BorderStroke(1.dp, Color.Gray)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(ThemeColorManager.getBackgroundBrush(option.hexCode))
-                        )
-                    }
-                }
-            }
         },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
     )
 }
 
@@ -4927,24 +6204,30 @@ fun PresetThemeColorDialog(
 fun ScrollingFooter(
     textLines: List<String>,
     scale: Float,
-    isPortrait: Boolean
+    isPortrait: Boolean,
+    appThemeHex: String,
+    scrollTextColorHex: String? = null,
 ) {
     val scrollText = remember(textLines) {
         textLines.filter { it.isNotBlank() }.joinToString(separator = "  •  ")
     }
     if (scrollText.isEmpty()) return
 
-    val textColor = android.graphics.Color.WHITE
+    val textColor = remember(scrollTextColorHex) {
+        parseHexColorOrNull(scrollTextColorHex) ?: android.graphics.Color.WHITE
+    }
     val textSizeSp = if (isPortrait) 12f else 14f
     // Use a compact repeating unit so ticker flow feels continuous (no visible block reset).
     val marqueeText = remember(scrollText) { "$scrollText   \u2022   " }
     val footerHeight = if (isPortrait) 24.dp else 28.dp
+    val footerBrush = remember(appThemeHex) {
+        ThemeColorManager.getTickerStripBackgroundBrush(appThemeHex)
+    }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            // Keep footer readable even when app theme is very dark.
-            .background(Color(0xFF1E4E79))
+            .background(footerBrush)
             .height(footerHeight),
         contentAlignment = Alignment.CenterStart
     ) {
@@ -5098,21 +6381,45 @@ private fun getTokensForCounter(counter: CounterEntity, tokensPerCounter: Map<St
     val cname = counter.name.orEmpty().trim()
     val dname = counter.defaultName.orEmpty().trim()
     val btnKey = counter.buttonIndex?.toString()?.trim().orEmpty()
+    val keypadKey = counter.keypadIndex?.trim().orEmpty()
 
-    val rawList = (if (cid.isNotBlank()) tokensPerCounter[cid] else null)
+    val rawList = (if (btnKey.isNotBlank()) tokensPerCounter[btnKey] else null)
+        ?: (if (keypadKey.isNotBlank()) tokensPerCounter[keypadKey] else null)
+        ?: (if (cid.isNotBlank()) tokensPerCounter[cid] else null)
         ?: (if (cname.isNotBlank()) tokensPerCounter[cname] else null)
         ?: (if (dname.isNotBlank()) tokensPerCounter[dname] else null)
-        ?: (if (btnKey.isNotBlank()) tokensPerCounter[btnKey] else null)
         ?: tokensPerCounter.entries.find {
-            val keyTrimmed = it.key.trim()
-            val keyInt = keyTrimmed.toIntOrNull()
-            val cidInt = cid.toIntOrNull()
-            keyInt != null && (keyInt == cidInt || keyInt == counter.buttonIndex)
+            mqttRouteMatchesButtonIndex(counter.buttonIndex, it.key.trim())
+        }?.value
+        ?: tokensPerCounter.entries.find {
+            mqttRouteMatchesKeypadIndex(counter.keypadIndex, it.key.trim())
         }?.value
         ?: (if (tokensPerCounter.containsKey("__default__")) tokensPerCounter["__default__"] else null)
         ?: emptyList()
         
-    return rawList.filter { it.trim() != "0" && !it.contains("CAL", ignoreCase = true) }.map { it.trim() }.distinct()
+    val cleaned = rawList.map { it.trim() }.filter { it.isNotBlank() }.distinct()
+    val normalTokens = cleaned.filter { token ->
+        !isSpecialMessageToken(token) && token != "0" && !token.contains("CAL", ignoreCase = true)
+    }
+    // If normal tokens exist, suppress any special-message placeholders from token list display.
+    if (normalTokens.isNotEmpty()) return normalTokens
+    return cleaned.filter { isSpecialMessageToken(it) }
+}
+
+private fun resolveCountersToDisplay(
+    counters: List<CounterEntity>,
+    config: TvConfigEntity
+): List<CounterEntity> {
+    val enabled = counters.filter { it.isEnabled != false }
+    if (enabled.isEmpty()) return emptyList()
+    return if (config.layoutType.equals("full", ignoreCase = true)) {
+        val gridCap = (config.displayRows ?: 1).coerceAtLeast(1) *
+            (config.displayColumns ?: 1).coerceAtLeast(1)
+        enabled.take(gridCap.coerceAtMost(enabled.size))
+    } else {
+        val limit = (config.noOfCounters ?: enabled.size).coerceAtLeast(1)
+        enabled.take(limit.coerceAtMost(enabled.size))
+    }
 }
 
 private fun formatTokenByPattern(token: String?, pattern: String?): String? {
@@ -5120,6 +6427,14 @@ private fun formatTokenByPattern(token: String?, pattern: String?): String? {
     if (pattern.isNullOrBlank()) return token
     
     return try {
+        val trimmedPattern = pattern.trim()
+        // e.g. "T2" → 01, 23 (digit width only; no literal "T" before the number on screen)
+        Regex("^T(\\d+)$", RegexOption.IGNORE_CASE).matchEntire(trimmedPattern)?.let { match ->
+            val digitLen = match.groupValues[1].toIntOrNull() ?: return@let null
+            val num = token.toIntOrNull() ?: return token
+            return num.toString().padStart(digitLen, '0')
+        }
+
         // Simple numeric padding if pattern is like "000" or "00"
         if (pattern.all { it == '0' || it == '#' }) {
             val num = token.toIntOrNull()

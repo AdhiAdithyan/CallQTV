@@ -1,0 +1,63 @@
+package com.softland.callqtv.utils;
+
+@kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u00002\n\u0002\u0018\u0002\n\u0002\u0010\u0000\n\u0002\b\u0003\n\u0002\u0010\u000e\n\u0002\b\u0007\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0003\n\u0002\u0010\u0002\n\u0002\b\u0006\n\u0002\u0010\u000b\n\u0002\b\u0003\b\u00c6\u0002\u0018\u00002\u00020\u0001B\t\b\u0002\u00a2\u0006\u0004\b\u0002\u0010\u0003J\u0010\u0010\f\u001a\u00020\r2\u0006\u0010\u000e\u001a\u00020\u000fH\u0002J\u0010\u0010\u0010\u001a\u00020\r2\u0006\u0010\u000e\u001a\u00020\u000fH\u0002J\u000e\u0010\u0011\u001a\u00020\u00052\u0006\u0010\u000e\u001a\u00020\u000fJ\u0016\u0010\u0012\u001a\u00020\u00132\u0006\u0010\u000e\u001a\u00020\u000f2\u0006\u0010\u0014\u001a\u00020\u0005J\u000e\u0010\u0015\u001a\u00020\u00132\u0006\u0010\u000e\u001a\u00020\u000fJ\u001e\u0010\u0016\u001a\u00020\u00132\u0006\u0010\u000e\u001a\u00020\u000f2\u0006\u0010\u0017\u001a\u00020\u00052\u0006\u0010\u0018\u001a\u00020\u0005J\u000e\u0010\u0019\u001a\u00020\u001a2\u0006\u0010\u000e\u001a\u00020\u000fJ\u0016\u0010\u001b\u001a\u00020\u00132\u0006\u0010\u000e\u001a\u00020\u000f2\u0006\u0010\u001c\u001a\u00020\u001aR\u000e\u0010\u0004\u001a\u00020\u0005X\u0086T\u00a2\u0006\u0002\n\u0000R\u000e\u0010\u0006\u001a\u00020\u0005X\u0086T\u00a2\u0006\u0002\n\u0000R\u000e\u0010\u0007\u001a\u00020\u0005X\u0086T\u00a2\u0006\u0002\n\u0000R\u000e\u0010\b\u001a\u00020\u0005X\u0086T\u00a2\u0006\u0002\n\u0000R\u000e\u0010\t\u001a\u00020\u0005X\u0086T\u00a2\u0006\u0002\n\u0000R\u000e\u0010\n\u001a\u00020\u0005X\u0086T\u00a2\u0006\u0002\n\u0000R\u000e\u0010\u000b\u001a\u00020\u0005X\u0082T\u00a2\u0006\u0002\n\u0000\u00a8\u0006\u001d"}, d2 = {"Lcom/softland/callqtv/utils/PreferenceHelper;", "", "<init>", "()V", "base_url", "", "product_license_end", "customer_id", "project_code", "TOKEN_VOICE", "OFFLINE_ADS", "CURRENT_DATE", "getAuthPrefs", "Landroid/content/SharedPreferences;", "context", "Landroid/content/Context;", "getLoginPrefs", "getCurrentDate", "saveCurrentDate", "", "date", "clearStringList", "UpdateLoginRespDetails", "key", "value", "isOfflineAdsEnabled", "", "setOfflineAdsEnabled", "enabled", "CallQTV_v1.0.1_CallQTVRelease"})
+public final class PreferenceHelper {
+    @org.jetbrains.annotations.NotNull()
+    public static final java.lang.String base_url = "base_url";
+    @org.jetbrains.annotations.NotNull()
+    public static final java.lang.String product_license_end = "product_license_end";
+    @org.jetbrains.annotations.NotNull()
+    public static final java.lang.String customer_id = "CustomerID";
+    @org.jetbrains.annotations.NotNull()
+    public static final java.lang.String project_code = "ProjectCode";
+    @org.jetbrains.annotations.NotNull()
+    public static final java.lang.String TOKEN_VOICE = "token_voice";
+    @org.jetbrains.annotations.NotNull()
+    public static final java.lang.String OFFLINE_ADS = "offline_ads";
+    @org.jetbrains.annotations.NotNull()
+    private static final java.lang.String CURRENT_DATE = "current_date";
+    @org.jetbrains.annotations.NotNull()
+    public static final com.softland.callqtv.utils.PreferenceHelper INSTANCE = null;
+    
+    private PreferenceHelper() {
+        super();
+    }
+    
+    private final android.content.SharedPreferences getAuthPrefs(android.content.Context context) {
+        return null;
+    }
+    
+    private final android.content.SharedPreferences getLoginPrefs(android.content.Context context) {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getCurrentDate(@org.jetbrains.annotations.NotNull()
+    android.content.Context context) {
+        return null;
+    }
+    
+    public final void saveCurrentDate(@org.jetbrains.annotations.NotNull()
+    android.content.Context context, @org.jetbrains.annotations.NotNull()
+    java.lang.String date) {
+    }
+    
+    public final void clearStringList(@org.jetbrains.annotations.NotNull()
+    android.content.Context context) {
+    }
+    
+    public final void UpdateLoginRespDetails(@org.jetbrains.annotations.NotNull()
+    android.content.Context context, @org.jetbrains.annotations.NotNull()
+    java.lang.String key, @org.jetbrains.annotations.NotNull()
+    java.lang.String value) {
+    }
+    
+    public final boolean isOfflineAdsEnabled(@org.jetbrains.annotations.NotNull()
+    android.content.Context context) {
+        return false;
+    }
+    
+    public final void setOfflineAdsEnabled(@org.jetbrains.annotations.NotNull()
+    android.content.Context context, boolean enabled) {
+    }
+}

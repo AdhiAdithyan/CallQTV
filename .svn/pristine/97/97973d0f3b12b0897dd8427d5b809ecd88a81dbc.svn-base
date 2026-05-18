@@ -1,0 +1,94 @@
+package com.softland.callqtv.utils;
+
+/**
+ * Utility to log errors and API responses to date-organized folders on device storage.
+ *
+ * Structure:
+ *  Download/CALLQTV_CONFIG/
+ *      2026-03-24/
+ *          errors_2026-03-24.txt
+ *          api_responses_2026-03-24.txt
+ *      2026-03-23/
+ *          ...
+ */
+@kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u00000\n\u0002\u0018\u0002\n\u0002\u0010\u0000\n\u0002\b\u0003\n\u0002\u0010\u000e\n\u0002\b\u0003\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0004\n\u0002\u0010\u0002\n\u0000\n\u0002\u0010\u0003\n\u0002\b\b\b\u00c6\u0002\u0018\u00002\u00020\u0001B\t\b\u0002\u00a2\u0006\u0004\b\u0002\u0010\u0003J\b\u0010\u0007\u001a\u00020\u0005H\u0002J\u0010\u0010\b\u001a\u00020\t2\u0006\u0010\n\u001a\u00020\u000bH\u0002J\u0018\u0010\f\u001a\u00020\t2\u0006\u0010\n\u001a\u00020\u000b2\b\b\u0002\u0010\r\u001a\u00020\u0005J\u000e\u0010\u000e\u001a\u00020\u00052\u0006\u0010\n\u001a\u00020\u000bJ\u0016\u0010\u000f\u001a\u00020\u00102\u0006\u0010\n\u001a\u00020\u000b2\u0006\u0010\u0011\u001a\u00020\u0012J*\u0010\u0013\u001a\u00020\u00102\u0006\u0010\n\u001a\u00020\u000b2\u0006\u0010\u0014\u001a\u00020\u00052\u0006\u0010\u0015\u001a\u00020\u00052\n\b\u0002\u0010\u0011\u001a\u0004\u0018\u00010\u0012J\u001e\u0010\u0016\u001a\u00020\u00102\u0006\u0010\n\u001a\u00020\u000b2\u0006\u0010\u0017\u001a\u00020\u00052\u0006\u0010\u0018\u001a\u00020\u0005J\u0010\u0010\u0019\u001a\u00020\u00102\u0006\u0010\n\u001a\u00020\u000bH\u0002R\u000e\u0010\u0004\u001a\u00020\u0005X\u0082T\u00a2\u0006\u0002\n\u0000R\u000e\u0010\u0006\u001a\u00020\u0005X\u0082T\u00a2\u0006\u0002\n\u0000\u00a8\u0006\u001a"}, d2 = {"Lcom/softland/callqtv/utils/FileLogger;", "", "<init>", "()V", "TAG", "", "BASE_FOLDER", "todayDateStr", "getBaseDirectory", "Ljava/io/File;", "context", "Landroid/content/Context;", "getLogDirectory", "date", "getLogFilePath", "logCrash", "", "exception", "", "logError", "tag", "message", "logResponse", "apiName", "response", "performCleanup", "CallQTV_v1.0.1_CallQTVDebug"})
+public final class FileLogger {
+    @org.jetbrains.annotations.NotNull()
+    private static final java.lang.String TAG = "FileLogger";
+    @org.jetbrains.annotations.NotNull()
+    private static final java.lang.String BASE_FOLDER = "CALLQTV_CONFIG";
+    @org.jetbrains.annotations.NotNull()
+    public static final com.softland.callqtv.utils.FileLogger INSTANCE = null;
+    
+    private FileLogger() {
+        super();
+    }
+    
+    /**
+     * Today's date string, e.g. "2026-03-24"
+     */
+    private final java.lang.String todayDateStr() {
+        return null;
+    }
+    
+    /**
+     * Returns the base CALLQTV_CONFIG directory, using the public Download folder
+     * with an app-specific fallback.
+     */
+    private final java.io.File getBaseDirectory(android.content.Context context) {
+        return null;
+    }
+    
+    /**
+     * Returns (and creates) the date-keyed subfolder inside CALLQTV_CONFIG.
+     * e.g. CALLQTV_CONFIG/2026-03-24/
+     */
+    @org.jetbrains.annotations.NotNull()
+    public final java.io.File getLogDirectory(@org.jetbrains.annotations.NotNull()
+    android.content.Context context, @org.jetbrains.annotations.NotNull()
+    java.lang.String date) {
+        return null;
+    }
+    
+    /**
+     * Full absolute path of today's error log file.
+     */
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getLogFilePath(@org.jetbrains.annotations.NotNull()
+    android.content.Context context) {
+        return null;
+    }
+    
+    /**
+     * Logs a crash/exception.
+     */
+    public final void logCrash(@org.jetbrains.annotations.NotNull()
+    android.content.Context context, @org.jetbrains.annotations.NotNull()
+    java.lang.Throwable exception) {
+    }
+    
+    /**
+     * Logs an error message and optional throwable to today's error file.
+     */
+    public final void logError(@org.jetbrains.annotations.NotNull()
+    android.content.Context context, @org.jetbrains.annotations.NotNull()
+    java.lang.String tag, @org.jetbrains.annotations.NotNull()
+    java.lang.String message, @org.jetbrains.annotations.Nullable()
+    java.lang.Throwable exception) {
+    }
+    
+    /**
+     * Logs an API response with timestamp and API name to today's api_responses file.
+     */
+    public final void logResponse(@org.jetbrains.annotations.NotNull()
+    android.content.Context context, @org.jetbrains.annotations.NotNull()
+    java.lang.String apiName, @org.jetbrains.annotations.NotNull()
+    java.lang.String response) {
+    }
+    
+    /**
+     * Deletes date subdirectories inside CALLQTV_CONFIG that are older than 7 days.
+     */
+    private final void performCleanup(android.content.Context context) {
+    }
+}

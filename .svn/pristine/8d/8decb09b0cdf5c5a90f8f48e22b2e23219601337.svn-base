@@ -1,0 +1,33 @@
+package com.softland.callqtv.utils;
+
+/**
+ * Uses AI (ML Kit) and Regex to extract Token and Counter information from unstructured text.
+ */
+@kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u0000\"\n\u0002\u0018\u0002\n\u0002\u0010\u0000\n\u0002\b\u0003\n\u0002\u0010\u000e\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0003\n\u0002\u0018\u0002\n\u0002\b\u0003\b\u00c6\u0002\u0018\u00002\u00020\u0001B\t\b\u0002\u00a2\u0006\u0004\b\u0002\u0010\u0003J&\u0010\n\u001a\u0010\u0012\u0004\u0012\u00020\u0005\u0012\u0004\u0012\u00020\u0005\u0018\u00010\u000b2\u0006\u0010\f\u001a\u00020\u00052\b\b\u0002\u0010\r\u001a\u00020\u0005R\u000e\u0010\u0004\u001a\u00020\u0005X\u0082T\u00a2\u0006\u0002\n\u0000R\u000e\u0010\u0006\u001a\u00020\u0007X\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u000e\u0010\b\u001a\u00020\u0007X\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u000e\u0010\t\u001a\u00020\u0007X\u0082\u0004\u00a2\u0006\u0002\n\u0000\u00a8\u0006\u000e"}, d2 = {"Lcom/softland/callqtv/utils/SemanticMqttParser;", "", "<init>", "()V", "TAG", "", "tokenRegex", "Lkotlin/text/Regex;", "counterRegex", "simplePairRegex", "parse", "Lkotlin/Pair;", "message", "topic", "CallQTV_v1.0.1_CallQTVRelease"})
+public final class SemanticMqttParser {
+    @org.jetbrains.annotations.NotNull()
+    private static final java.lang.String TAG = "SemanticParser";
+    @org.jetbrains.annotations.NotNull()
+    private static final kotlin.text.Regex tokenRegex = null;
+    @org.jetbrains.annotations.NotNull()
+    private static final kotlin.text.Regex counterRegex = null;
+    @org.jetbrains.annotations.NotNull()
+    private static final kotlin.text.Regex simplePairRegex = null;
+    @org.jetbrains.annotations.NotNull()
+    public static final com.softland.callqtv.utils.SemanticMqttParser INSTANCE = null;
+    
+    private SemanticMqttParser() {
+        super();
+    }
+    
+    /**
+     * Parses a message to find a token and counter.
+     * Returns Pair(CounterName, TokenValue)
+     */
+    @org.jetbrains.annotations.Nullable()
+    public final kotlin.Pair<java.lang.String, java.lang.String> parse(@org.jetbrains.annotations.NotNull()
+    java.lang.String message, @org.jetbrains.annotations.NotNull()
+    java.lang.String topic) {
+        return null;
+    }
+}

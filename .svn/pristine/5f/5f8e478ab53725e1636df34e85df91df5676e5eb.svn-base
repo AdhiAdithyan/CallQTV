@@ -1,0 +1,13 @@
+0000000000000000000000000000000000000000 852c782fa5bb49f6f9e30ffbf4affba9e9e27fb1 Adhi Adithyan <adhiadithyan@github.com> 1771683071 +0530	commit (initial): Initial commit
+852c782fa5bb49f6f9e30ffbf4affba9e9e27fb1 852c782fa5bb49f6f9e30ffbf4affba9e9e27fb1 Adhi Adithyan <adhiadithyan@github.com> 1771683083 +0530	Branch: renamed refs/heads/master to refs/heads/main
+852c782fa5bb49f6f9e30ffbf4affba9e9e27fb1 a6e91d6d8f6825732ef11c0ac97fa9c11f039bb5 Adhi Adithyan <adhiadithyan@github.com> 1772026773 +0530	commit: Improve UI dialogs, token handling, and history management
+a6e91d6d8f6825732ef11c0ac97fa9c11f039bb5 e001bcbbfb7ceda32955bbf5d7842fb84c951875 Adhi Adithyan <adhiadithyan@github.com> 1772030647 +0530	commit: Refine settings and registration dialogs UI
+e001bcbbfb7ceda32955bbf5d7842fb84c951875 d454a49831242fffae90f0b6f94c2635893419e1 Adhi Adithyan <adhiadithyan@github.com> 1772432384 +0530	commit: ->Added broker retry section.
+d454a49831242fffae90f0b6f94c2635893419e1 27b15a29453d864b6ea7f1982cf4d0f007f7daf2 Adhi Adithyan <adhiadithyan@github.com> 1773135734 +0530	commit: ->Fixed the orientation related issues
+27b15a29453d864b6ea7f1982cf4d0f007f7daf2 7285079c463f0b7811328aa02ec206b97fff634c Adhi Adithyan <adhiadithyan@github.com> 1773135812 +0530	commit: ->Fixed the orientation related issues
+7285079c463f0b7811328aa02ec206b97fff634c 77521edadf963c93f4f5bf0bcb6e2f1545e06685 Adhi Adithyan <adhiadithyan@github.com> 1773145557 +0530	commit: ->Fixed the orientation related issues
+77521edadf963c93f4f5bf0bcb6e2f1545e06685 4c98dc246a8d5141457809df082e079ef77e9a58 Adhi Adithyan <adhiadithyan@github.com> 1773218131 +0530	commit: ->added solution for the broker connection issues.
+4c98dc246a8d5141457809df082e079ef77e9a58 9ba3d2b16067718efd8e6a2b065dd2b3e040454c Adhi Adithyan <adhiadithyan@github.com> 1773318929 +0530	commit: ->Updated the MQTT connection and payload itration section
+9ba3d2b16067718efd8e6a2b065dd2b3e040454c 47980a7350a976fe7e3d03bc209cef8687598a3e Adhi Adithyan <adhiadithyan@github.com> 1773839618 +0530	commit: ->Updated the MQTT connection section
+47980a7350a976fe7e3d03bc209cef8687598a3e b437e0ff5f986ea7336d2bc69b3997330542f508 Adhi Adithyan <adhiadithyan@github.com> 1773904733 +0530	commit: ->Updated the MQTT timeout section.
+b437e0ff5f986ea7336d2bc69b3997330542f508 35277211310202ba5bc72329cf92f307dbac0394 Adhi Adithyan <adhiadithyan@github.com> 1774239147 +0530	commit: ->Added to database table for storing all the tokens received from the mqtt according to the filters added and duplicate tokens are also saved here with the time they are called.

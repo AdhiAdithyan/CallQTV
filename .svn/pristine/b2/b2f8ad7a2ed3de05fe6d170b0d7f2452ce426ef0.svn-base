@@ -1,0 +1,237 @@
+package com.softland.callqtv.data.local;
+
+import androidx.annotation.NonNull;
+import androidx.room.EntityInsertAdapter;
+import androidx.room.RoomDatabase;
+import androidx.room.util.DBUtil;
+import androidx.room.util.SQLiteStatementUtil;
+import androidx.sqlite.SQLiteStatement;
+import java.lang.Boolean;
+import java.lang.Class;
+import java.lang.Integer;
+import java.lang.NullPointerException;
+import java.lang.Override;
+import java.lang.String;
+import java.lang.SuppressWarnings;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import javax.annotation.processing.Generated;
+
+@Generated("androidx.room.RoomProcessor")
+@SuppressWarnings({"unchecked", "deprecation", "removal"})
+public final class ConnectedDeviceDao_Impl implements ConnectedDeviceDao {
+  private final RoomDatabase __db;
+
+  private final EntityInsertAdapter<ConnectedDeviceEntity> __insertAdapterOfConnectedDeviceEntity;
+
+  public ConnectedDeviceDao_Impl(@NonNull final RoomDatabase __db) {
+    this.__db = __db;
+    this.__insertAdapterOfConnectedDeviceEntity = new EntityInsertAdapter<ConnectedDeviceEntity>() {
+      @Override
+      @NonNull
+      protected String createQuery() {
+        return "INSERT OR REPLACE INTO `connected_devices` (`localId`,`device_id`,`mac_address`,`customer_id`,`remote_device_id`,`serial_number`,`device_type`,`name`,`status`,`is_active`,`config_json`) VALUES (nullif(?, 0),?,?,?,?,?,?,?,?,?,?)";
+      }
+
+      @Override
+      protected void bind(@NonNull final SQLiteStatement statement,
+          @NonNull final ConnectedDeviceEntity entity) {
+        statement.bindLong(1, entity.getLocalId());
+        statement.bindLong(2, entity.getDeviceId());
+        if (entity.getMacAddress() == null) {
+          statement.bindNull(3);
+        } else {
+          statement.bindText(3, entity.getMacAddress());
+        }
+        if (entity.getCustomerId() == null) {
+          statement.bindNull(4);
+        } else {
+          statement.bindText(4, entity.getCustomerId());
+        }
+        if (entity.getRemoteDeviceId() == null) {
+          statement.bindNull(5);
+        } else {
+          statement.bindLong(5, entity.getRemoteDeviceId());
+        }
+        if (entity.getSerialNumber() == null) {
+          statement.bindNull(6);
+        } else {
+          statement.bindText(6, entity.getSerialNumber());
+        }
+        if (entity.getDeviceType() == null) {
+          statement.bindNull(7);
+        } else {
+          statement.bindText(7, entity.getDeviceType());
+        }
+        if (entity.getName() == null) {
+          statement.bindNull(8);
+        } else {
+          statement.bindText(8, entity.getName());
+        }
+        if (entity.getStatus() == null) {
+          statement.bindNull(9);
+        } else {
+          statement.bindText(9, entity.getStatus());
+        }
+        final Integer _tmp = entity.isActive() == null ? null : (entity.isActive() ? 1 : 0);
+        if (_tmp == null) {
+          statement.bindNull(10);
+        } else {
+          statement.bindLong(10, _tmp);
+        }
+        if (entity.getConfigJson() == null) {
+          statement.bindNull(11);
+        } else {
+          statement.bindText(11, entity.getConfigJson());
+        }
+      }
+    };
+  }
+
+  @Override
+  public void insertAll(final List<ConnectedDeviceEntity> devices) {
+    if (devices == null) throw new NullPointerException();
+    DBUtil.performBlocking(__db, false, true, (_connection) -> {
+      __insertAdapterOfConnectedDeviceEntity.insert(_connection, devices);
+      return null;
+    });
+  }
+
+  @Override
+  public List<ConnectedDeviceEntity> getByMacAndCustomer(final String macAddress,
+      final String customerId) {
+    final String _sql = "SELECT * FROM connected_devices WHERE mac_address = ? AND customer_id = ?";
+    return DBUtil.performBlocking(__db, true, false, (_connection) -> {
+      final SQLiteStatement _stmt = _connection.prepare(_sql);
+      try {
+        int _argIndex = 1;
+        if (macAddress == null) {
+          _stmt.bindNull(_argIndex);
+        } else {
+          _stmt.bindText(_argIndex, macAddress);
+        }
+        _argIndex = 2;
+        if (customerId == null) {
+          _stmt.bindNull(_argIndex);
+        } else {
+          _stmt.bindText(_argIndex, customerId);
+        }
+        final int _cursorIndexOfLocalId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "localId");
+        final int _cursorIndexOfDeviceId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "device_id");
+        final int _cursorIndexOfMacAddress = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "mac_address");
+        final int _cursorIndexOfCustomerId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "customer_id");
+        final int _cursorIndexOfRemoteDeviceId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "remote_device_id");
+        final int _cursorIndexOfSerialNumber = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "serial_number");
+        final int _cursorIndexOfDeviceType = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "device_type");
+        final int _cursorIndexOfName = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "name");
+        final int _cursorIndexOfStatus = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "status");
+        final int _cursorIndexOfIsActive = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "is_active");
+        final int _cursorIndexOfConfigJson = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "config_json");
+        final List<ConnectedDeviceEntity> _result = new ArrayList<ConnectedDeviceEntity>();
+        while (_stmt.step()) {
+          final ConnectedDeviceEntity _item;
+          final int _tmpLocalId;
+          _tmpLocalId = (int) (_stmt.getLong(_cursorIndexOfLocalId));
+          final int _tmpDeviceId;
+          _tmpDeviceId = (int) (_stmt.getLong(_cursorIndexOfDeviceId));
+          final String _tmpMacAddress;
+          if (_stmt.isNull(_cursorIndexOfMacAddress)) {
+            _tmpMacAddress = null;
+          } else {
+            _tmpMacAddress = _stmt.getText(_cursorIndexOfMacAddress);
+          }
+          final String _tmpCustomerId;
+          if (_stmt.isNull(_cursorIndexOfCustomerId)) {
+            _tmpCustomerId = null;
+          } else {
+            _tmpCustomerId = _stmt.getText(_cursorIndexOfCustomerId);
+          }
+          final Integer _tmpRemoteDeviceId;
+          if (_stmt.isNull(_cursorIndexOfRemoteDeviceId)) {
+            _tmpRemoteDeviceId = null;
+          } else {
+            _tmpRemoteDeviceId = (int) (_stmt.getLong(_cursorIndexOfRemoteDeviceId));
+          }
+          final String _tmpSerialNumber;
+          if (_stmt.isNull(_cursorIndexOfSerialNumber)) {
+            _tmpSerialNumber = null;
+          } else {
+            _tmpSerialNumber = _stmt.getText(_cursorIndexOfSerialNumber);
+          }
+          final String _tmpDeviceType;
+          if (_stmt.isNull(_cursorIndexOfDeviceType)) {
+            _tmpDeviceType = null;
+          } else {
+            _tmpDeviceType = _stmt.getText(_cursorIndexOfDeviceType);
+          }
+          final String _tmpName;
+          if (_stmt.isNull(_cursorIndexOfName)) {
+            _tmpName = null;
+          } else {
+            _tmpName = _stmt.getText(_cursorIndexOfName);
+          }
+          final String _tmpStatus;
+          if (_stmt.isNull(_cursorIndexOfStatus)) {
+            _tmpStatus = null;
+          } else {
+            _tmpStatus = _stmt.getText(_cursorIndexOfStatus);
+          }
+          final Boolean _tmpIsActive;
+          final Integer _tmp;
+          if (_stmt.isNull(_cursorIndexOfIsActive)) {
+            _tmp = null;
+          } else {
+            _tmp = (int) (_stmt.getLong(_cursorIndexOfIsActive));
+          }
+          _tmpIsActive = _tmp == null ? null : _tmp != 0;
+          final String _tmpConfigJson;
+          if (_stmt.isNull(_cursorIndexOfConfigJson)) {
+            _tmpConfigJson = null;
+          } else {
+            _tmpConfigJson = _stmt.getText(_cursorIndexOfConfigJson);
+          }
+          _item = new ConnectedDeviceEntity(_tmpLocalId,_tmpDeviceId,_tmpMacAddress,_tmpCustomerId,_tmpRemoteDeviceId,_tmpSerialNumber,_tmpDeviceType,_tmpName,_tmpStatus,_tmpIsActive,_tmpConfigJson);
+          _result.add(_item);
+        }
+        return _result;
+      } finally {
+        _stmt.close();
+      }
+    });
+  }
+
+  @Override
+  public void deleteByDeviceAndCustomer(final int deviceId, final String macAddress,
+      final String customerId) {
+    final String _sql = "DELETE FROM connected_devices WHERE device_id = ? AND mac_address = ? AND customer_id = ?";
+    DBUtil.performBlocking(__db, false, true, (_connection) -> {
+      final SQLiteStatement _stmt = _connection.prepare(_sql);
+      try {
+        int _argIndex = 1;
+        _stmt.bindLong(_argIndex, deviceId);
+        _argIndex = 2;
+        if (macAddress == null) {
+          _stmt.bindNull(_argIndex);
+        } else {
+          _stmt.bindText(_argIndex, macAddress);
+        }
+        _argIndex = 3;
+        if (customerId == null) {
+          _stmt.bindNull(_argIndex);
+        } else {
+          _stmt.bindText(_argIndex, customerId);
+        }
+        _stmt.step();
+        return null;
+      } finally {
+        _stmt.close();
+      }
+    });
+  }
+
+  @NonNull
+  public static List<Class<?>> getRequiredConverters() {
+    return Collections.emptyList();
+  }
+}

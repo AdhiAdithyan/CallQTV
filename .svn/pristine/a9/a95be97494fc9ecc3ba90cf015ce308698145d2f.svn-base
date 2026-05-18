@@ -1,0 +1,108 @@
+package com.softland.callqtv.data.model;
+
+@kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u0000&\n\u0002\u0018\u0002\n\u0002\u0010\u0000\n\u0002\b\u0003\n\u0002\u0010\u000e\n\u0000\n\u0002\u0010\b\n\u0002\b\u0007\n\u0002\u0010 \n\u0002\u0018\u0002\n\u0002\b\u001b\u0018\u00002\u00020\u0001B\u0007\u00a2\u0006\u0004\b\u0002\u0010\u0003BW\b\u0016\u0012\u0006\u0010\u0004\u001a\u00020\u0005\u0012\u0006\u0010\u0006\u001a\u00020\u0007\u0012\u0006\u0010\b\u001a\u00020\u0007\u0012\u0006\u0010\t\u001a\u00020\u0007\u0012\u0006\u0010\n\u001a\u00020\u0007\u0012\u0006\u0010\u000b\u001a\u00020\u0007\u0012\u0006\u0010\f\u001a\u00020\u0007\u0012\u0006\u0010\r\u001a\u00020\u0007\u0012\f\u0010\u000e\u001a\b\u0012\u0004\u0012\u00020\u00100\u000f\u00a2\u0006\u0004\b\u0002\u0010\u0011B\'\b\u0016\u0012\u0006\u0010\u0004\u001a\u00020\u0005\u0012\u0006\u0010\u0006\u001a\u00020\u0007\u0012\f\u0010\u000e\u001a\b\u0012\u0004\u0012\u00020\u00100\u000f\u00a2\u0006\u0004\b\u0002\u0010\u0012R \u0010\u0004\u001a\u0004\u0018\u00010\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u0013\u0010\u0014\"\u0004\b\u0015\u0010\u0016R\u001e\u0010\u0006\u001a\u00020\u00078\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u0017\u0010\u0018\"\u0004\b\u0019\u0010\u001aR\u001e\u0010\b\u001a\u00020\u00078\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u001b\u0010\u0018\"\u0004\b\u001c\u0010\u001aR\u001e\u0010\t\u001a\u00020\u00078\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u001d\u0010\u0018\"\u0004\b\u001e\u0010\u001aR\u001e\u0010\n\u001a\u00020\u00078\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u001f\u0010\u0018\"\u0004\b \u0010\u001aR\u001e\u0010\u000b\u001a\u00020\u00078\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b!\u0010\u0018\"\u0004\b\"\u0010\u001aR\u001e\u0010\f\u001a\u00020\u00078\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b#\u0010\u0018\"\u0004\b$\u0010\u001aR\u001e\u0010\r\u001a\u00020\u00078\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b%\u0010\u0018\"\u0004\b&\u0010\u001aR&\u0010\u000e\u001a\n\u0012\u0004\u0012\u00020\u0010\u0018\u00010\u000f8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\'\u0010(\"\u0004\b)\u0010*\u00a8\u0006+"}, d2 = {"Lcom/softland/callqtv/data/model/DailyOrderResponse;", "", "<init>", "()V", "message", "", "count", "", "unread", "delivered", "ready", "preparing", "created", "cancelled", "orderDetails", "", "Lcom/softland/callqtv/data/model/CurrentDayOrder;", "(Ljava/lang/String;IIIIIIILjava/util/List;)V", "(Ljava/lang/String;ILjava/util/List;)V", "getMessage", "()Ljava/lang/String;", "setMessage", "(Ljava/lang/String;)V", "getCount", "()I", "setCount", "(I)V", "getUnread", "setUnread", "getDelivered", "setDelivered", "getReady", "setReady", "getPreparing", "setPreparing", "getCreated", "setCreated", "getCancelled", "setCancelled", "getOrderDetails", "()Ljava/util/List;", "setOrderDetails", "(Ljava/util/List;)V", "CallQTV_v1.0.0_CallQTVRelease"})
+public final class DailyOrderResponse {
+    @com.google.gson.annotations.SerializedName(value = "message")
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String message;
+    @com.google.gson.annotations.SerializedName(value = "count")
+    private int count = 0;
+    @com.google.gson.annotations.SerializedName(value = "unread")
+    private int unread = 0;
+    @com.google.gson.annotations.SerializedName(value = "delivered")
+    private int delivered = 0;
+    @com.google.gson.annotations.SerializedName(value = "ready")
+    private int ready = 0;
+    @com.google.gson.annotations.SerializedName(value = "preparing")
+    private int preparing = 0;
+    @com.google.gson.annotations.SerializedName(value = "created")
+    private int created = 0;
+    @com.google.gson.annotations.SerializedName(value = "cancelled")
+    private int cancelled = 0;
+    @com.google.gson.annotations.SerializedName(value = "detail")
+    @org.jetbrains.annotations.Nullable()
+    private java.util.List<com.softland.callqtv.data.model.CurrentDayOrder> orderDetails;
+    
+    public DailyOrderResponse() {
+        super();
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getMessage() {
+        return null;
+    }
+    
+    public final void setMessage(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    public final int getCount() {
+        return 0;
+    }
+    
+    public final void setCount(int p0) {
+    }
+    
+    public final int getUnread() {
+        return 0;
+    }
+    
+    public final void setUnread(int p0) {
+    }
+    
+    public final int getDelivered() {
+        return 0;
+    }
+    
+    public final void setDelivered(int p0) {
+    }
+    
+    public final int getReady() {
+        return 0;
+    }
+    
+    public final void setReady(int p0) {
+    }
+    
+    public final int getPreparing() {
+        return 0;
+    }
+    
+    public final void setPreparing(int p0) {
+    }
+    
+    public final int getCreated() {
+        return 0;
+    }
+    
+    public final void setCreated(int p0) {
+    }
+    
+    public final int getCancelled() {
+        return 0;
+    }
+    
+    public final void setCancelled(int p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.util.List<com.softland.callqtv.data.model.CurrentDayOrder> getOrderDetails() {
+        return null;
+    }
+    
+    public final void setOrderDetails(@org.jetbrains.annotations.Nullable()
+    java.util.List<com.softland.callqtv.data.model.CurrentDayOrder> p0) {
+    }
+    
+    public DailyOrderResponse(@org.jetbrains.annotations.NotNull()
+    java.lang.String message, int count, int unread, int delivered, int ready, int preparing, int created, int cancelled, @org.jetbrains.annotations.NotNull()
+    java.util.List<com.softland.callqtv.data.model.CurrentDayOrder> orderDetails) {
+        super();
+    }
+    
+    public DailyOrderResponse(@org.jetbrains.annotations.NotNull()
+    java.lang.String message, int count, @org.jetbrains.annotations.NotNull()
+    java.util.List<com.softland.callqtv.data.model.CurrentDayOrder> orderDetails) {
+        super();
+    }
+}

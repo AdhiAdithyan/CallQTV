@@ -1,0 +1,104 @@
+package com.softland.callqtv.data.model;
+
+@kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u0000$\n\u0002\u0018\u0002\n\u0002\u0010\u0000\n\u0002\b\u0003\n\u0002\u0010\u000e\n\u0002\b\u0004\n\u0002\u0010\t\n\u0002\b\u0003\n\u0002\u0010\b\n\u0002\b\u0019\u0018\u00002\u00020\u0001B\t\b\u0016\u00a2\u0006\u0004\b\u0002\u0010\u0003B9\b\u0016\u0012\b\u0010\u0004\u001a\u0004\u0018\u00010\u0005\u0012\b\u0010\u0006\u001a\u0004\u0018\u00010\u0005\u0012\b\u0010\u0007\u001a\u0004\u0018\u00010\u0005\u0012\b\u0010\b\u001a\u0004\u0018\u00010\u0005\u0012\u0006\u0010\t\u001a\u00020\n\u00a2\u0006\u0004\b\u0002\u0010\u000bBK\b\u0016\u0012\b\u0010\u0004\u001a\u0004\u0018\u00010\u0005\u0012\b\u0010\u0006\u001a\u0004\u0018\u00010\u0005\u0012\b\u0010\u0007\u001a\u0004\u0018\u00010\u0005\u0012\b\u0010\b\u001a\u0004\u0018\u00010\u0005\u0012\u0006\u0010\t\u001a\u00020\n\u0012\b\u0010\f\u001a\u0004\u0018\u00010\u0005\u0012\u0006\u0010\r\u001a\u00020\u000e\u00a2\u0006\u0004\b\u0002\u0010\u000fB\'\b\u0016\u0012\b\u0010\u0010\u001a\u0004\u0018\u00010\u0005\u0012\b\u0010\u0011\u001a\u0004\u0018\u00010\u0005\u0012\b\u0010\b\u001a\u0004\u0018\u00010\u0005\u00a2\u0006\u0004\b\u0002\u0010\u0012R\u001c\u0010\u0004\u001a\u0004\u0018\u00010\u0005X\u0086\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u0013\u0010\u0014\"\u0004\b\u0015\u0010\u0016R\u001c\u0010\u0006\u001a\u0004\u0018\u00010\u0005X\u0086\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u0017\u0010\u0014\"\u0004\b\u0018\u0010\u0016R\u001c\u0010\u0007\u001a\u0004\u0018\u00010\u0005X\u0086\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u0019\u0010\u0014\"\u0004\b\u001a\u0010\u0016R\u001c\u0010\b\u001a\u0004\u0018\u00010\u0005X\u0086\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u001b\u0010\u0014\"\u0004\b\u001c\u0010\u0016R\u001a\u0010\t\u001a\u00020\nX\u0086\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u001d\u0010\u001e\"\u0004\b\u001f\u0010 R\u001c\u0010\f\u001a\u0004\u0018\u00010\u0005X\u0086\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b!\u0010\u0014\"\u0004\b\"\u0010\u0016R\u001a\u0010\r\u001a\u00020\u000eX\u0086\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b#\u0010$\"\u0004\b%\u0010&\u00a8\u0006\'"}, d2 = {"Lcom/softland/callqtv/data/model/Message;", "", "<init>", "()V", "id", "", "text", "senderId", "senderName", "timestamp", "", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;J)V", "audioUrl", "audioDuration", "", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLjava/lang/String;I)V", "messageText", "currentUserUid", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", "getId", "()Ljava/lang/String;", "setId", "(Ljava/lang/String;)V", "getText", "setText", "getSenderId", "setSenderId", "getSenderName", "setSenderName", "getTimestamp", "()J", "setTimestamp", "(J)V", "getAudioUrl", "setAudioUrl", "getAudioDuration", "()I", "setAudioDuration", "(I)V", "CallQTV_v1.0.0_CallQTVDebug"})
+public final class Message {
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String id;
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String text;
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String senderId;
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String senderName;
+    private long timestamp = 0L;
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String audioUrl;
+    private int audioDuration = 0;
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getId() {
+        return null;
+    }
+    
+    public final void setId(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getText() {
+        return null;
+    }
+    
+    public final void setText(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getSenderId() {
+        return null;
+    }
+    
+    public final void setSenderId(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getSenderName() {
+        return null;
+    }
+    
+    public final void setSenderName(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    public final long getTimestamp() {
+        return 0L;
+    }
+    
+    public final void setTimestamp(long p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getAudioUrl() {
+        return null;
+    }
+    
+    public final void setAudioUrl(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    public final int getAudioDuration() {
+        return 0;
+    }
+    
+    public final void setAudioDuration(int p0) {
+    }
+    
+    public Message() {
+        super();
+    }
+    
+    public Message(@org.jetbrains.annotations.Nullable()
+    java.lang.String id, @org.jetbrains.annotations.Nullable()
+    java.lang.String text, @org.jetbrains.annotations.Nullable()
+    java.lang.String senderId, @org.jetbrains.annotations.Nullable()
+    java.lang.String senderName, long timestamp) {
+        super();
+    }
+    
+    public Message(@org.jetbrains.annotations.Nullable()
+    java.lang.String id, @org.jetbrains.annotations.Nullable()
+    java.lang.String text, @org.jetbrains.annotations.Nullable()
+    java.lang.String senderId, @org.jetbrains.annotations.Nullable()
+    java.lang.String senderName, long timestamp, @org.jetbrains.annotations.Nullable()
+    java.lang.String audioUrl, int audioDuration) {
+        super();
+    }
+    
+    public Message(@org.jetbrains.annotations.Nullable()
+    java.lang.String messageText, @org.jetbrains.annotations.Nullable()
+    java.lang.String currentUserUid, @org.jetbrains.annotations.Nullable()
+    java.lang.String senderName) {
+        super();
+    }
+}

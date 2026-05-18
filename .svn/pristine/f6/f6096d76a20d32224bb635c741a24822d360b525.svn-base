@@ -1,0 +1,326 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.softland.callqtv"
+4    android:versionCode="2"
+5    android:versionName="1.0.1" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="26"
+9        android:targetSdkVersion="35" />
+10
+11    <uses-feature
+11-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:5:5-7:36
+12        android:name="android.hardware.camera"
+12-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:6:9-47
+13        android:required="false" />
+13-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:7:9-33
+14
+15    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+15-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:9:5-10:47
+15-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:9:22-76
+16    <uses-permission android:name="android.permission.CAMERA" />
+16-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:12:5-65
+16-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:12:22-62
+17    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+17-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:13:5-71
+17-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:13:22-68
+18    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+18-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:15:5-79
+18-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:15:22-76
+19    <uses-permission android:name="android.permission.INTERNET" />
+19-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:16:5-67
+19-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:16:22-64
+20    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+20-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:17:5-81
+20-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:17:22-78
+21    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+21-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:18:5-79
+21-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:18:22-76
+22    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+22-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:19:5-76
+22-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:19:22-73
+23    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+23-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:20:5-77
+23-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:20:22-74
+24    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+24-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:21:5-85
+24-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:21:22-82
+25    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+25-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:22:5-76
+25-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:22:22-74
+26    <uses-permission android:name="android.permission.INSTANT_APP_FOREGROUND_SERVICE" />
+26-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:23:5-24:47
+26-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:23:22-86
+27    <uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" />
+27-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:25:5-27:47
+27-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:26:9-77
+28    <uses-permission android:name="android.permission.WAKE_LOCK" />
+28-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:28:5-68
+28-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:28:22-65
+29    <uses-permission android:name="android.permission.VIBRATE" />
+29-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:30:5-66
+29-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:30:22-63
+30    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+30-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:31:5-81
+30-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:31:22-78
+31
+32    <!-- Storage permissions for error logs (CallQTV/errors.txt folder) -->
+33    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+33-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:34:5-80
+33-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:34:22-77
+34    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+34-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:35:5-36:40
+34-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:35:22-78
+35    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+35-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:37:5-38:40
+35-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:37:22-79
+36
+37    <supports-screens
+37-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:41:5-47:40
+38        android:anyDensity="true"
+38-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:42:9-34
+39        android:largeScreens="true"
+39-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:43:9-36
+40        android:normalScreens="true"
+40-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:44:9-37
+41        android:resizeable="true"
+41-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:45:9-34
+42        android:smallScreens="true"
+42-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:46:9-36
+43        android:xlargeScreens="true" />
+43-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:47:9-37
+44
+45    <permission
+45-->[androidx.core:core:1.15.0] F:\gradle-home\caches\9.4.0\transforms\4cac5e67ef8d0772e12bd930bd46f8de\transformed\core-1.15.0\AndroidManifest.xml:22:5-24:47
+46        android:name="com.softland.callqtv.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+46-->[androidx.core:core:1.15.0] F:\gradle-home\caches\9.4.0\transforms\4cac5e67ef8d0772e12bd930bd46f8de\transformed\core-1.15.0\AndroidManifest.xml:23:9-81
+47        android:protectionLevel="signature" />
+47-->[androidx.core:core:1.15.0] F:\gradle-home\caches\9.4.0\transforms\4cac5e67ef8d0772e12bd930bd46f8de\transformed\core-1.15.0\AndroidManifest.xml:24:9-44
+48
+49    <uses-permission android:name="com.softland.callqtv.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+49-->[androidx.core:core:1.15.0] F:\gradle-home\caches\9.4.0\transforms\4cac5e67ef8d0772e12bd930bd46f8de\transformed\core-1.15.0\AndroidManifest.xml:26:5-97
+49-->[androidx.core:core:1.15.0] F:\gradle-home\caches\9.4.0\transforms\4cac5e67ef8d0772e12bd930bd46f8de\transformed\core-1.15.0\AndroidManifest.xml:26:22-94
+50
+51    <uses-feature
+51-->[com.journeyapps:zxing-android-embedded:4.3.0] F:\gradle-home\caches\9.4.0\transforms\965ce78708e5fee9c38969e16ed07675\transformed\jetified-zxing-android-embedded-4.3.0\AndroidManifest.xml:28:5-30:36
+52        android:name="android.hardware.camera.front"
+52-->[com.journeyapps:zxing-android-embedded:4.3.0] F:\gradle-home\caches\9.4.0\transforms\965ce78708e5fee9c38969e16ed07675\transformed\jetified-zxing-android-embedded-4.3.0\AndroidManifest.xml:29:9-53
+53        android:required="false" /> <!-- TODO replace above two with next line after Android 4.2 -->
+53-->[com.journeyapps:zxing-android-embedded:4.3.0] F:\gradle-home\caches\9.4.0\transforms\965ce78708e5fee9c38969e16ed07675\transformed\jetified-zxing-android-embedded-4.3.0\AndroidManifest.xml:30:9-33
+54    <!-- <uses-feature android:name="android.hardware.camera.any"/> -->
+55    <uses-feature
+55-->[com.journeyapps:zxing-android-embedded:4.3.0] F:\gradle-home\caches\9.4.0\transforms\965ce78708e5fee9c38969e16ed07675\transformed\jetified-zxing-android-embedded-4.3.0\AndroidManifest.xml:33:5-35:36
+56        android:name="android.hardware.camera.autofocus"
+56-->[com.journeyapps:zxing-android-embedded:4.3.0] F:\gradle-home\caches\9.4.0\transforms\965ce78708e5fee9c38969e16ed07675\transformed\jetified-zxing-android-embedded-4.3.0\AndroidManifest.xml:34:9-57
+57        android:required="false" />
+57-->[com.journeyapps:zxing-android-embedded:4.3.0] F:\gradle-home\caches\9.4.0\transforms\965ce78708e5fee9c38969e16ed07675\transformed\jetified-zxing-android-embedded-4.3.0\AndroidManifest.xml:35:9-33
+58    <uses-feature
+58-->[com.journeyapps:zxing-android-embedded:4.3.0] F:\gradle-home\caches\9.4.0\transforms\965ce78708e5fee9c38969e16ed07675\transformed\jetified-zxing-android-embedded-4.3.0\AndroidManifest.xml:36:5-38:36
+59        android:name="android.hardware.camera.flash"
+59-->[com.journeyapps:zxing-android-embedded:4.3.0] F:\gradle-home\caches\9.4.0\transforms\965ce78708e5fee9c38969e16ed07675\transformed\jetified-zxing-android-embedded-4.3.0\AndroidManifest.xml:37:9-53
+60        android:required="false" />
+60-->[com.journeyapps:zxing-android-embedded:4.3.0] F:\gradle-home\caches\9.4.0\transforms\965ce78708e5fee9c38969e16ed07675\transformed\jetified-zxing-android-embedded-4.3.0\AndroidManifest.xml:38:9-33
+61    <uses-feature
+61-->[com.journeyapps:zxing-android-embedded:4.3.0] F:\gradle-home\caches\9.4.0\transforms\965ce78708e5fee9c38969e16ed07675\transformed\jetified-zxing-android-embedded-4.3.0\AndroidManifest.xml:39:5-41:36
+62        android:name="android.hardware.screen.landscape"
+62-->[com.journeyapps:zxing-android-embedded:4.3.0] F:\gradle-home\caches\9.4.0\transforms\965ce78708e5fee9c38969e16ed07675\transformed\jetified-zxing-android-embedded-4.3.0\AndroidManifest.xml:40:9-57
+63        android:required="false" />
+63-->[com.journeyapps:zxing-android-embedded:4.3.0] F:\gradle-home\caches\9.4.0\transforms\965ce78708e5fee9c38969e16ed07675\transformed\jetified-zxing-android-embedded-4.3.0\AndroidManifest.xml:41:9-33
+64    <uses-feature
+64-->[com.journeyapps:zxing-android-embedded:4.3.0] F:\gradle-home\caches\9.4.0\transforms\965ce78708e5fee9c38969e16ed07675\transformed\jetified-zxing-android-embedded-4.3.0\AndroidManifest.xml:42:5-44:36
+65        android:name="android.hardware.wifi"
+65-->[com.journeyapps:zxing-android-embedded:4.3.0] F:\gradle-home\caches\9.4.0\transforms\965ce78708e5fee9c38969e16ed07675\transformed\jetified-zxing-android-embedded-4.3.0\AndroidManifest.xml:43:9-45
+66        android:required="false" />
+66-->[com.journeyapps:zxing-android-embedded:4.3.0] F:\gradle-home\caches\9.4.0\transforms\965ce78708e5fee9c38969e16ed07675\transformed\jetified-zxing-android-embedded-4.3.0\AndroidManifest.xml:44:9-33
+67
+68    <application
+69        android:name="com.softland.callqtv.MyApplication"
+69-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:50:9-38
+70        android:allowBackup="false"
+70-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:51:9-36
+71        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+71-->[androidx.core:core:1.15.0] F:\gradle-home\caches\9.4.0\transforms\4cac5e67ef8d0772e12bd930bd46f8de\transformed\core-1.15.0\AndroidManifest.xml:28:18-86
+72        android:dataExtractionRules="@xml/data_extraction_rules"
+72-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:52:9-65
+73        android:debuggable="true"
+74        android:enableOnBackInvokedCallback="true"
+74-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:61:9-51
+75        android:extractNativeLibs="false"
+76        android:fullBackupContent="@xml/backup_rules"
+76-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:53:9-54
+77        android:icon="@drawable/callq_tv_logo"
+77-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:54:9-34
+78        android:label="CallQTV"
+78-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:55:9-35
+79        android:largeHeap="true"
+79-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:56:9-33
+80        android:requestLegacyExternalStorage="true"
+80-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:62:9-52
+81        android:roundIcon="@drawable/callq_tv_logo"
+81-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:57:9-44
+82        android:supportsRtl="true"
+82-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:58:9-35
+83        android:testOnly="true"
+84        android:theme="@style/Theme.CallQTV"
+84-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:59:9-45
+85        android:usesCleartextTraffic="true" >
+85-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:60:9-44
+86        <activity
+86-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:66:9-69:57
+87            android:name="com.softland.callqtv.ui.CustomerIdActivity"
+87-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:67:13-50
+88            android:exported="false"
+88-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:68:13-37
+89            android:windowSoftInputMode="stateHidden" />
+89-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:69:13-54
+90        <activity
+90-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:71:9-76:59
+91            android:name="com.softland.callqtv.ui.TokenDisplayActivity"
+91-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:72:13-52
+92            android:exported="false"
+92-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:73:13-37
+93            android:launchMode="singleTask"
+93-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:74:13-44
+94            android:screenOrientation="landscape" />
+94-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:75:13-50
+95        <activity
+95-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:77:9-85:20
+96            android:name="com.softland.callqtv.ui.SplashScreenActivity"
+96-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:78:13-52
+97            android:exported="true" >
+97-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:79:13-36
+98            <intent-filter>
+98-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:80:13-84:29
+99                <action android:name="android.intent.action.MAIN" />
+99-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:81:17-69
+99-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:81:25-66
+100
+101                <category android:name="android.intent.category.LAUNCHER" />
+101-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:83:17-77
+101-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:83:27-74
+102            </intent-filter>
+103        </activity>
+104
+105        <provider
+106            android:name="com.softland.callqtv.StoragePathProvider"
+106-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:88:13-48
+107            android:authorities="com.softland.callqtv.fileprovider"
+107-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:89:13-64
+108            android:exported="false"
+108-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:90:13-37
+109            android:grantUriPermissions="true" >
+109-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:91:13-47
+110            <meta-data
+110-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:92:13-94:54
+111                android:name="android.support.FILE_PROVIDER_PATHS"
+111-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:93:17-67
+112                android:resource="@xml/file_paths" />
+112-->F:\I Drive\Adithyan\CallQTV\app\src\main\AndroidManifest.xml:94:17-51
+113        </provider>
+114
+115        <activity
+115-->[androidx.compose.ui:ui-tooling-android:1.7.6] F:\gradle-home\caches\9.4.0\transforms\ccea670ff4db76b4ce0ac073ef4c8475\transformed\jetified-ui-tooling-release\AndroidManifest.xml:23:9-25:39
+116            android:name="androidx.compose.ui.tooling.PreviewActivity"
+116-->[androidx.compose.ui:ui-tooling-android:1.7.6] F:\gradle-home\caches\9.4.0\transforms\ccea670ff4db76b4ce0ac073ef4c8475\transformed\jetified-ui-tooling-release\AndroidManifest.xml:24:13-71
+117            android:exported="true" />
+117-->[androidx.compose.ui:ui-tooling-android:1.7.6] F:\gradle-home\caches\9.4.0\transforms\ccea670ff4db76b4ce0ac073ef4c8475\transformed\jetified-ui-tooling-release\AndroidManifest.xml:25:13-36
+118
+119        <provider
+119-->[androidx.emoji2:emoji2:1.3.0] F:\gradle-home\caches\9.4.0\transforms\a77e4d2ed92ff039ecc9bcad464ca269\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:24:9-32:20
+120            android:name="androidx.startup.InitializationProvider"
+120-->[androidx.emoji2:emoji2:1.3.0] F:\gradle-home\caches\9.4.0\transforms\a77e4d2ed92ff039ecc9bcad464ca269\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:25:13-67
+121            android:authorities="com.softland.callqtv.androidx-startup"
+121-->[androidx.emoji2:emoji2:1.3.0] F:\gradle-home\caches\9.4.0\transforms\a77e4d2ed92ff039ecc9bcad464ca269\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:26:13-68
+122            android:exported="false" >
+122-->[androidx.emoji2:emoji2:1.3.0] F:\gradle-home\caches\9.4.0\transforms\a77e4d2ed92ff039ecc9bcad464ca269\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:27:13-37
+123            <meta-data
+123-->[androidx.emoji2:emoji2:1.3.0] F:\gradle-home\caches\9.4.0\transforms\a77e4d2ed92ff039ecc9bcad464ca269\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:29:13-31:52
+124                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+124-->[androidx.emoji2:emoji2:1.3.0] F:\gradle-home\caches\9.4.0\transforms\a77e4d2ed92ff039ecc9bcad464ca269\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:30:17-75
+125                android:value="androidx.startup" />
+125-->[androidx.emoji2:emoji2:1.3.0] F:\gradle-home\caches\9.4.0\transforms\a77e4d2ed92ff039ecc9bcad464ca269\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:31:17-49
+126            <meta-data
+126-->[androidx.lifecycle:lifecycle-process:2.8.7] F:\gradle-home\caches\9.4.0\transforms\b223969b071e6382a59cb7bbfb279fd6\transformed\jetified-lifecycle-process-2.8.7\AndroidManifest.xml:29:13-31:52
+127                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+127-->[androidx.lifecycle:lifecycle-process:2.8.7] F:\gradle-home\caches\9.4.0\transforms\b223969b071e6382a59cb7bbfb279fd6\transformed\jetified-lifecycle-process-2.8.7\AndroidManifest.xml:30:17-78
+128                android:value="androidx.startup" />
+128-->[androidx.lifecycle:lifecycle-process:2.8.7] F:\gradle-home\caches\9.4.0\transforms\b223969b071e6382a59cb7bbfb279fd6\transformed\jetified-lifecycle-process-2.8.7\AndroidManifest.xml:31:17-49
+129            <meta-data
+129-->[androidx.profileinstaller:profileinstaller:1.4.0] F:\gradle-home\caches\9.4.0\transforms\e8c7dfb8d5eb467154c42f8764b651ee\transformed\jetified-profileinstaller-1.4.0\AndroidManifest.xml:29:13-31:52
+130                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+130-->[androidx.profileinstaller:profileinstaller:1.4.0] F:\gradle-home\caches\9.4.0\transforms\e8c7dfb8d5eb467154c42f8764b651ee\transformed\jetified-profileinstaller-1.4.0\AndroidManifest.xml:30:17-85
+131                android:value="androidx.startup" />
+131-->[androidx.profileinstaller:profileinstaller:1.4.0] F:\gradle-home\caches\9.4.0\transforms\e8c7dfb8d5eb467154c42f8764b651ee\transformed\jetified-profileinstaller-1.4.0\AndroidManifest.xml:31:17-49
+132        </provider>
+133
+134        <activity
+134-->[androidx.compose.ui:ui-test-manifest:1.7.6] F:\gradle-home\caches\9.4.0\transforms\6806ff77c8331ba556ecc50bce1d1fa0\transformed\jetified-ui-test-manifest-1.7.6\AndroidManifest.xml:23:9-25:39
+135            android:name="androidx.activity.ComponentActivity"
+135-->[androidx.compose.ui:ui-test-manifest:1.7.6] F:\gradle-home\caches\9.4.0\transforms\6806ff77c8331ba556ecc50bce1d1fa0\transformed\jetified-ui-test-manifest-1.7.6\AndroidManifest.xml:24:13-63
+136            android:exported="true" />
+136-->[androidx.compose.ui:ui-test-manifest:1.7.6] F:\gradle-home\caches\9.4.0\transforms\6806ff77c8331ba556ecc50bce1d1fa0\transformed\jetified-ui-test-manifest-1.7.6\AndroidManifest.xml:25:13-36
+137
+138        <service
+138-->[androidx.room:room-runtime-android:2.7.0-alpha12] F:\gradle-home\caches\9.4.0\transforms\f757a6c794ca94b57ebb2a1f050220cd\transformed\jetified-room-runtime-release\AndroidManifest.xml:24:9-28:63
+139            android:name="androidx.room.MultiInstanceInvalidationService"
+139-->[androidx.room:room-runtime-android:2.7.0-alpha12] F:\gradle-home\caches\9.4.0\transforms\f757a6c794ca94b57ebb2a1f050220cd\transformed\jetified-room-runtime-release\AndroidManifest.xml:25:13-74
+140            android:directBootAware="true"
+140-->[androidx.room:room-runtime-android:2.7.0-alpha12] F:\gradle-home\caches\9.4.0\transforms\f757a6c794ca94b57ebb2a1f050220cd\transformed\jetified-room-runtime-release\AndroidManifest.xml:26:13-43
+141            android:exported="false" />
+141-->[androidx.room:room-runtime-android:2.7.0-alpha12] F:\gradle-home\caches\9.4.0\transforms\f757a6c794ca94b57ebb2a1f050220cd\transformed\jetified-room-runtime-release\AndroidManifest.xml:27:13-37
+142
+143        <receiver
+143-->[androidx.profileinstaller:profileinstaller:1.4.0] F:\gradle-home\caches\9.4.0\transforms\e8c7dfb8d5eb467154c42f8764b651ee\transformed\jetified-profileinstaller-1.4.0\AndroidManifest.xml:34:9-52:20
+144            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+144-->[androidx.profileinstaller:profileinstaller:1.4.0] F:\gradle-home\caches\9.4.0\transforms\e8c7dfb8d5eb467154c42f8764b651ee\transformed\jetified-profileinstaller-1.4.0\AndroidManifest.xml:35:13-76
+145            android:directBootAware="false"
+145-->[androidx.profileinstaller:profileinstaller:1.4.0] F:\gradle-home\caches\9.4.0\transforms\e8c7dfb8d5eb467154c42f8764b651ee\transformed\jetified-profileinstaller-1.4.0\AndroidManifest.xml:36:13-44
+146            android:enabled="true"
+146-->[androidx.profileinstaller:profileinstaller:1.4.0] F:\gradle-home\caches\9.4.0\transforms\e8c7dfb8d5eb467154c42f8764b651ee\transformed\jetified-profileinstaller-1.4.0\AndroidManifest.xml:37:13-35
+147            android:exported="true"
+147-->[androidx.profileinstaller:profileinstaller:1.4.0] F:\gradle-home\caches\9.4.0\transforms\e8c7dfb8d5eb467154c42f8764b651ee\transformed\jetified-profileinstaller-1.4.0\AndroidManifest.xml:38:13-36
+148            android:permission="android.permission.DUMP" >
+148-->[androidx.profileinstaller:profileinstaller:1.4.0] F:\gradle-home\caches\9.4.0\transforms\e8c7dfb8d5eb467154c42f8764b651ee\transformed\jetified-profileinstaller-1.4.0\AndroidManifest.xml:39:13-57
+149            <intent-filter>
+149-->[androidx.profileinstaller:profileinstaller:1.4.0] F:\gradle-home\caches\9.4.0\transforms\e8c7dfb8d5eb467154c42f8764b651ee\transformed\jetified-profileinstaller-1.4.0\AndroidManifest.xml:40:13-42:29
+150                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+150-->[androidx.profileinstaller:profileinstaller:1.4.0] F:\gradle-home\caches\9.4.0\transforms\e8c7dfb8d5eb467154c42f8764b651ee\transformed\jetified-profileinstaller-1.4.0\AndroidManifest.xml:41:17-91
+150-->[androidx.profileinstaller:profileinstaller:1.4.0] F:\gradle-home\caches\9.4.0\transforms\e8c7dfb8d5eb467154c42f8764b651ee\transformed\jetified-profileinstaller-1.4.0\AndroidManifest.xml:41:25-88
+151            </intent-filter>
+152            <intent-filter>
+152-->[androidx.profileinstaller:profileinstaller:1.4.0] F:\gradle-home\caches\9.4.0\transforms\e8c7dfb8d5eb467154c42f8764b651ee\transformed\jetified-profileinstaller-1.4.0\AndroidManifest.xml:43:13-45:29
+153                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+153-->[androidx.profileinstaller:profileinstaller:1.4.0] F:\gradle-home\caches\9.4.0\transforms\e8c7dfb8d5eb467154c42f8764b651ee\transformed\jetified-profileinstaller-1.4.0\AndroidManifest.xml:44:17-85
+153-->[androidx.profileinstaller:profileinstaller:1.4.0] F:\gradle-home\caches\9.4.0\transforms\e8c7dfb8d5eb467154c42f8764b651ee\transformed\jetified-profileinstaller-1.4.0\AndroidManifest.xml:44:25-82
+154            </intent-filter>
+155            <intent-filter>
+155-->[androidx.profileinstaller:profileinstaller:1.4.0] F:\gradle-home\caches\9.4.0\transforms\e8c7dfb8d5eb467154c42f8764b651ee\transformed\jetified-profileinstaller-1.4.0\AndroidManifest.xml:46:13-48:29
+156                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+156-->[androidx.profileinstaller:profileinstaller:1.4.0] F:\gradle-home\caches\9.4.0\transforms\e8c7dfb8d5eb467154c42f8764b651ee\transformed\jetified-profileinstaller-1.4.0\AndroidManifest.xml:47:17-88
+156-->[androidx.profileinstaller:profileinstaller:1.4.0] F:\gradle-home\caches\9.4.0\transforms\e8c7dfb8d5eb467154c42f8764b651ee\transformed\jetified-profileinstaller-1.4.0\AndroidManifest.xml:47:25-85
+157            </intent-filter>
+158            <intent-filter>
+158-->[androidx.profileinstaller:profileinstaller:1.4.0] F:\gradle-home\caches\9.4.0\transforms\e8c7dfb8d5eb467154c42f8764b651ee\transformed\jetified-profileinstaller-1.4.0\AndroidManifest.xml:49:13-51:29
+159                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+159-->[androidx.profileinstaller:profileinstaller:1.4.0] F:\gradle-home\caches\9.4.0\transforms\e8c7dfb8d5eb467154c42f8764b651ee\transformed\jetified-profileinstaller-1.4.0\AndroidManifest.xml:50:17-95
+159-->[androidx.profileinstaller:profileinstaller:1.4.0] F:\gradle-home\caches\9.4.0\transforms\e8c7dfb8d5eb467154c42f8764b651ee\transformed\jetified-profileinstaller-1.4.0\AndroidManifest.xml:50:25-92
+160            </intent-filter>
+161        </receiver>
+162
+163        <activity
+163-->[com.journeyapps:zxing-android-embedded:4.3.0] F:\gradle-home\caches\9.4.0\transforms\965ce78708e5fee9c38969e16ed07675\transformed\jetified-zxing-android-embedded-4.3.0\AndroidManifest.xml:47:9-53:63
+164            android:name="com.journeyapps.barcodescanner.CaptureActivity"
+164-->[com.journeyapps:zxing-android-embedded:4.3.0] F:\gradle-home\caches\9.4.0\transforms\965ce78708e5fee9c38969e16ed07675\transformed\jetified-zxing-android-embedded-4.3.0\AndroidManifest.xml:48:13-74
+165            android:clearTaskOnLaunch="true"
+165-->[com.journeyapps:zxing-android-embedded:4.3.0] F:\gradle-home\caches\9.4.0\transforms\965ce78708e5fee9c38969e16ed07675\transformed\jetified-zxing-android-embedded-4.3.0\AndroidManifest.xml:49:13-45
+166            android:screenOrientation="sensorLandscape"
+166-->[com.journeyapps:zxing-android-embedded:4.3.0] F:\gradle-home\caches\9.4.0\transforms\965ce78708e5fee9c38969e16ed07675\transformed\jetified-zxing-android-embedded-4.3.0\AndroidManifest.xml:50:13-56
+167            android:stateNotNeeded="true"
+167-->[com.journeyapps:zxing-android-embedded:4.3.0] F:\gradle-home\caches\9.4.0\transforms\965ce78708e5fee9c38969e16ed07675\transformed\jetified-zxing-android-embedded-4.3.0\AndroidManifest.xml:51:13-42
+168            android:theme="@style/zxing_CaptureTheme"
+168-->[com.journeyapps:zxing-android-embedded:4.3.0] F:\gradle-home\caches\9.4.0\transforms\965ce78708e5fee9c38969e16ed07675\transformed\jetified-zxing-android-embedded-4.3.0\AndroidManifest.xml:52:13-54
+169            android:windowSoftInputMode="stateAlwaysHidden" />
+169-->[com.journeyapps:zxing-android-embedded:4.3.0] F:\gradle-home\caches\9.4.0\transforms\965ce78708e5fee9c38969e16ed07675\transformed\jetified-zxing-android-embedded-4.3.0\AndroidManifest.xml:53:13-60
+170    </application>
+171
+172</manifest>

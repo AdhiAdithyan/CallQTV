@@ -1,0 +1,2 @@
+->Added to database table for storing all the tokens received from the mqtt according to the filters added and duplicate tokens are also saved here with the time they are called.
+->Need to add a service for sending these details to web so that the user can track the tokens and their token status using these details.

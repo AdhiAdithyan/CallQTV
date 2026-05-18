@@ -1,0 +1,31 @@
+package com.softland.callqtv.data.local;
+
+@kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u0000.\n\u0002\u0018\u0002\n\u0002\u0010\u0000\n\u0000\n\u0002\u0010\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0002\n\u0002\u0010\u000e\n\u0002\b\u0002\n\u0002\u0010 \n\u0000\n\u0002\u0010\b\n\u0002\b\u0003\bg\u0018\u00002\u00020\u0001J\u0010\u0010\u0002\u001a\u00020\u00032\u0006\u0010\u0004\u001a\u00020\u0005H\'J\u0018\u0010\u0006\u001a\u00020\u00032\u0006\u0010\u0007\u001a\u00020\b2\u0006\u0010\t\u001a\u00020\bH\'J\u0016\u0010\n\u001a\b\u0012\u0004\u0012\u00020\u00050\u000b2\u0006\u0010\f\u001a\u00020\rH\'J\u001e\u0010\u000e\u001a\b\u0012\u0004\u0012\u00020\u00050\u000b2\u0006\u0010\u0007\u001a\u00020\b2\u0006\u0010\t\u001a\u00020\bH\'J\u001a\u0010\u000f\u001a\u0004\u0018\u00010\u00052\u0006\u0010\u0007\u001a\u00020\b2\u0006\u0010\t\u001a\u00020\bH\'\u00a8\u0006\u0010\u00c0\u0006\u0003"}, d2 = {"Lcom/softland/callqtv/data/local/MappedBrokerDao;", "", "upsert", "", "entity", "Lcom/softland/callqtv/data/local/MappedBrokerEntity;", "deleteByMacAndCustomer", "macAddress", "", "customerId", "getByDeviceId", "", "deviceId", "", "getAllByMacAndCustomer", "getByMacAndCustomer", "CallQTV_v1.0.0_CallQTVDebug"})
+@androidx.room.Dao()
+public abstract interface MappedBrokerDao {
+    
+    @androidx.room.Insert(onConflict = 1)
+    public abstract void upsert(@org.jetbrains.annotations.NotNull()
+    com.softland.callqtv.data.local.MappedBrokerEntity entity);
+    
+    @androidx.room.Query(value = "DELETE FROM mapped_broker WHERE mac_address = :macAddress AND customer_id = :customerId")
+    public abstract void deleteByMacAndCustomer(@org.jetbrains.annotations.NotNull()
+    java.lang.String macAddress, @org.jetbrains.annotations.NotNull()
+    java.lang.String customerId);
+    
+    @androidx.room.Query(value = "SELECT * FROM mapped_broker WHERE device_id = :deviceId")
+    @org.jetbrains.annotations.NotNull()
+    public abstract java.util.List<com.softland.callqtv.data.local.MappedBrokerEntity> getByDeviceId(int deviceId);
+    
+    @androidx.room.Query(value = "SELECT * FROM mapped_broker WHERE mac_address = :macAddress AND customer_id = :customerId")
+    @org.jetbrains.annotations.NotNull()
+    public abstract java.util.List<com.softland.callqtv.data.local.MappedBrokerEntity> getAllByMacAndCustomer(@org.jetbrains.annotations.NotNull()
+    java.lang.String macAddress, @org.jetbrains.annotations.NotNull()
+    java.lang.String customerId);
+    
+    @androidx.room.Query(value = "SELECT * FROM mapped_broker WHERE mac_address = :macAddress AND customer_id = :customerId LIMIT 1")
+    @org.jetbrains.annotations.Nullable()
+    public abstract com.softland.callqtv.data.local.MappedBrokerEntity getByMacAndCustomer(@org.jetbrains.annotations.NotNull()
+    java.lang.String macAddress, @org.jetbrains.annotations.NotNull()
+    java.lang.String customerId);
+}

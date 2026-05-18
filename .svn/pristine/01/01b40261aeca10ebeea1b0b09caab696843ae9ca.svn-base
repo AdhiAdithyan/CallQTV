@@ -1,0 +1,2 @@
+->Updated the MQTT connection section
+->Added Mqtt publish to a fixed topic "fr/status"

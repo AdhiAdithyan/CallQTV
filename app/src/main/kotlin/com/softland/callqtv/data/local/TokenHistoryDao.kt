@@ -36,6 +36,10 @@ interface TokenHistoryDao {
     @Query("DELETE FROM token_history")
     suspend fun clearAll()
 
+    /** Remove saved history for specific counter keys only. */
+    @Query("DELETE FROM token_history WHERE counter_key IN (:counterKeys)")
+    suspend fun clearByCounterKeys(counterKeys: List<String>)
+
     /** Remove tokens that are not from [today] (yyyy-MM-dd). Keeps only today's called tokens. */
     @Query("DELETE FROM token_history WHERE call_date != :today OR call_date IS NULL OR call_date = ''")
     suspend fun deleteWhereDateNot(today: String)

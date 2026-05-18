@@ -88,10 +88,13 @@ class CustomerIdActivity : AppCompatActivity() {
 
         // Pre-fill if exists
         val authSharedPrefs = getSharedPreferences(AppSharedPreferences.AUTHENTICATION, Context.MODE_PRIVATE)
+        val custIdText = authSharedPrefs.getString(PreferenceHelper.customer_id_text, "") ?: ""
         val custId = authSharedPrefs.getInt(PreferenceHelper.customer_id, 0)
         val licenseEnd = authSharedPrefs.getString(PreferenceHelper.product_license_end, "") ?: ""
 
-        if (custId != 0) {
+        if (custIdText.length == 4) {
+            registrationViewModel.setCustomerId(custIdText)
+        } else if (custId != 0) {
             registrationViewModel.setCustomerId(String.format(Locale.ROOT, "%04d", custId))
         }
 

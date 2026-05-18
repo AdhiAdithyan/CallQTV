@@ -1,0 +1,187 @@
+package com.softland.callqtv.data.local;
+
+@kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u0000\"\n\u0002\u0018\u0002\n\u0002\u0010\u0000\n\u0000\n\u0002\u0010\b\n\u0002\b\u0002\n\u0002\u0010\u000e\n\u0002\b\u0007\n\u0002\u0010\u000b\n\u0002\b%\b\u0087\b\u0018\u00002\u00020\u0001Bo\u0012\b\b\u0002\u0010\u0002\u001a\u00020\u0003\u0012\u0006\u0010\u0004\u001a\u00020\u0003\u0012\u0006\u0010\u0005\u001a\u00020\u0006\u0012\u0006\u0010\u0007\u001a\u00020\u0006\u0012\b\u0010\b\u001a\u0004\u0018\u00010\u0003\u0012\b\u0010\t\u001a\u0004\u0018\u00010\u0006\u0012\b\u0010\n\u001a\u0004\u0018\u00010\u0006\u0012\b\u0010\u000b\u001a\u0004\u0018\u00010\u0006\u0012\b\u0010\f\u001a\u0004\u0018\u00010\u0006\u0012\b\u0010\r\u001a\u0004\u0018\u00010\u000e\u0012\b\u0010\u000f\u001a\u0004\u0018\u00010\u0006\u00a2\u0006\u0004\b\u0010\u0010\u0011J\t\u0010\"\u001a\u00020\u0003H\u00c6\u0003J\t\u0010#\u001a\u00020\u0003H\u00c6\u0003J\t\u0010$\u001a\u00020\u0006H\u00c6\u0003J\t\u0010%\u001a\u00020\u0006H\u00c6\u0003J\u0010\u0010&\u001a\u0004\u0018\u00010\u0003H\u00c6\u0003\u00a2\u0006\u0002\u0010\u0019J\u000b\u0010\'\u001a\u0004\u0018\u00010\u0006H\u00c6\u0003J\u000b\u0010(\u001a\u0004\u0018\u00010\u0006H\u00c6\u0003J\u000b\u0010)\u001a\u0004\u0018\u00010\u0006H\u00c6\u0003J\u000b\u0010*\u001a\u0004\u0018\u00010\u0006H\u00c6\u0003J\u0010\u0010+\u001a\u0004\u0018\u00010\u000eH\u00c6\u0003\u00a2\u0006\u0002\u0010\u001fJ\u000b\u0010,\u001a\u0004\u0018\u00010\u0006H\u00c6\u0003J\u008a\u0001\u0010-\u001a\u00020\u00002\b\b\u0002\u0010\u0002\u001a\u00020\u00032\b\b\u0002\u0010\u0004\u001a\u00020\u00032\b\b\u0002\u0010\u0005\u001a\u00020\u00062\b\b\u0002\u0010\u0007\u001a\u00020\u00062\n\b\u0002\u0010\b\u001a\u0004\u0018\u00010\u00032\n\b\u0002\u0010\t\u001a\u0004\u0018\u00010\u00062\n\b\u0002\u0010\n\u001a\u0004\u0018\u00010\u00062\n\b\u0002\u0010\u000b\u001a\u0004\u0018\u00010\u00062\n\b\u0002\u0010\f\u001a\u0004\u0018\u00010\u00062\n\b\u0002\u0010\r\u001a\u0004\u0018\u00010\u000e2\n\b\u0002\u0010\u000f\u001a\u0004\u0018\u00010\u0006H\u00c6\u0001\u00a2\u0006\u0002\u0010.J\u0013\u0010/\u001a\u00020\u000e2\b\u00100\u001a\u0004\u0018\u00010\u0001H\u00d6\u0003J\t\u00101\u001a\u00020\u0003H\u00d6\u0001J\t\u00102\u001a\u00020\u0006H\u00d6\u0001R\u0016\u0010\u0002\u001a\u00020\u00038\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b\u0012\u0010\u0013R\u0016\u0010\u0004\u001a\u00020\u00038\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b\u0014\u0010\u0013R\u0016\u0010\u0005\u001a\u00020\u00068\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b\u0015\u0010\u0016R\u0016\u0010\u0007\u001a\u00020\u00068\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b\u0017\u0010\u0016R\u001a\u0010\b\u001a\u0004\u0018\u00010\u00038\u0006X\u0087\u0004\u00a2\u0006\n\n\u0002\u0010\u001a\u001a\u0004\b\u0018\u0010\u0019R\u0018\u0010\t\u001a\u0004\u0018\u00010\u00068\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b\u001b\u0010\u0016R\u0018\u0010\n\u001a\u0004\u0018\u00010\u00068\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b\u001c\u0010\u0016R\u0018\u0010\u000b\u001a\u0004\u0018\u00010\u00068\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b\u001d\u0010\u0016R\u0018\u0010\f\u001a\u0004\u0018\u00010\u00068\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b\u001e\u0010\u0016R\u001a\u0010\r\u001a\u0004\u0018\u00010\u000e8\u0006X\u0087\u0004\u00a2\u0006\n\n\u0002\u0010 \u001a\u0004\b\r\u0010\u001fR\u0018\u0010\u000f\u001a\u0004\u0018\u00010\u00068\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b!\u0010\u0016\u00a8\u00063"}, d2 = {"Lcom/softland/callqtv/data/local/ConnectedDeviceEntity;", "", "localId", "", "deviceId", "macAddress", "", "customerId", "remoteDeviceId", "serialNumber", "deviceType", "name", "status", "isActive", "", "configJson", "<init>", "(IILjava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Boolean;Ljava/lang/String;)V", "getLocalId", "()I", "getDeviceId", "getMacAddress", "()Ljava/lang/String;", "getCustomerId", "getRemoteDeviceId", "()Ljava/lang/Integer;", "Ljava/lang/Integer;", "getSerialNumber", "getDeviceType", "getName", "getStatus", "()Ljava/lang/Boolean;", "Ljava/lang/Boolean;", "getConfigJson", "component1", "component2", "component3", "component4", "component5", "component6", "component7", "component8", "component9", "component10", "component11", "copy", "(IILjava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Boolean;Ljava/lang/String;)Lcom/softland/callqtv/data/local/ConnectedDeviceEntity;", "equals", "other", "hashCode", "toString", "CallQTV_v1.0.0_CallQTVRelease"})
+@androidx.room.Entity(tableName = "connected_devices")
+public final class ConnectedDeviceEntity {
+    @androidx.room.PrimaryKey(autoGenerate = true)
+    private final int localId = 0;
+    @androidx.room.ColumnInfo(name = "device_id")
+    private final int deviceId = 0;
+    @androidx.room.ColumnInfo(name = "mac_address")
+    @org.jetbrains.annotations.NotNull()
+    private final java.lang.String macAddress = null;
+    @androidx.room.ColumnInfo(name = "customer_id")
+    @org.jetbrains.annotations.NotNull()
+    private final java.lang.String customerId = null;
+    @androidx.room.ColumnInfo(name = "remote_device_id")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.Integer remoteDeviceId = null;
+    @androidx.room.ColumnInfo(name = "serial_number")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.String serialNumber = null;
+    @androidx.room.ColumnInfo(name = "device_type")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.String deviceType = null;
+    @androidx.room.ColumnInfo(name = "name")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.String name = null;
+    @androidx.room.ColumnInfo(name = "status")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.String status = null;
+    @androidx.room.ColumnInfo(name = "is_active")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.Boolean isActive = null;
+    @androidx.room.ColumnInfo(name = "config_json")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.String configJson = null;
+    
+    public ConnectedDeviceEntity(int localId, int deviceId, @org.jetbrains.annotations.NotNull()
+    java.lang.String macAddress, @org.jetbrains.annotations.NotNull()
+    java.lang.String customerId, @org.jetbrains.annotations.Nullable()
+    java.lang.Integer remoteDeviceId, @org.jetbrains.annotations.Nullable()
+    java.lang.String serialNumber, @org.jetbrains.annotations.Nullable()
+    java.lang.String deviceType, @org.jetbrains.annotations.Nullable()
+    java.lang.String name, @org.jetbrains.annotations.Nullable()
+    java.lang.String status, @org.jetbrains.annotations.Nullable()
+    java.lang.Boolean isActive, @org.jetbrains.annotations.Nullable()
+    java.lang.String configJson) {
+        super();
+    }
+    
+    public final int getLocalId() {
+        return 0;
+    }
+    
+    public final int getDeviceId() {
+        return 0;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getMacAddress() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getCustomerId() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Integer getRemoteDeviceId() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getSerialNumber() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getDeviceType() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getName() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getStatus() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Boolean isActive() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getConfigJson() {
+        return null;
+    }
+    
+    public final int component1() {
+        return 0;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Boolean component10() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String component11() {
+        return null;
+    }
+    
+    public final int component2() {
+        return 0;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String component3() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String component4() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Integer component5() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String component6() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String component7() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String component8() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String component9() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final com.softland.callqtv.data.local.ConnectedDeviceEntity copy(int localId, int deviceId, @org.jetbrains.annotations.NotNull()
+    java.lang.String macAddress, @org.jetbrains.annotations.NotNull()
+    java.lang.String customerId, @org.jetbrains.annotations.Nullable()
+    java.lang.Integer remoteDeviceId, @org.jetbrains.annotations.Nullable()
+    java.lang.String serialNumber, @org.jetbrains.annotations.Nullable()
+    java.lang.String deviceType, @org.jetbrains.annotations.Nullable()
+    java.lang.String name, @org.jetbrains.annotations.Nullable()
+    java.lang.String status, @org.jetbrains.annotations.Nullable()
+    java.lang.Boolean isActive, @org.jetbrains.annotations.Nullable()
+    java.lang.String configJson) {
+        return null;
+    }
+    
+    @java.lang.Override()
+    public boolean equals(@org.jetbrains.annotations.Nullable()
+    java.lang.Object other) {
+        return false;
+    }
+    
+    @java.lang.Override()
+    public int hashCode() {
+        return 0;
+    }
+    
+    @java.lang.Override()
+    @org.jetbrains.annotations.NotNull()
+    public java.lang.String toString() {
+        return null;
+    }
+}

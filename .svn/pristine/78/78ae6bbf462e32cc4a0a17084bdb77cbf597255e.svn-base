@@ -1,0 +1,133 @@
+package com.softland.callqtv.viewmodel;
+
+@kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u0000~\n\u0002\u0018\u0002\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0003\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\u0010\u000b\n\u0002\b\u0002\n\u0002\u0018\u0002\n\u0002\b\u0002\n\u0002\u0010\u000e\n\u0002\b\u0003\n\u0002\u0018\u0002\n\u0002\b\u0003\n\u0002\u0010 \n\u0002\u0018\u0002\n\u0002\b\u0003\n\u0002\u0018\u0002\n\u0002\b\u0003\n\u0002\u0018\u0002\n\u0002\b\u0003\n\u0002\u0010\b\n\u0002\b\f\n\u0002\u0018\u0002\n\u0002\b\u0003\n\u0002\u0010\u0002\n\u0002\b\b\n\u0002\u0018\u0002\n\u0002\b\u0006\n\u0002\u0018\u0002\n\u0000\u0018\u00002\u00020\u0001B\u000f\u0012\u0006\u0010\u0002\u001a\u00020\u0003\u00a2\u0006\u0004\b\u0004\u0010\u0005J\u000e\u00105\u001a\u0002062\u0006\u00107\u001a\u00020\nJ\u0006\u00108\u001a\u000206J\b\u00109\u001a\u000206H\u0002J\b\u0010:\u001a\u000206H\u0002J\u000f\u0010;\u001a\u0004\u0018\u00010%H\u0002\u00a2\u0006\u0002\u0010<J\u0018\u0010=\u001a\u0002062\u0006\u0010>\u001a\u00020?2\b\b\u0002\u0010@\u001a\u00020\nJ\u001e\u0010A\u001a\u0002062\u0006\u0010B\u001a\u00020\u00142\u0006\u0010>\u001a\u00020?H\u0082@\u00a2\u0006\u0002\u0010CJ\u0018\u0010D\u001a\u0002062\u0006\u0010E\u001a\u00020F2\u0006\u0010>\u001a\u00020?H\u0002R\u000e\u0010\u0006\u001a\u00020\u0007X\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u001c\u0010\b\u001a\u0010\u0012\f\u0012\n \u000b*\u0004\u0018\u00010\n0\n0\tX\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u0017\u0010\f\u001a\b\u0012\u0004\u0012\u00020\n0\r\u00a2\u0006\b\n\u0000\u001a\u0004\b\f\u0010\u000eR\u0016\u0010\u000f\u001a\n\u0012\u0006\u0012\u0004\u0018\u00010\u00100\tX\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u0019\u0010\u0011\u001a\n\u0012\u0006\u0012\u0004\u0018\u00010\u00100\r\u00a2\u0006\b\n\u0000\u001a\u0004\b\u0012\u0010\u000eR\u0016\u0010\u0013\u001a\n\u0012\u0006\u0012\u0004\u0018\u00010\u00140\tX\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u0019\u0010\u0015\u001a\n\u0012\u0006\u0012\u0004\u0018\u00010\u00140\r\u00a2\u0006\b\n\u0000\u001a\u0004\b\u0016\u0010\u000eR\u001a\u0010\u0017\u001a\u000e\u0012\n\u0012\b\u0012\u0004\u0012\u00020\u00190\u00180\tX\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u001d\u0010\u001a\u001a\u000e\u0012\n\u0012\b\u0012\u0004\u0012\u00020\u00190\u00180\r\u00a2\u0006\b\n\u0000\u001a\u0004\b\u001b\u0010\u000eR\u001a\u0010\u001c\u001a\u000e\u0012\n\u0012\b\u0012\u0004\u0012\u00020\u001d0\u00180\tX\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u001d\u0010\u001e\u001a\u000e\u0012\n\u0012\b\u0012\u0004\u0012\u00020\u001d0\u00180\r\u00a2\u0006\b\n\u0000\u001a\u0004\b\u001f\u0010\u000eR\u001a\u0010 \u001a\u000e\u0012\n\u0012\b\u0012\u0004\u0012\u00020!0\u00180\tX\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u001d\u0010\"\u001a\u000e\u0012\n\u0012\b\u0012\u0004\u0012\u00020!0\u00180\r\u00a2\u0006\b\n\u0000\u001a\u0004\b#\u0010\u000eR\u0016\u0010$\u001a\n\u0012\u0006\u0012\u0004\u0018\u00010%0\tX\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u0019\u0010&\u001a\n\u0012\u0006\u0012\u0004\u0018\u00010%0\r\u00a2\u0006\b\n\u0000\u001a\u0004\b\'\u0010\u000eR\u001c\u0010(\u001a\u0010\u0012\f\u0012\n \u000b*\u0004\u0018\u00010\u00100\u00100\tX\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u0017\u0010)\u001a\b\u0012\u0004\u0012\u00020\u00100\r\u00a2\u0006\b\n\u0000\u001a\u0004\b*\u0010\u000eR\u000e\u0010+\u001a\u00020\u0010X\u0082\u000e\u00a2\u0006\u0002\n\u0000R\u0011\u0010,\u001a\u00020\u00108F\u00a2\u0006\u0006\u001a\u0004\b-\u0010.R\u001c\u0010/\u001a\u0010\u0012\f\u0012\n \u000b*\u0004\u0018\u00010\n0\n0\tX\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u0017\u00100\u001a\b\u0012\u0004\u0012\u00020\n0\r\u00a2\u0006\b\n\u0000\u001a\u0004\b0\u0010\u000eR\u0016\u00101\u001a\n \u000b*\u0004\u0018\u00010202X\u0082\u0004\u00a2\u0006\u0002\n\u0000R\u000e\u00103\u001a\u00020\nX\u0082\u000e\u00a2\u0006\u0002\n\u0000R\u000e\u00104\u001a\u00020\nX\u0082\u000e\u00a2\u0006\u0002\n\u0000\u00a8\u0006G"}, d2 = {"Lcom/softland/callqtv/viewmodel/TokenDisplayViewModel;", "Landroidx/lifecycle/AndroidViewModel;", "application", "Landroid/app/Application;", "<init>", "(Landroid/app/Application;)V", "repository", "Lcom/softland/callqtv/data/repository/TvConfigRepository;", "_isLoading", "Landroidx/lifecycle/MutableLiveData;", "", "kotlin.jvm.PlatformType", "isLoading", "Landroidx/lifecycle/LiveData;", "()Landroidx/lifecycle/LiveData;", "_errorMessage", "", "errorMessage", "getErrorMessage", "_config", "Lcom/softland/callqtv/data/local/TvConfigEntity;", "config", "getConfig", "_counters", "", "Lcom/softland/callqtv/data/local/CounterEntity;", "counters", "getCounters", "_adFiles", "Lcom/softland/callqtv/data/local/AdFileEntity;", "adFiles", "getAdFiles", "_connectedDevices", "Lcom/softland/callqtv/data/local/ConnectedDeviceEntity;", "connectedDevices", "getConnectedDevices", "_daysUntilExpiry", "", "daysUntilExpiry", "getDaysUntilExpiry", "_currentDateTime", "currentDateTime", "getCurrentDateTime", "_macAddress", "macAddress", "getMacAddress", "()Ljava/lang/String;", "_isPendingApproval", "isPendingApproval", "authPrefs", "Landroid/content/SharedPreferences;", "hasShownInitialLoadingOverlay", "is24HourFormat", "setTimeFormat", "", "is24Hour", "clearConfigurationError", "startDateTimeUpdates", "startExpiryCheck", "computeDaysUntilExpiry", "()Ljava/lang/Integer;", "loadData", "mqttViewModel", "Lcom/softland/callqtv/viewmodel/MqttViewModel;", "forceShowOverlay", "initMqttIfNeeded", "cfg", "(Lcom/softland/callqtv/data/local/TvConfigEntity;Lcom/softland/callqtv/viewmodel/MqttViewModel;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", "connectToBroker", "broker", "Lcom/softland/callqtv/data/local/MappedBrokerEntity;", "CallQTV_v1.0.0_CallQTVDebug"})
+public final class TokenDisplayViewModel extends androidx.lifecycle.AndroidViewModel {
+    @org.jetbrains.annotations.NotNull()
+    private final com.softland.callqtv.data.repository.TvConfigRepository repository = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.MutableLiveData<java.lang.Boolean> _isLoading = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.LiveData<java.lang.Boolean> isLoading = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.MutableLiveData<java.lang.String> _errorMessage = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.LiveData<java.lang.String> errorMessage = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.MutableLiveData<com.softland.callqtv.data.local.TvConfigEntity> _config = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.LiveData<com.softland.callqtv.data.local.TvConfigEntity> config = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.MutableLiveData<java.util.List<com.softland.callqtv.data.local.CounterEntity>> _counters = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.LiveData<java.util.List<com.softland.callqtv.data.local.CounterEntity>> counters = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.MutableLiveData<java.util.List<com.softland.callqtv.data.local.AdFileEntity>> _adFiles = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.LiveData<java.util.List<com.softland.callqtv.data.local.AdFileEntity>> adFiles = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.MutableLiveData<java.util.List<com.softland.callqtv.data.local.ConnectedDeviceEntity>> _connectedDevices = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.LiveData<java.util.List<com.softland.callqtv.data.local.ConnectedDeviceEntity>> connectedDevices = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.MutableLiveData<java.lang.Integer> _daysUntilExpiry = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.LiveData<java.lang.Integer> daysUntilExpiry = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.MutableLiveData<java.lang.String> _currentDateTime = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.LiveData<java.lang.String> currentDateTime = null;
+    @org.jetbrains.annotations.NotNull()
+    private java.lang.String _macAddress = "";
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.MutableLiveData<java.lang.Boolean> _isPendingApproval = null;
+    @org.jetbrains.annotations.NotNull()
+    private final androidx.lifecycle.LiveData<java.lang.Boolean> isPendingApproval = null;
+    private final android.content.SharedPreferences authPrefs = null;
+    private boolean hasShownInitialLoadingOverlay = false;
+    private boolean is24HourFormat = true;
+    
+    public TokenDisplayViewModel(@org.jetbrains.annotations.NotNull()
+    android.app.Application application) {
+        super(null);
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final androidx.lifecycle.LiveData<java.lang.Boolean> isLoading() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final androidx.lifecycle.LiveData<java.lang.String> getErrorMessage() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final androidx.lifecycle.LiveData<com.softland.callqtv.data.local.TvConfigEntity> getConfig() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final androidx.lifecycle.LiveData<java.util.List<com.softland.callqtv.data.local.CounterEntity>> getCounters() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final androidx.lifecycle.LiveData<java.util.List<com.softland.callqtv.data.local.AdFileEntity>> getAdFiles() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final androidx.lifecycle.LiveData<java.util.List<com.softland.callqtv.data.local.ConnectedDeviceEntity>> getConnectedDevices() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final androidx.lifecycle.LiveData<java.lang.Integer> getDaysUntilExpiry() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final androidx.lifecycle.LiveData<java.lang.String> getCurrentDateTime() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getMacAddress() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final androidx.lifecycle.LiveData<java.lang.Boolean> isPendingApproval() {
+        return null;
+    }
+    
+    public final void setTimeFormat(boolean is24Hour) {
+    }
+    
+    /**
+     * Clears the configuration error so the Configuration Error dialog is not shown.
+     */
+    public final void clearConfigurationError() {
+    }
+    
+    private final void startDateTimeUpdates() {
+    }
+    
+    private final void startExpiryCheck() {
+    }
+    
+    private final java.lang.Integer computeDaysUntilExpiry() {
+        return null;
+    }
+    
+    public final void loadData(@org.jetbrains.annotations.NotNull()
+    com.softland.callqtv.viewmodel.MqttViewModel mqttViewModel, boolean forceShowOverlay) {
+    }
+    
+    private final java.lang.Object initMqttIfNeeded(com.softland.callqtv.data.local.TvConfigEntity cfg, com.softland.callqtv.viewmodel.MqttViewModel mqttViewModel, kotlin.coroutines.Continuation<? super kotlin.Unit> $completion) {
+        return null;
+    }
+    
+    private final void connectToBroker(com.softland.callqtv.data.local.MappedBrokerEntity broker, com.softland.callqtv.viewmodel.MqttViewModel mqttViewModel) {
+    }
+}

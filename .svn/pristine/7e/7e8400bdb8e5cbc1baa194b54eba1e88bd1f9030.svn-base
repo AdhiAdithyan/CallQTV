@@ -1,0 +1,67 @@
+package com.softland.callqtv.data.local;
+
+@kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u0000,\n\u0002\u0018\u0002\n\u0002\u0010\u0000\n\u0000\n\u0002\u0010 \n\u0002\u0018\u0002\n\u0000\n\u0002\u0010\u000e\n\u0002\b\u0004\n\u0002\u0010\u0002\n\u0002\b\u0007\n\u0002\u0010\b\n\u0002\b\u0005\bg\u0018\u00002\u00020\u0001J\u001c\u0010\u0002\u001a\b\u0012\u0004\u0012\u00020\u00040\u00032\u0006\u0010\u0005\u001a\u00020\u0006H\u00a7@\u00a2\u0006\u0002\u0010\u0007J\u0014\u0010\b\u001a\b\u0012\u0004\u0012\u00020\u00040\u0003H\u00a7@\u00a2\u0006\u0002\u0010\tJ\u0016\u0010\n\u001a\u00020\u000b2\u0006\u0010\f\u001a\u00020\u0004H\u00a7@\u00a2\u0006\u0002\u0010\rJ\u001c\u0010\u000e\u001a\u00020\u000b2\f\u0010\u000f\u001a\b\u0012\u0004\u0012\u00020\u00040\u0003H\u00a7@\u00a2\u0006\u0002\u0010\u0010J\u001e\u0010\u0011\u001a\u00020\u000b2\u0006\u0010\u0005\u001a\u00020\u00062\u0006\u0010\u0012\u001a\u00020\u0013H\u00a7@\u00a2\u0006\u0002\u0010\u0014J\u000e\u0010\u0015\u001a\u00020\u000bH\u00a7@\u00a2\u0006\u0002\u0010\tJ\u0016\u0010\u0016\u001a\u00020\u000b2\u0006\u0010\u0017\u001a\u00020\u0006H\u00a7@\u00a2\u0006\u0002\u0010\u0007\u00a8\u0006\u0018\u00c0\u0006\u0003"}, d2 = {"Lcom/softland/callqtv/data/local/TokenHistoryDao;", "", "getHistory", "", "Lcom/softland/callqtv/data/local/TokenHistoryEntity;", "counterKey", "", "(Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", "getAllHistory", "(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", "upsert", "", "entry", "(Lcom/softland/callqtv/data/local/TokenHistoryEntity;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", "upsertAll", "entries", "(Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;", "pruneOldEntries", "maxCount", "", "(Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;", "clearAll", "deleteWhereDateNot", "today", "CallQTV_v1.0.0_CallQTVDebug"})
+@androidx.room.Dao()
+public abstract interface TokenHistoryDao {
+    
+    /**
+     * Load all saved tokens for a counter, ordered newest-first (position ASC).
+     */
+    @androidx.room.Query(value = "SELECT * FROM token_history WHERE counter_key = :counterKey ORDER BY position ASC")
+    @org.jetbrains.annotations.Nullable()
+    public abstract java.lang.Object getHistory(@org.jetbrains.annotations.NotNull()
+    java.lang.String counterKey, @org.jetbrains.annotations.NotNull()
+    kotlin.coroutines.Continuation<? super java.util.List<com.softland.callqtv.data.local.TokenHistoryEntity>> $completion);
+    
+    /**
+     * Load all saved tokens for ALL counters, ordered newest-first per counter.
+     */
+    @androidx.room.Query(value = "SELECT * FROM token_history ORDER BY counter_key ASC, position ASC")
+    @org.jetbrains.annotations.Nullable()
+    public abstract java.lang.Object getAllHistory(@org.jetbrains.annotations.NotNull()
+    kotlin.coroutines.Continuation<? super java.util.List<com.softland.callqtv.data.local.TokenHistoryEntity>> $completion);
+    
+    /**
+     * Upsert a single history row (counter_key + position is unique).
+     */
+    @androidx.room.Insert(onConflict = 1)
+    @org.jetbrains.annotations.Nullable()
+    public abstract java.lang.Object upsert(@org.jetbrains.annotations.NotNull()
+    com.softland.callqtv.data.local.TokenHistoryEntity entry, @org.jetbrains.annotations.NotNull()
+    kotlin.coroutines.Continuation<? super kotlin.Unit> $completion);
+    
+    /**
+     * Upsert a batch of history rows.
+     */
+    @androidx.room.Insert(onConflict = 1)
+    @org.jetbrains.annotations.Nullable()
+    public abstract java.lang.Object upsertAll(@org.jetbrains.annotations.NotNull()
+    java.util.List<com.softland.callqtv.data.local.TokenHistoryEntity> entries, @org.jetbrains.annotations.NotNull()
+    kotlin.coroutines.Continuation<? super kotlin.Unit> $completion);
+    
+    /**
+     * Remove rows beyond the kept limit for a given counter.
+     */
+    @androidx.room.Query(value = "\n        DELETE FROM token_history\n        WHERE counter_key = :counterKey\n          AND position >= :maxCount\n    ")
+    @org.jetbrains.annotations.Nullable()
+    public abstract java.lang.Object pruneOldEntries(@org.jetbrains.annotations.NotNull()
+    java.lang.String counterKey, int maxCount, @org.jetbrains.annotations.NotNull()
+    kotlin.coroutines.Continuation<? super kotlin.Unit> $completion);
+    
+    /**
+     * Wipe all history (e.g. on full config reset).
+     */
+    @androidx.room.Query(value = "DELETE FROM token_history")
+    @org.jetbrains.annotations.Nullable()
+    public abstract java.lang.Object clearAll(@org.jetbrains.annotations.NotNull()
+    kotlin.coroutines.Continuation<? super kotlin.Unit> $completion);
+    
+    /**
+     * Remove tokens that are not from [today] (yyyy-MM-dd). Keeps only today's called tokens.
+     */
+    @androidx.room.Query(value = "DELETE FROM token_history WHERE call_date != :today OR call_date IS NULL OR call_date = \'\'")
+    @org.jetbrains.annotations.Nullable()
+    public abstract java.lang.Object deleteWhereDateNot(@org.jetbrains.annotations.NotNull()
+    java.lang.String today, @org.jetbrains.annotations.NotNull()
+    kotlin.coroutines.Continuation<? super kotlin.Unit> $completion);
+}

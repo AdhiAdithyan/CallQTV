@@ -15,9 +15,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         AdFileEntity::class,
         TokenHistoryEntity::class,
         ConnectedDeviceEntity::class,
-        TokenRecordEntity::class
+        TokenRecordEntity::class,
+        MqttPayloadLogEntity::class
     ],
-    version = 15,
+    version = 17,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -29,6 +30,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun tokenHistoryDao(): TokenHistoryDao
     abstract fun connectedDeviceDao(): ConnectedDeviceDao
     abstract fun tokenRecordDao(): TokenRecordDao
+    abstract fun mqttPayloadLogDao(): MqttPayloadLogDao
 
     companion object {
         @Volatile
@@ -46,6 +48,33 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tv_config ADD COLUMN keypads_json TEXT")
+                db.execSQL("ALTER TABLE tv_config ADD COLUMN scroll_text_color TEXT")
+
+                db.execSQL("ALTER TABLE counters ADD COLUMN keypad_index TEXT")
+                db.execSQL("ALTER TABLE counters ADD COLUMN dispenser_index INTEGER")
+                db.execSQL("ALTER TABLE counters ADD COLUMN dispenser_button_number INTEGER")
+            }
+        }
+
+        private val MIGRATION_16_17 = object : Migration(16, 17) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `mqtt_payload_logs` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `MessagePayload` TEXT NOT NULL,
+                        `ReaceivedTime` TEXT NOT NULL,
+                        `DisplayedTime` TEXT NOT NULL,
+                        `IsUploaded` INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -53,7 +82,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "callqtv.db"
                 )
-                    .addMigrations(MIGRATION_10_11, MIGRATION_13_14)
+                    .addMigrations(MIGRATION_10_11, MIGRATION_13_14, MIGRATION_15_16, MIGRATION_16_17)
                     .fallbackToDestructiveMigration() // For development; use proper migration in production
                     .build().also { INSTANCE = it }
             }

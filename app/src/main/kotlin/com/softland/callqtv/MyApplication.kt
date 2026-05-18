@@ -20,9 +20,9 @@ class MyApplication : Application() {
             // Log crash to file first
             writeCrashLog(exception)
 
-            // Check if this is a MIUI/Xiaomi SDK related error that we can safely ignore
-            if (isMiuiSdkException(exception)) {
-                Log.w("MyApplication", "Suppressed MIUI SDK exception: ${exception.message}")
+            // Check if this is a MIUI/Xiaomi SDK or GMS related error that we can safely ignore
+            if (isSuppressedSystemException(exception)) {
+                Log.w("MyApplication", "Suppressed non-critical system/GMS exception: ${exception.message}")
                 // Don't crash the app for these non-critical errors
                 return@setDefaultUncaughtExceptionHandler
             }
@@ -42,11 +42,19 @@ class MyApplication : Application() {
         }
     }
 
-    private fun isMiuiSdkException(exception: Throwable?): Boolean {
+    private fun isSuppressedSystemException(exception: Throwable?): Boolean {
         if (exception == null) return false
         
         val stackTrace = exception.stackTraceToString()
         val message = exception.message ?: ""
+
+        // [DropboxRealtime] null InputStream / DropBoxUtil - common transient GMS failure
+        if (stackTrace.contains("DropBoxUtil", ignoreCase = true) || 
+            stackTrace.contains("DropboxRealtime", ignoreCase = true) ||
+            (message.contains("null InputStream", ignoreCase = true) && stackTrace.contains("com.google.android.gms", ignoreCase = true))
+        ) {
+            return true
+        }
 
         // Google Play Express Integrity warm-up can fail transiently on some networks
         // (Cronet ERR_CONNECTION_CLOSED / ERR_INTERNET_DISCONNECTED, etc.).
@@ -97,7 +105,7 @@ class MyApplication : Application() {
         // Check nested exceptions
         var cause: Throwable? = exception.cause
         while (cause != null) {
-            if (isMiuiSdkException(cause)) {
+            if (isSuppressedSystemException(cause)) {
                 return true
             }
             cause = cause.cause
@@ -105,4 +113,7 @@ class MyApplication : Application() {
         
         return false
     }
+
+    @Deprecated("Renamed to isSuppressedSystemException", ReplaceWith("isSuppressedSystemException(exception)"))
+    private fun isMiuiSdkException(exception: Throwable?): Boolean = isSuppressedSystemException(exception)
 }

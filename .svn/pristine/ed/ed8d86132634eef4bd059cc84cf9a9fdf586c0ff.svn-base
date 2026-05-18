@@ -1,0 +1,278 @@
+package com.softland.callqtv.data.model;
+
+/**
+ * Response from TV configuration API.
+ */
+@kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u0000N\n\u0002\u0018\u0002\n\u0002\u0010\u0000\n\u0000\n\u0002\u0010\u000e\n\u0002\b\u0002\n\u0002\u0010\b\n\u0002\b\u0003\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0010 \n\u0002\u0018\u0002\n\u0000\n\u0002\u0018\u0002\n\u0002\b\u0002\n\u0002\u0018\u0002\n\u0002\b1\n\u0002\u0010\u000b\n\u0002\b\u0004\b\u0086\b\u0018\u00002\u00020\u0001B\u00d3\u0001\u0012\n\b\u0002\u0010\u0002\u001a\u0004\u0018\u00010\u0003\u0012\n\b\u0002\u0010\u0004\u001a\u0004\u0018\u00010\u0003\u0012\n\b\u0002\u0010\u0005\u001a\u0004\u0018\u00010\u0006\u0012\n\b\u0002\u0010\u0007\u001a\u0004\u0018\u00010\u0003\u0012\n\b\u0002\u0010\b\u001a\u0004\u0018\u00010\u0003\u0012\n\b\u0002\u0010\t\u001a\u0004\u0018\u00010\n\u0012\n\b\u0002\u0010\u000b\u001a\u0004\u0018\u00010\f\u0012\n\b\u0002\u0010\r\u001a\u0004\u0018\u00010\u000e\u0012\u0010\b\u0002\u0010\u000f\u001a\n\u0012\u0004\u0012\u00020\u0011\u0018\u00010\u0010\u0012\u0010\b\u0002\u0010\u0012\u001a\n\u0012\u0004\u0012\u00020\u0013\u0018\u00010\u0010\u0012\n\b\u0002\u0010\u0014\u001a\u0004\u0018\u00010\f\u0012\n\b\u0002\u0010\u0015\u001a\u0004\u0018\u00010\u0016\u0012\n\b\u0002\u0010\u0017\u001a\u0004\u0018\u00010\u0003\u0012\n\b\u0002\u0010\u0018\u001a\u0004\u0018\u00010\u0003\u0012\n\b\u0002\u0010\u0019\u001a\u0004\u0018\u00010\u0003\u0012\n\b\u0002\u0010\u001a\u001a\u0004\u0018\u00010\u0003\u00a2\u0006\u0004\b\u001b\u0010\u001cJ\u000b\u00105\u001a\u0004\u0018\u00010\u0003H\u00c6\u0003J\u000b\u00106\u001a\u0004\u0018\u00010\u0003H\u00c6\u0003J\u0010\u00107\u001a\u0004\u0018\u00010\u0006H\u00c6\u0003\u00a2\u0006\u0002\u0010!J\u000b\u00108\u001a\u0004\u0018\u00010\u0003H\u00c6\u0003J\u000b\u00109\u001a\u0004\u0018\u00010\u0003H\u00c6\u0003J\u000b\u0010:\u001a\u0004\u0018\u00010\nH\u00c6\u0003J\u000b\u0010;\u001a\u0004\u0018\u00010\fH\u00c6\u0003J\u000b\u0010<\u001a\u0004\u0018\u00010\u000eH\u00c6\u0003J\u0011\u0010=\u001a\n\u0012\u0004\u0012\u00020\u0011\u0018\u00010\u0010H\u00c6\u0003J\u0011\u0010>\u001a\n\u0012\u0004\u0012\u00020\u0013\u0018\u00010\u0010H\u00c6\u0003J\u000b\u0010?\u001a\u0004\u0018\u00010\fH\u00c6\u0003J\u000b\u0010@\u001a\u0004\u0018\u00010\u0016H\u00c6\u0003J\u000b\u0010A\u001a\u0004\u0018\u00010\u0003H\u00c6\u0003J\u000b\u0010B\u001a\u0004\u0018\u00010\u0003H\u00c6\u0003J\u000b\u0010C\u001a\u0004\u0018\u00010\u0003H\u00c6\u0003J\u000b\u0010D\u001a\u0004\u0018\u00010\u0003H\u00c6\u0003J\u00da\u0001\u0010E\u001a\u00020\u00002\n\b\u0002\u0010\u0002\u001a\u0004\u0018\u00010\u00032\n\b\u0002\u0010\u0004\u001a\u0004\u0018\u00010\u00032\n\b\u0002\u0010\u0005\u001a\u0004\u0018\u00010\u00062\n\b\u0002\u0010\u0007\u001a\u0004\u0018\u00010\u00032\n\b\u0002\u0010\b\u001a\u0004\u0018\u00010\u00032\n\b\u0002\u0010\t\u001a\u0004\u0018\u00010\n2\n\b\u0002\u0010\u000b\u001a\u0004\u0018\u00010\f2\n\b\u0002\u0010\r\u001a\u0004\u0018\u00010\u000e2\u0010\b\u0002\u0010\u000f\u001a\n\u0012\u0004\u0012\u00020\u0011\u0018\u00010\u00102\u0010\b\u0002\u0010\u0012\u001a\n\u0012\u0004\u0012\u00020\u0013\u0018\u00010\u00102\n\b\u0002\u0010\u0014\u001a\u0004\u0018\u00010\f2\n\b\u0002\u0010\u0015\u001a\u0004\u0018\u00010\u00162\n\b\u0002\u0010\u0017\u001a\u0004\u0018\u00010\u00032\n\b\u0002\u0010\u0018\u001a\u0004\u0018\u00010\u00032\n\b\u0002\u0010\u0019\u001a\u0004\u0018\u00010\u00032\n\b\u0002\u0010\u001a\u001a\u0004\u0018\u00010\u0003H\u00c6\u0001\u00a2\u0006\u0002\u0010FJ\u0013\u0010G\u001a\u00020H2\b\u0010I\u001a\u0004\u0018\u00010\u0001H\u00d6\u0003J\t\u0010J\u001a\u00020\u0006H\u00d6\u0001J\t\u0010K\u001a\u00020\u0003H\u00d6\u0001R\u0018\u0010\u0002\u001a\u0004\u0018\u00010\u00038\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b\u001d\u0010\u001eR\u0018\u0010\u0004\u001a\u0004\u0018\u00010\u00038\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b\u001f\u0010\u001eR\u001a\u0010\u0005\u001a\u0004\u0018\u00010\u00068\u0006X\u0087\u0004\u00a2\u0006\n\n\u0002\u0010\"\u001a\u0004\b \u0010!R\u0018\u0010\u0007\u001a\u0004\u0018\u00010\u00038\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b#\u0010\u001eR\u0018\u0010\b\u001a\u0004\u0018\u00010\u00038\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b$\u0010\u001eR\u0018\u0010\t\u001a\u0004\u0018\u00010\n8\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b%\u0010&R\u0018\u0010\u000b\u001a\u0004\u0018\u00010\f8\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b\'\u0010(R\u0018\u0010\r\u001a\u0004\u0018\u00010\u000e8\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b)\u0010*R\u001e\u0010\u000f\u001a\n\u0012\u0004\u0012\u00020\u0011\u0018\u00010\u00108\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b+\u0010,R\u001e\u0010\u0012\u001a\n\u0012\u0004\u0012\u00020\u0013\u0018\u00010\u00108\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b-\u0010,R\u0018\u0010\u0014\u001a\u0004\u0018\u00010\f8\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b.\u0010(R\u0018\u0010\u0015\u001a\u0004\u0018\u00010\u00168\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b/\u00100R\u0018\u0010\u0017\u001a\u0004\u0018\u00010\u00038\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b1\u0010\u001eR\u0018\u0010\u0018\u001a\u0004\u0018\u00010\u00038\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b2\u0010\u001eR\u0018\u0010\u0019\u001a\u0004\u0018\u00010\u00038\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b3\u0010\u001eR\u0018\u0010\u001a\u001a\u0004\u0018\u00010\u00038\u0006X\u0087\u0004\u00a2\u0006\b\n\u0000\u001a\u0004\b4\u0010\u001e\u00a8\u0006L"}, d2 = {"Lcom/softland/callqtv/data/model/TvConfigResponse;", "", "status", "", "message", "deviceId", "", "serialNumber", "companyName", "tvConfig", "Lcom/softland/callqtv/data/model/TvConfigPayload;", "currentProfile", "Lcom/google/gson/JsonElement;", "mappedBroker", "Lcom/softland/callqtv/data/model/MappedBroker;", "connectedDevices", "", "Lcom/softland/callqtv/data/model/ConnectedDevice;", "counters", "Lcom/softland/callqtv/data/model/CounterConfig;", "shiftDetails", "scrollConfig", "Lcom/softland/callqtv/data/model/ScrollConfig;", "error", "deviceType", "deviceSerial", "licenceStatus", "<init>", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Lcom/softland/callqtv/data/model/TvConfigPayload;Lcom/google/gson/JsonElement;Lcom/softland/callqtv/data/model/MappedBroker;Ljava/util/List;Ljava/util/List;Lcom/google/gson/JsonElement;Lcom/softland/callqtv/data/model/ScrollConfig;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", "getStatus", "()Ljava/lang/String;", "getMessage", "getDeviceId", "()Ljava/lang/Integer;", "Ljava/lang/Integer;", "getSerialNumber", "getCompanyName", "getTvConfig", "()Lcom/softland/callqtv/data/model/TvConfigPayload;", "getCurrentProfile", "()Lcom/google/gson/JsonElement;", "getMappedBroker", "()Lcom/softland/callqtv/data/model/MappedBroker;", "getConnectedDevices", "()Ljava/util/List;", "getCounters", "getShiftDetails", "getScrollConfig", "()Lcom/softland/callqtv/data/model/ScrollConfig;", "getError", "getDeviceType", "getDeviceSerial", "getLicenceStatus", "component1", "component2", "component3", "component4", "component5", "component6", "component7", "component8", "component9", "component10", "component11", "component12", "component13", "component14", "component15", "component16", "copy", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;Lcom/softland/callqtv/data/model/TvConfigPayload;Lcom/google/gson/JsonElement;Lcom/softland/callqtv/data/model/MappedBroker;Ljava/util/List;Ljava/util/List;Lcom/google/gson/JsonElement;Lcom/softland/callqtv/data/model/ScrollConfig;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/softland/callqtv/data/model/TvConfigResponse;", "equals", "", "other", "hashCode", "toString", "CallQTV_v1.0.1_CallQTVRelease"})
+public final class TvConfigResponse {
+    @com.google.gson.annotations.SerializedName(value = "status")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.String status = null;
+    @com.google.gson.annotations.SerializedName(value = "message")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.String message = null;
+    @com.google.gson.annotations.SerializedName(value = "device_id")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.Integer deviceId = null;
+    @com.google.gson.annotations.SerializedName(value = "serial_number")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.String serialNumber = null;
+    @com.google.gson.annotations.SerializedName(value = "company_name")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.String companyName = null;
+    @com.google.gson.annotations.SerializedName(value = "tv_config")
+    @org.jetbrains.annotations.Nullable()
+    private final com.softland.callqtv.data.model.TvConfigPayload tvConfig = null;
+    @com.google.gson.annotations.SerializedName(value = "current_profile")
+    @org.jetbrains.annotations.Nullable()
+    private final com.google.gson.JsonElement currentProfile = null;
+    @com.google.gson.annotations.SerializedName(value = "mapped_broker")
+    @org.jetbrains.annotations.Nullable()
+    private final com.softland.callqtv.data.model.MappedBroker mappedBroker = null;
+    @com.google.gson.annotations.SerializedName(value = "connected_devices")
+    @org.jetbrains.annotations.Nullable()
+    private final java.util.List<com.softland.callqtv.data.model.ConnectedDevice> connectedDevices = null;
+    @com.google.gson.annotations.SerializedName(value = "counters")
+    @org.jetbrains.annotations.Nullable()
+    private final java.util.List<com.softland.callqtv.data.model.CounterConfig> counters = null;
+    @com.google.gson.annotations.SerializedName(value = "shift_details")
+    @org.jetbrains.annotations.Nullable()
+    private final com.google.gson.JsonElement shiftDetails = null;
+    @com.google.gson.annotations.SerializedName(value = "scroll_config")
+    @org.jetbrains.annotations.Nullable()
+    private final com.softland.callqtv.data.model.ScrollConfig scrollConfig = null;
+    @com.google.gson.annotations.SerializedName(value = "error")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.String error = null;
+    @com.google.gson.annotations.SerializedName(value = "device_type")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.String deviceType = null;
+    @com.google.gson.annotations.SerializedName(value = "device_serial")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.String deviceSerial = null;
+    @com.google.gson.annotations.SerializedName(value = "licence_status")
+    @org.jetbrains.annotations.Nullable()
+    private final java.lang.String licenceStatus = null;
+    
+    public TvConfigResponse(@org.jetbrains.annotations.Nullable()
+    java.lang.String status, @org.jetbrains.annotations.Nullable()
+    java.lang.String message, @org.jetbrains.annotations.Nullable()
+    java.lang.Integer deviceId, @org.jetbrains.annotations.Nullable()
+    java.lang.String serialNumber, @org.jetbrains.annotations.Nullable()
+    java.lang.String companyName, @org.jetbrains.annotations.Nullable()
+    com.softland.callqtv.data.model.TvConfigPayload tvConfig, @org.jetbrains.annotations.Nullable()
+    com.google.gson.JsonElement currentProfile, @org.jetbrains.annotations.Nullable()
+    com.softland.callqtv.data.model.MappedBroker mappedBroker, @org.jetbrains.annotations.Nullable()
+    java.util.List<com.softland.callqtv.data.model.ConnectedDevice> connectedDevices, @org.jetbrains.annotations.Nullable()
+    java.util.List<com.softland.callqtv.data.model.CounterConfig> counters, @org.jetbrains.annotations.Nullable()
+    com.google.gson.JsonElement shiftDetails, @org.jetbrains.annotations.Nullable()
+    com.softland.callqtv.data.model.ScrollConfig scrollConfig, @org.jetbrains.annotations.Nullable()
+    java.lang.String error, @org.jetbrains.annotations.Nullable()
+    java.lang.String deviceType, @org.jetbrains.annotations.Nullable()
+    java.lang.String deviceSerial, @org.jetbrains.annotations.Nullable()
+    java.lang.String licenceStatus) {
+        super();
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getStatus() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getMessage() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Integer getDeviceId() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getSerialNumber() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getCompanyName() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final com.softland.callqtv.data.model.TvConfigPayload getTvConfig() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final com.google.gson.JsonElement getCurrentProfile() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final com.softland.callqtv.data.model.MappedBroker getMappedBroker() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.util.List<com.softland.callqtv.data.model.ConnectedDevice> getConnectedDevices() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.util.List<com.softland.callqtv.data.model.CounterConfig> getCounters() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final com.google.gson.JsonElement getShiftDetails() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final com.softland.callqtv.data.model.ScrollConfig getScrollConfig() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getError() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getDeviceType() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getDeviceSerial() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getLicenceStatus() {
+        return null;
+    }
+    
+    public TvConfigResponse() {
+        super();
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String component1() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.util.List<com.softland.callqtv.data.model.CounterConfig> component10() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final com.google.gson.JsonElement component11() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final com.softland.callqtv.data.model.ScrollConfig component12() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String component13() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String component14() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String component15() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String component16() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String component2() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Integer component3() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String component4() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String component5() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final com.softland.callqtv.data.model.TvConfigPayload component6() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final com.google.gson.JsonElement component7() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final com.softland.callqtv.data.model.MappedBroker component8() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.util.List<com.softland.callqtv.data.model.ConnectedDevice> component9() {
+        return null;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final com.softland.callqtv.data.model.TvConfigResponse copy(@org.jetbrains.annotations.Nullable()
+    java.lang.String status, @org.jetbrains.annotations.Nullable()
+    java.lang.String message, @org.jetbrains.annotations.Nullable()
+    java.lang.Integer deviceId, @org.jetbrains.annotations.Nullable()
+    java.lang.String serialNumber, @org.jetbrains.annotations.Nullable()
+    java.lang.String companyName, @org.jetbrains.annotations.Nullable()
+    com.softland.callqtv.data.model.TvConfigPayload tvConfig, @org.jetbrains.annotations.Nullable()
+    com.google.gson.JsonElement currentProfile, @org.jetbrains.annotations.Nullable()
+    com.softland.callqtv.data.model.MappedBroker mappedBroker, @org.jetbrains.annotations.Nullable()
+    java.util.List<com.softland.callqtv.data.model.ConnectedDevice> connectedDevices, @org.jetbrains.annotations.Nullable()
+    java.util.List<com.softland.callqtv.data.model.CounterConfig> counters, @org.jetbrains.annotations.Nullable()
+    com.google.gson.JsonElement shiftDetails, @org.jetbrains.annotations.Nullable()
+    com.softland.callqtv.data.model.ScrollConfig scrollConfig, @org.jetbrains.annotations.Nullable()
+    java.lang.String error, @org.jetbrains.annotations.Nullable()
+    java.lang.String deviceType, @org.jetbrains.annotations.Nullable()
+    java.lang.String deviceSerial, @org.jetbrains.annotations.Nullable()
+    java.lang.String licenceStatus) {
+        return null;
+    }
+    
+    @java.lang.Override()
+    public boolean equals(@org.jetbrains.annotations.Nullable()
+    java.lang.Object other) {
+        return false;
+    }
+    
+    @java.lang.Override()
+    public int hashCode() {
+        return 0;
+    }
+    
+    @java.lang.Override()
+    @org.jetbrains.annotations.NotNull()
+    public java.lang.String toString() {
+        return null;
+    }
+}

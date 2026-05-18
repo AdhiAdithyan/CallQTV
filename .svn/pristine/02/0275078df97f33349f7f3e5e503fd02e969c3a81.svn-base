@@ -1,0 +1,122 @@
+package com.softland.callqtv.utils;
+
+@kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u00002\n\u0002\u0018\u0002\n\u0002\u0010\u0000\n\u0002\b\u0003\n\u0002\u0010\u000b\n\u0002\b\u0005\n\u0002\u0010\b\n\u0002\b\u0006\n\u0002\u0010\u000e\n\u0002\b\f\n\u0002\u0018\u0002\n\u0000\n\u0002\u0010\u0002\n\u0002\b\u000e\b\u00c6\u0002\u0018\u00002\u00020\u0001B\t\b\u0002\u00a2\u0006\u0004\b\u0002\u0010\u0003J\u000e\u0010\u001d\u001a\u00020\u00122\u0006\u0010\u001e\u001a\u00020\u001fJ\u0016\u0010 \u001a\u00020!2\u0006\u0010\u001e\u001a\u00020\u001f2\u0006\u0010\"\u001a\u00020\u0012J\u0006\u0010#\u001a\u00020\u0012J\u000e\u0010$\u001a\u00020\u00052\u0006\u0010\u001e\u001a\u00020\u001fJ\u0006\u0010-\u001a\u00020\u0012J\b\u0010.\u001a\u00020\u0012H\u0007R\u001a\u0010\u0004\u001a\u00020\u0005X\u0086\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u0006\u0010\u0007\"\u0004\b\b\u0010\tR$\u0010\n\u001a\u00020\u000b8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u0014\n\u0000\u0012\u0004\b\f\u0010\u0003\u001a\u0004\b\r\u0010\u000e\"\u0004\b\u000f\u0010\u0010R$\u0010\u0011\u001a\u00020\u00128\u0006@\u0006X\u0087\u000e\u00a2\u0006\u0014\n\u0000\u0012\u0004\b\u0013\u0010\u0003\u001a\u0004\b\u0014\u0010\u0015\"\u0004\b\u0016\u0010\u0017R\u000e\u0010\u0018\u001a\u00020\u0012X\u0086T\u00a2\u0006\u0002\n\u0000R\u000e\u0010\u0019\u001a\u00020\u0012X\u0086T\u00a2\u0006\u0002\n\u0000R\u000e\u0010\u001a\u001a\u00020\u0012X\u0086T\u00a2\u0006\u0002\n\u0000R\u000e\u0010\u001b\u001a\u00020\u0012X\u0086T\u00a2\u0006\u0002\n\u0000R\u000e\u0010\u001c\u001a\u00020\u0012X\u0086T\u00a2\u0006\u0002\n\u0000R$\u0010%\u001a\u00020\u00128\u0006@\u0006X\u0087\u000e\u00a2\u0006\u0014\n\u0000\u0012\u0004\b&\u0010\u0003\u001a\u0004\b\'\u0010\u0015\"\u0004\b(\u0010\u0017R$\u0010)\u001a\u00020\u00128\u0006@\u0006X\u0087\u000e\u00a2\u0006\u0014\n\u0000\u0012\u0004\b*\u0010\u0003\u001a\u0004\b+\u0010\u0015\"\u0004\b,\u0010\u0017\u00a8\u0006/"}, d2 = {"Lcom/softland/callqtv/utils/Variables;", "", "<init>", "()V", "IS_LIVE", "", "getIS_LIVE", "()Z", "setIS_LIVE", "(Z)V", "ServiceCounter", "", "getServiceCounter$annotations", "getServiceCounter", "()I", "setServiceCounter", "(I)V", "GetServicelink", "", "getGetServicelink$annotations", "getGetServicelink", "()Ljava/lang/String;", "setGetServicelink", "(Ljava/lang/String;)V", "GET_SERVICE_LINK", "GET_SERVICE_URL", "PRODUCT_AUTH_URL_HEADER", "DEVICE_REG_URL_HEADER", "CHECK_DEVICE_LICENSE_URL_HEADER", "getMacId", "context", "Landroid/content/Context;", "ShowToast", "", "message", "getCurentDate", "isNetworkEnabled", "LISENSE_DEMO_URL", "getLISENSE_DEMO_URL$annotations", "getLISENSE_DEMO_URL", "setLISENSE_DEMO_URL", "LISENSE_DEMO_URL_LIVE", "getLISENSE_DEMO_URL_LIVE$annotations", "getLISENSE_DEMO_URL_LIVE", "setLISENSE_DEMO_URL_LIVE", "getLicenseBaseUrl", "LoadURL", "CallQTV_v1.0.1_CallQTVDebug"})
+public final class Variables {
+    private static boolean IS_LIVE = true;
+    private static int ServiceCounter = 0;
+    @org.jetbrains.annotations.NotNull()
+    private static java.lang.String GetServicelink = "";
+    @org.jetbrains.annotations.NotNull()
+    public static final java.lang.String GET_SERVICE_LINK = "v1/product/link";
+    @org.jetbrains.annotations.NotNull()
+    public static final java.lang.String GET_SERVICE_URL = "v1/product/url";
+    @org.jetbrains.annotations.NotNull()
+    public static final java.lang.String PRODUCT_AUTH_URL_HEADER = "license/authenticate";
+    @org.jetbrains.annotations.NotNull()
+    public static final java.lang.String DEVICE_REG_URL_HEADER = "license/register";
+    @org.jetbrains.annotations.NotNull()
+    public static final java.lang.String CHECK_DEVICE_LICENSE_URL_HEADER = "license/check";
+    @org.jetbrains.annotations.NotNull()
+    private static java.lang.String LISENSE_DEMO_URL = "http://202.88.237.210:8093/LicenceMgmt/public/api/";
+    @org.jetbrains.annotations.NotNull()
+    private static java.lang.String LISENSE_DEMO_URL_LIVE = "http://licencemanagement.softlandindia.net/public/api/";
+    @org.jetbrains.annotations.NotNull()
+    public static final com.softland.callqtv.utils.Variables INSTANCE = null;
+    
+    private Variables() {
+        super();
+    }
+    
+    public final boolean getIS_LIVE() {
+        return false;
+    }
+    
+    public final void setIS_LIVE(boolean p0) {
+    }
+    
+    public static final int getServiceCounter() {
+        return 0;
+    }
+    
+    @kotlin.jvm.JvmStatic()
+    @java.lang.Deprecated()
+    public static void getServiceCounter$annotations() {
+    }
+    
+    public static final void setServiceCounter(int p0) {
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public static final java.lang.String getGetServicelink() {
+        return null;
+    }
+    
+    @kotlin.jvm.JvmStatic()
+    @java.lang.Deprecated()
+    public static void getGetServicelink$annotations() {
+    }
+    
+    public static final void setGetServicelink(@org.jetbrains.annotations.NotNull()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getMacId(@org.jetbrains.annotations.NotNull()
+    android.content.Context context) {
+        return null;
+    }
+    
+    public final void ShowToast(@org.jetbrains.annotations.NotNull()
+    android.content.Context context, @org.jetbrains.annotations.NotNull()
+    java.lang.String message) {
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getCurentDate() {
+        return null;
+    }
+    
+    public final boolean isNetworkEnabled(@org.jetbrains.annotations.NotNull()
+    android.content.Context context) {
+        return false;
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public static final java.lang.String getLISENSE_DEMO_URL() {
+        return null;
+    }
+    
+    @kotlin.jvm.JvmStatic()
+    @java.lang.Deprecated()
+    public static void getLISENSE_DEMO_URL$annotations() {
+    }
+    
+    public static final void setLISENSE_DEMO_URL(@org.jetbrains.annotations.NotNull()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public static final java.lang.String getLISENSE_DEMO_URL_LIVE() {
+        return null;
+    }
+    
+    @kotlin.jvm.JvmStatic()
+    @java.lang.Deprecated()
+    public static void getLISENSE_DEMO_URL_LIVE$annotations() {
+    }
+    
+    public static final void setLISENSE_DEMO_URL_LIVE(@org.jetbrains.annotations.NotNull()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.NotNull()
+    public final java.lang.String getLicenseBaseUrl() {
+        return null;
+    }
+    
+    @kotlin.jvm.JvmStatic()
+    @org.jetbrains.annotations.NotNull()
+    public static final java.lang.String LoadURL() {
+        return null;
+    }
+}

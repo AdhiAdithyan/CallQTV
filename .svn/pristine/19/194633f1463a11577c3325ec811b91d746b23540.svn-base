@@ -1,0 +1,282 @@
+[
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_ic_message.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\ic_message.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_ic_error.png.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\ic_error.png"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_ic_play_circle.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\ic_play_circle.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\mipmap-anydpi-v26_ic_launcher_round.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\mipmap-anydpi-v26\\ic_launcher_round.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_callq_tv_2.png.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\callq_tv_2.png"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\mipmap-xxxhdpi_ic_launcher_round.webp.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\mipmap-xxxhdpi\\ic_launcher_round.webp"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_ic_order_status.png.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\ic_order_status.png"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_card_bg_new.png.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\card_bg_new.png"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_ic_verified.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\ic_verified.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_ic_cancel.png.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\ic_cancel.png"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_icon_bg_round.png.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\icon_bg_round.png"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_ic_launcher_background.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\ic_launcher_background.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\anim_righttoleft.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\anim\\righttoleft.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\mipmap-mdpi_ic_launcher.webp.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\mipmap-mdpi\\ic_launcher.webp"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_ic_person.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\ic_person.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_ic_lock.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\ic_lock.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_ic_send.png.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\ic_send.png"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\raw_lf20_raiw2hpe.json.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\raw\\lf20_raiw2hpe.json"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable-v24_ic_launcher_foreground.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable-v24\\ic_launcher_foreground.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\xml_data_extraction_rules.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\xml\\data_extraction_rules.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\anim_slide_out_bottom.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\anim\\slide_out_bottom.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_circle_bg1.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\circle_bg1.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_callq_tv_1.png.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\callq_tv_1.png"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_warning_24.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\warning_24.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_app_bg.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\app_bg.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_settings.png.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\settings.png"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_chat_bubble.png.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\chat_bubble.png"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_app_bg_vector.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\app_bg_vector.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\xml_backup_rules.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\xml\\backup_rules.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\mipmap-mdpi_ic_launcher_round.webp.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\mipmap-mdpi\\ic_launcher_round.webp"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_ic_filter.png.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\ic_filter.png"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_app_bg2.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\app_bg2.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_icon_background_red.png.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\icon_background_red.png"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_predefined_button_bg.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\predefined_button_bg.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_edittext_rounded_bg.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\edittext_rounded_bg.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\anim_fade_out.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\anim\\fade_out.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_ic_settings.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\ic_settings.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\anim_top_to_bottom.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\anim\\top_to_bottom.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\mipmap-xhdpi_ic_launcher.webp.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\mipmap-xhdpi\\ic_launcher.webp"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_create_oredr.png.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\create_oredr.png"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\raw_beep.mp3.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\raw\\beep.mp3"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_ic_network_unavailable.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\ic_network_unavailable.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_ic_record_voice.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\ic_record_voice.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_message_item_background.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\message_item_background.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\mipmap-xxhdpi_ic_launcher.webp.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\mipmap-xxhdpi\\ic_launcher.webp"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\mipmap-xxxhdpi_ic_launcher.webp.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\mipmap-xxxhdpi\\ic_launcher.webp"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_circle_bg2.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\circle_bg2.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\anim_slide_in_left.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\anim\\slide_in_left.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_ic_clear.png.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\ic_clear.png"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\xml_file_paths.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\xml\\file_paths.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\mipmap-xhdpi_ic_launcher_round.webp.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\mipmap-xhdpi\\ic_launcher_round.webp"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\mipmap-hdpi_ic_launcher.webp.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\mipmap-hdpi\\ic_launcher.webp"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_ic_softland_logo.png.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\ic_softland_logo.png"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_circle_bg.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\circle_bg.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_bg_layout.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\bg_layout.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\anim_slide_in_bottom.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\anim\\slide_in_bottom.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\anim_lefttoright.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\anim\\lefttoright.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_ic_check_circle.png.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\ic_check_circle.png"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\mipmap-anydpi-v26_ic_launcher.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\mipmap-anydpi-v26\\ic_launcher.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\mipmap-xxhdpi_ic_launcher_round.webp.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\mipmap-xxhdpi\\ic_launcher_round.webp"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\anim_fade_in.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\anim\\fade_in.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\mipmap-hdpi_ic_launcher_round.webp.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\mipmap-hdpi\\ic_launcher_round.webp"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_ic_network_available.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\ic_network_available.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_callq_tv_logo.png.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\callq_tv_logo.png"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_ic_ready.png.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\ic_ready.png"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_placeholder_ad.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\placeholder_ad.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_rectangle_2.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\rectangle_2.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_ic_search.png.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\ic_search.png"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_ic_notification.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\ic_notification.xml"
+    },
+    {
+        "merged": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-CallQTVDebug-84:\\drawable_ic_logout.xml.flat",
+        "source": "C:\\Users\\SILLAP-048\\.gradle\\daemon\\9.4.0\\com.softland.callqtv.app-main-88:\\drawable\\ic_logout.xml"
+    }
+]

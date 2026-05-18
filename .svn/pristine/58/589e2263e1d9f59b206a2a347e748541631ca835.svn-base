@@ -1,0 +1,100 @@
+package com.softland.callqtv.data.model;
+
+@kotlin.Metadata(mv = {2, 2, 0}, k = 1, xi = 48, d1 = {"\u0000\u001c\n\u0002\u0018\u0002\n\u0002\u0010\u0000\n\u0002\b\u0003\n\u0002\u0010\u000e\n\u0002\b\u0005\n\u0002\u0010\b\n\u0002\b\u0015\u0018\u00002\u00020\u0001B\u0007\u00a2\u0006\u0004\b\u0002\u0010\u0003R \u0010\u0004\u001a\u0004\u0018\u00010\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u0006\u0010\u0007\"\u0004\b\b\u0010\tR\"\u0010\n\u001a\u0004\u0018\u00010\u000b8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u0010\n\u0002\u0010\u0010\u001a\u0004\b\f\u0010\r\"\u0004\b\u000e\u0010\u000fR \u0010\u0011\u001a\u0004\u0018\u00010\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u0012\u0010\u0007\"\u0004\b\u0013\u0010\tR\"\u0010\u0014\u001a\u0004\u0018\u00010\u000b8\u0006@\u0006X\u0087\u000e\u00a2\u0006\u0010\n\u0002\u0010\u0010\u001a\u0004\b\u0015\u0010\r\"\u0004\b\u0016\u0010\u000fR \u0010\u0017\u001a\u0004\u0018\u00010\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u0018\u0010\u0007\"\u0004\b\u0019\u0010\tR \u0010\u001a\u001a\u0004\u0018\u00010\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u001b\u0010\u0007\"\u0004\b\u001c\u0010\tR \u0010\u001d\u001a\u0004\u0018\u00010\u00058\u0006@\u0006X\u0087\u000e\u00a2\u0006\u000e\n\u0000\u001a\u0004\b\u001e\u0010\u0007\"\u0004\b\u001f\u0010\t\u00a8\u0006 "}, d2 = {"Lcom/softland/callqtv/data/model/ProductAuthenticationRes;", "", "<init>", "()V", "authenticationstatus", "", "getAuthenticationstatus", "()Ljava/lang/String;", "setAuthenticationstatus", "(Ljava/lang/String;)V", "productRegistrationId", "", "getProductRegistrationId", "()Ljava/lang/Integer;", "setProductRegistrationId", "(Ljava/lang/Integer;)V", "Ljava/lang/Integer;", "uniqueIDentifier", "getUniqueIDentifier", "setUniqueIDentifier", "customerId", "getCustomerId", "setCustomerId", "productFromDate", "getProductFromDate", "setProductFromDate", "productToDate", "getProductToDate", "setProductToDate", "qms", "getQms", "setQms", "CallQTV_v1.0.1_CallQTVDebug"})
+public final class ProductAuthenticationRes {
+    @com.google.gson.annotations.SerializedName(value = "Authenticationstatus")
+    @com.google.gson.annotations.Expose()
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String authenticationstatus;
+    @com.google.gson.annotations.SerializedName(value = "ProductRegistrationId")
+    @com.google.gson.annotations.Expose()
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.Integer productRegistrationId;
+    @com.google.gson.annotations.SerializedName(value = "UniqueIDentifier")
+    @com.google.gson.annotations.Expose()
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String uniqueIDentifier;
+    @com.google.gson.annotations.SerializedName(value = "CustomerId")
+    @com.google.gson.annotations.Expose()
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.Integer customerId;
+    @com.google.gson.annotations.SerializedName(value = "ProductFromDate")
+    @com.google.gson.annotations.Expose()
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String productFromDate;
+    @com.google.gson.annotations.SerializedName(value = "ProductToDate")
+    @com.google.gson.annotations.Expose()
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String productToDate;
+    @com.google.gson.annotations.SerializedName(value = "QMS")
+    @com.google.gson.annotations.Expose()
+    @org.jetbrains.annotations.Nullable()
+    private java.lang.String qms;
+    
+    public ProductAuthenticationRes() {
+        super();
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getAuthenticationstatus() {
+        return null;
+    }
+    
+    public final void setAuthenticationstatus(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Integer getProductRegistrationId() {
+        return null;
+    }
+    
+    public final void setProductRegistrationId(@org.jetbrains.annotations.Nullable()
+    java.lang.Integer p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getUniqueIDentifier() {
+        return null;
+    }
+    
+    public final void setUniqueIDentifier(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.Integer getCustomerId() {
+        return null;
+    }
+    
+    public final void setCustomerId(@org.jetbrains.annotations.Nullable()
+    java.lang.Integer p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getProductFromDate() {
+        return null;
+    }
+    
+    public final void setProductFromDate(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getProductToDate() {
+        return null;
+    }
+    
+    public final void setProductToDate(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+    
+    @org.jetbrains.annotations.Nullable()
+    public final java.lang.String getQms() {
+        return null;
+    }
+    
+    public final void setQms(@org.jetbrains.annotations.Nullable()
+    java.lang.String p0) {
+    }
+}

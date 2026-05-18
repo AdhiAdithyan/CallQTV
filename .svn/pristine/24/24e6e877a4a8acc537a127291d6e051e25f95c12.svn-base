@@ -1,0 +1,233 @@
+package com.softland.callqtv.data.local;
+
+import androidx.annotation.NonNull;
+import androidx.room.EntityInsertAdapter;
+import androidx.room.RoomDatabase;
+import androidx.room.util.DBUtil;
+import androidx.room.util.SQLiteStatementUtil;
+import androidx.sqlite.SQLiteStatement;
+import java.lang.Class;
+import java.lang.NullPointerException;
+import java.lang.Override;
+import java.lang.String;
+import java.lang.SuppressWarnings;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import javax.annotation.processing.Generated;
+
+@Generated("androidx.room.RoomProcessor")
+@SuppressWarnings({"unchecked", "deprecation", "removal"})
+public final class AdFileDao_Impl implements AdFileDao {
+  private final RoomDatabase __db;
+
+  private final EntityInsertAdapter<AdFileEntity> __insertAdapterOfAdFileEntity;
+
+  public AdFileDao_Impl(@NonNull final RoomDatabase __db) {
+    this.__db = __db;
+    this.__insertAdapterOfAdFileEntity = new EntityInsertAdapter<AdFileEntity>() {
+      @Override
+      @NonNull
+      protected String createQuery() {
+        return "INSERT OR REPLACE INTO `ad_files` (`id`,`device_id`,`mac_address`,`customer_id`,`position`,`file_path`,`raw_json`) VALUES (nullif(?, 0),?,?,?,?,?,?)";
+      }
+
+      @Override
+      protected void bind(@NonNull final SQLiteStatement statement,
+          @NonNull final AdFileEntity entity) {
+        statement.bindLong(1, entity.getId());
+        statement.bindLong(2, entity.getDeviceId());
+        if (entity.getMacAddress() == null) {
+          statement.bindNull(3);
+        } else {
+          statement.bindText(3, entity.getMacAddress());
+        }
+        if (entity.getCustomerId() == null) {
+          statement.bindNull(4);
+        } else {
+          statement.bindText(4, entity.getCustomerId());
+        }
+        statement.bindLong(5, entity.getPosition());
+        if (entity.getFilePath() == null) {
+          statement.bindNull(6);
+        } else {
+          statement.bindText(6, entity.getFilePath());
+        }
+        if (entity.getRawJson() == null) {
+          statement.bindNull(7);
+        } else {
+          statement.bindText(7, entity.getRawJson());
+        }
+      }
+    };
+  }
+
+  @Override
+  public void insertAll(final List<AdFileEntity> entities) {
+    if (entities == null) throw new NullPointerException();
+    DBUtil.performBlocking(__db, false, true, (_connection) -> {
+      __insertAdapterOfAdFileEntity.insert(_connection, entities);
+      return null;
+    });
+  }
+
+  @Override
+  public List<AdFileEntity> getByDeviceId(final int deviceId) {
+    final String _sql = "SELECT * FROM ad_files WHERE device_id = ? ORDER BY position ASC";
+    return DBUtil.performBlocking(__db, true, false, (_connection) -> {
+      final SQLiteStatement _stmt = _connection.prepare(_sql);
+      try {
+        int _argIndex = 1;
+        _stmt.bindLong(_argIndex, deviceId);
+        final int _cursorIndexOfId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "id");
+        final int _cursorIndexOfDeviceId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "device_id");
+        final int _cursorIndexOfMacAddress = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "mac_address");
+        final int _cursorIndexOfCustomerId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "customer_id");
+        final int _cursorIndexOfPosition = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "position");
+        final int _cursorIndexOfFilePath = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "file_path");
+        final int _cursorIndexOfRawJson = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "raw_json");
+        final List<AdFileEntity> _result = new ArrayList<AdFileEntity>();
+        while (_stmt.step()) {
+          final AdFileEntity _item;
+          final long _tmpId;
+          _tmpId = _stmt.getLong(_cursorIndexOfId);
+          final int _tmpDeviceId;
+          _tmpDeviceId = (int) (_stmt.getLong(_cursorIndexOfDeviceId));
+          final String _tmpMacAddress;
+          if (_stmt.isNull(_cursorIndexOfMacAddress)) {
+            _tmpMacAddress = null;
+          } else {
+            _tmpMacAddress = _stmt.getText(_cursorIndexOfMacAddress);
+          }
+          final String _tmpCustomerId;
+          if (_stmt.isNull(_cursorIndexOfCustomerId)) {
+            _tmpCustomerId = null;
+          } else {
+            _tmpCustomerId = _stmt.getText(_cursorIndexOfCustomerId);
+          }
+          final int _tmpPosition;
+          _tmpPosition = (int) (_stmt.getLong(_cursorIndexOfPosition));
+          final String _tmpFilePath;
+          if (_stmt.isNull(_cursorIndexOfFilePath)) {
+            _tmpFilePath = null;
+          } else {
+            _tmpFilePath = _stmt.getText(_cursorIndexOfFilePath);
+          }
+          final String _tmpRawJson;
+          if (_stmt.isNull(_cursorIndexOfRawJson)) {
+            _tmpRawJson = null;
+          } else {
+            _tmpRawJson = _stmt.getText(_cursorIndexOfRawJson);
+          }
+          _item = new AdFileEntity(_tmpId,_tmpDeviceId,_tmpMacAddress,_tmpCustomerId,_tmpPosition,_tmpFilePath,_tmpRawJson);
+          _result.add(_item);
+        }
+        return _result;
+      } finally {
+        _stmt.close();
+      }
+    });
+  }
+
+  @Override
+  public List<AdFileEntity> getByMacAndCustomer(final String macAddress, final String customerId) {
+    final String _sql = "SELECT * FROM ad_files WHERE mac_address = ? AND customer_id = ? ORDER BY position ASC";
+    return DBUtil.performBlocking(__db, true, false, (_connection) -> {
+      final SQLiteStatement _stmt = _connection.prepare(_sql);
+      try {
+        int _argIndex = 1;
+        if (macAddress == null) {
+          _stmt.bindNull(_argIndex);
+        } else {
+          _stmt.bindText(_argIndex, macAddress);
+        }
+        _argIndex = 2;
+        if (customerId == null) {
+          _stmt.bindNull(_argIndex);
+        } else {
+          _stmt.bindText(_argIndex, customerId);
+        }
+        final int _cursorIndexOfId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "id");
+        final int _cursorIndexOfDeviceId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "device_id");
+        final int _cursorIndexOfMacAddress = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "mac_address");
+        final int _cursorIndexOfCustomerId = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "customer_id");
+        final int _cursorIndexOfPosition = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "position");
+        final int _cursorIndexOfFilePath = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "file_path");
+        final int _cursorIndexOfRawJson = SQLiteStatementUtil.getColumnIndexOrThrow(_stmt, "raw_json");
+        final List<AdFileEntity> _result = new ArrayList<AdFileEntity>();
+        while (_stmt.step()) {
+          final AdFileEntity _item;
+          final long _tmpId;
+          _tmpId = _stmt.getLong(_cursorIndexOfId);
+          final int _tmpDeviceId;
+          _tmpDeviceId = (int) (_stmt.getLong(_cursorIndexOfDeviceId));
+          final String _tmpMacAddress;
+          if (_stmt.isNull(_cursorIndexOfMacAddress)) {
+            _tmpMacAddress = null;
+          } else {
+            _tmpMacAddress = _stmt.getText(_cursorIndexOfMacAddress);
+          }
+          final String _tmpCustomerId;
+          if (_stmt.isNull(_cursorIndexOfCustomerId)) {
+            _tmpCustomerId = null;
+          } else {
+            _tmpCustomerId = _stmt.getText(_cursorIndexOfCustomerId);
+          }
+          final int _tmpPosition;
+          _tmpPosition = (int) (_stmt.getLong(_cursorIndexOfPosition));
+          final String _tmpFilePath;
+          if (_stmt.isNull(_cursorIndexOfFilePath)) {
+            _tmpFilePath = null;
+          } else {
+            _tmpFilePath = _stmt.getText(_cursorIndexOfFilePath);
+          }
+          final String _tmpRawJson;
+          if (_stmt.isNull(_cursorIndexOfRawJson)) {
+            _tmpRawJson = null;
+          } else {
+            _tmpRawJson = _stmt.getText(_cursorIndexOfRawJson);
+          }
+          _item = new AdFileEntity(_tmpId,_tmpDeviceId,_tmpMacAddress,_tmpCustomerId,_tmpPosition,_tmpFilePath,_tmpRawJson);
+          _result.add(_item);
+        }
+        return _result;
+      } finally {
+        _stmt.close();
+      }
+    });
+  }
+
+  @Override
+  public void deleteByDeviceAndCustomer(final int deviceId, final String macAddress,
+      final String customerId) {
+    final String _sql = "DELETE FROM ad_files WHERE device_id = ? AND mac_address = ? AND customer_id = ?";
+    DBUtil.performBlocking(__db, false, true, (_connection) -> {
+      final SQLiteStatement _stmt = _connection.prepare(_sql);
+      try {
+        int _argIndex = 1;
+        _stmt.bindLong(_argIndex, deviceId);
+        _argIndex = 2;
+        if (macAddress == null) {
+          _stmt.bindNull(_argIndex);
+        } else {
+          _stmt.bindText(_argIndex, macAddress);
+        }
+        _argIndex = 3;
+        if (customerId == null) {
+          _stmt.bindNull(_argIndex);
+        } else {
+          _stmt.bindText(_argIndex, customerId);
+        }
+        _stmt.step();
+        return null;
+      } finally {
+        _stmt.close();
+      }
+    });
+  }
+
+  @NonNull
+  public static List<Class<?>> getRequiredConverters() {
+    return Collections.emptyList();
+  }
+}
