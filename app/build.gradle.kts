@@ -24,13 +24,14 @@ android {
 
     defaultConfig {
         applicationId = "com.softland.callqtv"
-        minSdk = 26
+        minSdk = 21
         targetSdk = 35
         versionCode = 2
         versionName = "1.0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         palmAnd = if (isLiveApk) "LIVE_v" else "QA_v"
         buildConfigField("String", "BUILD_TYPE_DEVICE", "\"android_tv\"")
+        buildConfigField("boolean", "IS_LIVE", isLiveApk.toString())
     }
 
     applicationVariants.all {
@@ -64,6 +65,7 @@ android {
     }
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -108,6 +110,8 @@ android {
 base.archivesName.set("CallQTV_v${android.defaultConfig.versionName}")
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+
     implementation("org.jetbrains.kotlin:kotlin-stdlib:2.1.0")
 
     // Jetpack Compose (BOM 2024.12.01)
@@ -152,6 +156,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-process:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.compose.runtime:runtime-livedata")
 

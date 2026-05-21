@@ -12,6 +12,12 @@ object PreferenceHelper {
     const val project_code = "ProjectCode"
     const val TOKEN_VOICE = "token_voice"
     const val OFFLINE_ADS = "offline_ads"
+    const val device_registration_id = "device_registration_id"
+    const val product_registration_id = "product_registration_id"
+    const val device_unique_id = "device_unique_id"
+    const val project_name = "project_name"
+    /** Last license API base (scheme + host + path) that succeeded; prefer it on next launch. */
+    const val license_transport_base_last_ok = "license_transport_base_last_ok"
     private const val CURRENT_DATE = "current_date"
 
     private fun getAuthPrefs(context: Context): SharedPreferences {
@@ -46,5 +52,15 @@ object PreferenceHelper {
 
     fun setOfflineAdsEnabled(context: Context, enabled: Boolean) {
         getAuthPrefs(context).edit().putBoolean(OFFLINE_ADS, enabled).apply()
+    }
+
+    fun getLastSuccessfulLicenseBase(context: Context): String? {
+        return getAuthPrefs(context).getString(license_transport_base_last_ok, null)?.trim()?.takeIf { it.isNotBlank() }
+    }
+
+    fun setLastSuccessfulLicenseBase(context: Context, baseUrl: String) {
+        val trimmed = baseUrl.trim()
+        if (trimmed.isBlank()) return
+        getAuthPrefs(context).edit().putString(license_transport_base_last_ok, trimmed).apply()
     }
 }

@@ -12,6 +12,8 @@ import com.softland.callqtv.data.model.DeviceRegistrationRequest
 import com.softland.callqtv.data.model.ProductAuthenticationReq
 import com.softland.callqtv.data.repository.ProjectRepository
 import com.softland.callqtv.data.repository.ServiceUrlRepository
+import com.softland.callqtv.utils.ApkUpdateHelper
+import com.softland.callqtv.utils.LicenseApiMessages
 import com.softland.callqtv.utils.PreferenceHelper
 import com.softland.callqtv.utils.Variables
 import com.google.gson.Gson
@@ -68,7 +70,23 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
         _state.value = RegistrationState.Idle
     }
 
+    fun presentUpdateAvailable(
+        apkVersion: String,
+        downloadURL: String,
+        isMandatoryUpdate: Int,
+        projectCode: String,
+    ) {
+        _state.value = RegistrationState.UpdateAvailable(
+            apkVersion = apkVersion,
+            downloadURL = downloadURL,
+            isMandatoryUpdate = isMandatoryUpdate,
+            projectCode = projectCode,
+        )
+    }
+
     fun startRegistrationFlow() {
+        if (_state.value is RegistrationState.Loading) return
+
         val id = _customerId.value ?: ""
         if (id.length != 4) {
             _customerIdError.value = "Customer ID must be 4 digits"
@@ -76,12 +94,6 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
         }
 
         val customerIdInt = id.toIntOrNull() ?: 0
-
-        // Persist customer ID immediately so it's remembered for the next session
-        authPrefs.edit()
-            .putInt(PreferenceHelper.customer_id, customerIdInt)
-            .putString(PreferenceHelper.customer_id_text, id)
-            .apply()
 
         viewModelScope.launch {
             val macAddress = withContext(Dispatchers.IO) { Variables.getMacId(getApplication()) }
@@ -93,7 +105,7 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
                     this.uniqueIDentifier = macAddress
                     this.customerId = customerIdInt
                 }
-                val authRes = projectRepository.authenticateProduct(Variables.getLicenseBaseUrl() + "ProductAuthentication", authReq)
+                val authRes = projectRepository.authenticateProduct("ProductAuthentication", authReq)
                 lastAuthRes = authRes
 
                 if (authRes.authenticationstatus == "Approve" ) {
@@ -118,8 +130,7 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
                 _state.value = RegistrationState.Error(displayMsg)
             } catch (e: Exception) {
                 com.softland.callqtv.utils.FileLogger.logError(getApplication(), "RegViewModel", "Auth Exception", e)
-//                _state.value = RegistrationState.Error("Auth failed: ${e.message}")
-                _state.value = RegistrationState.Error("Auth failed.Please retry...")
+                _state.value = RegistrationState.Error(LicenseApiMessages.userMessageFor(e, "Authentication"))
             }
         }
     }
@@ -134,7 +145,7 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
                 this.deviceType = 3 // TV
             }
             
-            val regRes = projectRepository.getDeviceRegistration(Variables.getLicenseBaseUrl() + "DeviceRegistration", regReq)
+            val regRes = projectRepository.getDeviceRegistration("DeviceRegistration", regReq)
             lastRegRes = regRes
 
             when (regRes.status) {
@@ -166,8 +177,7 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
             _state.value = RegistrationState.Error(displayMsg)
         } catch (e: Exception) {
             com.softland.callqtv.utils.FileLogger.logError(getApplication(), "RegViewModel", "Reg Exception", e)
-//            _state.value = RegistrationState.Error("Registration failed: ${e.message}")
-            _state.value = RegistrationState.Error("Registration failed: Please retry")
+            _state.value = RegistrationState.Error(LicenseApiMessages.userMessageFor(e, "Registration"))
         }
     }
 
@@ -186,20 +196,24 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
                 this.deviceRegistrationId = regRes.deviceRegistrationId ?: 0
                 this.projectNAme = regRes.projectName
             }
-            val statusRes = projectRepository.getCheckDeviceStatus(Variables.getLicenseBaseUrl() + "CheckDeviceStatus", statusReq)
+            val statusRes = projectRepository.getCheckDeviceStatus("CheckDeviceStatus", statusReq)
 
             if (statusRes.status == 1 || statusRes.status == 3) {
-                saveAuthDetails(customerId, statusRes)
-                
-                val currentVersion = getApplication<Application>().packageManager.getPackageInfo(getApplication<Application>().packageName, 0).versionName
-                val serverVersion = statusRes.apkVersion
-                if (serverVersion != null && serverVersion != currentVersion) {
-                    _state.value = RegistrationState.UpdateAvailable(
-                        apkVersion = serverVersion,
-                        downloadURL = statusRes.downloadUrl ?: "",
-                        isMandatoryUpdate = statusRes.isMandatoryUpdate?.toIntOrNull() ?: 0,
-                        projectCode = statusRes.projectCode ?: ""
-                    )
+                saveAuthDetails(customerId, statusRes, authRes, regRes)
+
+                if (ApkUpdateHelper.isUpdateAvailable(getApplication(), statusRes)) {
+                    val apkVersion = ApkUpdateHelper.normalizeVersionName(statusRes.apkVersion).orEmpty()
+                    val downloadUrl = statusRes.downloadUrl?.trim().orEmpty()
+                    if (apkVersion.isNotBlank() && downloadUrl.isNotBlank()) {
+                        _state.value = RegistrationState.UpdateAvailable(
+                            apkVersion = apkVersion,
+                            downloadURL = downloadUrl,
+                            isMandatoryUpdate = statusRes.isMandatoryUpdate?.toIntOrNull() ?: 0,
+                            projectCode = statusRes.projectCode ?: "",
+                        )
+                    } else {
+                        fetchServiceUrl(statusRes.projectCode ?: "")
+                    }
                 } else {
                     fetchServiceUrl(statusRes.projectCode ?: "")
                 }
@@ -224,8 +238,7 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
             _state.value = RegistrationState.Error(displayMsg)
         } catch (e: Exception) {
             com.softland.callqtv.utils.FileLogger.logError(getApplication(), "RegViewModel", "Status Exception", e)
-//            _state.value = RegistrationState.Error("Status check failed: ${e.message}")
-            _state.value = RegistrationState.Error("Status check failed: Please retry")
+            _state.value = RegistrationState.Error(LicenseApiMessages.userMessageFor(e, "Status check"))
         }
     }
 
@@ -280,7 +293,12 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
-    private fun saveAuthDetails(customerId: Int, res: com.softland.callqtv.data.model.CheckDeviceStatusResponse) {
+    private fun saveAuthDetails(
+        customerId: Int,
+        res: com.softland.callqtv.data.model.CheckDeviceStatusResponse,
+        authRes: com.softland.callqtv.data.model.ProductAuthenticationRes,
+        regRes: com.softland.callqtv.data.model.DeviceRegistrationResponse,
+    ) {
         val enteredCustomerId = _customerId.value.orEmpty()
         authPrefs.edit().apply {
             putInt(PreferenceHelper.customer_id, customerId)
@@ -289,6 +307,13 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
             }
             putString(PreferenceHelper.product_license_end, res.licenceActiveTo)
             putString(PreferenceHelper.project_code, res.projectCode)
+            putInt(PreferenceHelper.device_registration_id, regRes.deviceRegistrationId ?: 0)
+            putInt(PreferenceHelper.product_registration_id, authRes.productRegistrationId ?: 0)
+            putString(
+                PreferenceHelper.device_unique_id,
+                regRes.uniqueIDentifier ?: authRes.uniqueIDentifier,
+            )
+            putString(PreferenceHelper.project_name, regRes.projectName)
             apply()
         }
     }

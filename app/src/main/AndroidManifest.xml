@@ -30,12 +30,18 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
-    <!-- Storage permissions for error logs (CallQTV/errors.txt folder) -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+    <!-- Storage: legacy (API 21–32), granular media (API 33+), all-files (API 30+ TV boxes) -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32"
         tools:ignore="ScopedStorage" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
 
     <supports-screens
@@ -59,7 +65,6 @@
         android:theme="@style/Theme.CallQTV"
         android:usesCleartextTraffic="true"
         android:enableOnBackInvokedCallback="true"
-        android:requestLegacyExternalStorage="true"
         tools:targetApi="35">
 
 

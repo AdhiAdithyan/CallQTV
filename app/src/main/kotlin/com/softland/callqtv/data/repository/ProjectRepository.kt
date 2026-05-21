@@ -10,9 +10,12 @@ import com.softland.callqtv.data.model.ProductAuthenticationReq
 import com.softland.callqtv.data.model.ProductAuthenticationRes
 import com.softland.callqtv.data.network.RetrofitClient
 import com.softland.callqtv.data.network.ApiService
+import com.softland.callqtv.utils.LicenseEndpointResolver
 import com.softland.callqtv.utils.NetworkUtil
+import com.softland.callqtv.utils.PreferenceHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import retrofit2.HttpException
 import java.io.IOException
 
 class ProjectRepository(private val context: android.content.Context) {
@@ -20,66 +23,90 @@ class ProjectRepository(private val context: android.content.Context) {
     private val api: ApiService = RetrofitClient.getApiLicenseService(context)
     private val gson = Gson()
 
-    suspend fun authenticateProduct(url: String, request: ProductAuthenticationReq): ProductAuthenticationRes =
-        withContext(Dispatchers.IO) {
-            if (!NetworkUtil.isNetworkAvailable(context)) {
-                Log.w("LicenseApi", "Skipping authenticateProduct: network unavailable")
-                throw IOException("No internet connection. Please check network and retry.")
-            }
-            try {
-                Log.i("LicenseApi", "authenticateProduct REQUEST url=$url body=${gson.toJson(request)}")
-            } catch (e: Exception) {e.printStackTrace()}
-            try {
-                val response = api.authenticateProduct(url, request)
-                try {
-                    Log.i("LicenseApi", "authenticateProduct RESPONSE url=$url body=${gson.toJson(response)}")
-                } catch (e: Exception) {e.printStackTrace()}
-                response
-            } catch (e: Exception) {
-                Log.e("LicenseApi", "authenticateProduct ERROR url=$url message=${e.message}", e)
-                throw e
-            }
+    suspend fun authenticateProduct(endpoint: String, request: ProductAuthenticationReq): ProductAuthenticationRes =
+        withLicenseFailover(endpoint, "authenticateProduct") { url ->
+            logRequest("authenticateProduct", url, request)
+            val response = api.authenticateProduct(url, request)
+            logResponse("authenticateProduct", url, response)
+            response
         }
 
-    suspend fun getDeviceRegistration(url: String, request: DeviceRegistrationRequest): DeviceRegistrationResponse =
-        withContext(Dispatchers.IO) {
-            if (!NetworkUtil.isNetworkAvailable(context)) {
-                Log.w("LicenseApi", "Skipping getDeviceRegistration: network unavailable")
-                throw IOException("No internet connection. Please check network and retry.")
-            }
-            try {
-                Log.i("LicenseApi", "getDeviceRegistration REQUEST url=$url body=${gson.toJson(request)}")
-            } catch (_: Exception) { }
-            try {
-                val response = api.getDeviceRegistration(url, request)
-                try {
-                    Log.i("LicenseApi", "getDeviceRegistration RESPONSE url=$url body=${gson.toJson(response)}")
-                } catch (_: Exception) { }
-                response
-            } catch (e: Exception) {
-                Log.e("LicenseApi", "getDeviceRegistration ERROR url=$url message=${e.message}", e)
-                throw e
-            }
+    suspend fun getDeviceRegistration(
+        endpoint: String,
+        request: DeviceRegistrationRequest,
+    ): DeviceRegistrationResponse =
+        withLicenseFailover(endpoint, "getDeviceRegistration") { url ->
+            logRequest("getDeviceRegistration", url, request)
+            val response = api.getDeviceRegistration(url, request)
+            logResponse("getDeviceRegistration", url, response)
+            response
         }
 
-    suspend fun getCheckDeviceStatus(url: String, request: CheckDeviceStatusRequest): CheckDeviceStatusResponse =
-        withContext(Dispatchers.IO) {
-            if (!NetworkUtil.isNetworkAvailable(context)) {
-                Log.w("LicenseApi", "Skipping getCheckDeviceStatus: network unavailable")
-                throw IOException("No internet connection. Please check network and retry.")
-            }
+    suspend fun getCheckDeviceStatus(
+        endpoint: String,
+        request: CheckDeviceStatusRequest,
+    ): CheckDeviceStatusResponse =
+        withLicenseFailover(endpoint, "getCheckDeviceStatus") { url ->
+            logRequest("getCheckDeviceStatus", url, request)
+            val response = api.getCheckDeviceStatus(url, request)
+            logResponse("getCheckDeviceStatus", url, response)
+            response
+        }
+
+    private suspend fun <T> withLicenseFailover(
+        endpoint: String,
+        label: String,
+        block: suspend (url: String) -> T,
+    ): T = withContext(Dispatchers.IO) {
+        if (!NetworkUtil.isNetworkAvailable(context)) {
+            Log.w("LicenseApi", "Skipping $label: network unavailable")
+            throw IOException("No internet connection. Please check network and retry.")
+        }
+
+        val bases = LicenseEndpointResolver.orderedLicenseBaseUrls(context.applicationContext)
+        var lastError: Exception? = null
+        for ((index, base) in bases.withIndex()) {
+            val url = LicenseEndpointResolver.endpointUrl(base, endpoint)
             try {
-                Log.i("LicenseApi", "getCheckDeviceStatus REQUEST url=$url body=${gson.toJson(request)}")
-            } catch (_: Exception) { }
-            try {
-                val response = api.getCheckDeviceStatus(url, request)
-                try {
-                    Log.i("LicenseApi", "getCheckDeviceStatus RESPONSE url=$url body=${gson.toJson(response)}")
-                } catch (_: Exception) { }
-                response
-            } catch (e: Exception) {
-                Log.e("LicenseApi", "getCheckDeviceStatus ERROR url=$url message=${e.message}", e)
+                Log.i(
+                    "LicenseApi",
+                    "$label ${LicenseEndpointResolver.environmentLabel()} url=$url",
+                )
+                val result = block(url)
+                PreferenceHelper.setLastSuccessfulLicenseBase(context.applicationContext, base)
+                return@withContext result
+            } catch (e: HttpException) {
+                Log.e("LicenseApi", "$label HTTP ${e.code()} url=$url", e)
                 throw e
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("LicenseApi", "$label ERROR url=$url message=${e.message}", e)
+                lastError = e as? Exception ?: IOException(e.message, e)
+                val canRetryScheme =
+                    index < bases.lastIndex &&
+                        LicenseEndpointResolver.shouldRetryWithAlternateLicenseScheme(e)
+                if (canRetryScheme) {
+                    Log.w("LicenseApi", "$label: retrying with alternate transport (http/https)")
+                    continue
+                }
+                throw lastError
             }
         }
+        throw lastError ?: IOException("License server unreachable")
+    }
+
+    private fun logRequest(label: String, url: String, body: Any) {
+        try {
+            Log.i("LicenseApi", "$label REQUEST url=$url body=${gson.toJson(body)}")
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun logResponse(label: String, url: String, body: Any) {
+        try {
+            Log.i("LicenseApi", "$label RESPONSE url=$url body=${gson.toJson(body)}")
+        } catch (_: Exception) {
+        }
+    }
 }

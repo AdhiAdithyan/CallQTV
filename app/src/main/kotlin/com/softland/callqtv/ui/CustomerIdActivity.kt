@@ -4,13 +4,11 @@ import android.app.UiModeManager
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
-import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.os.Environment
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -40,11 +38,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
-import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModelProvider
 import com.softland.callqtv.R
 import com.softland.callqtv.data.local.AppSharedPreferences
 import com.softland.callqtv.utils.AnimatedLoadingOverlay
+import com.softland.callqtv.utils.ApkUpdateHelper
 import com.softland.callqtv.utils.KeyboardUtils
 import com.softland.callqtv.utils.NetworkUtil
 import com.softland.callqtv.utils.PreferenceHelper
@@ -66,11 +64,29 @@ import java.util.Locale
 
 class CustomerIdActivity : AppCompatActivity() {
 
+    companion object {
+        const val EXTRA_PENDING_UPDATE_VERSION = "pending_update_version"
+        const val EXTRA_PENDING_UPDATE_URL = "pending_update_url"
+        const val EXTRA_PENDING_UPDATE_MANDATORY = "pending_update_mandatory"
+        const val EXTRA_PENDING_UPDATE_PROJECT = "pending_update_project"
+    }
+
     private lateinit var registrationViewModel: RegistrationViewModel
     private lateinit var downloadViewModel: DownloadViewModel
     private lateinit var networkViewModel: NetworkViewModel
     @Volatile
     private var hasNavigatedToMain = false
+
+    private var pendingInstallApkPath: String? = null
+
+    private val installPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {
+        val apkPath = pendingInstallApkPath
+        if (apkPath != null) {
+            installApk(apkPath)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -120,6 +136,19 @@ class CustomerIdActivity : AppCompatActivity() {
                     initial = NetworkUtil.isNetworkAvailable(this)
                 )
 
+                var lastAutoStartedCustomerId by remember { mutableStateOf<String?>(null) }
+                LaunchedEffect(customerId, registrationState) {
+                    if (customerId.length != 4) {
+                        lastAutoStartedCustomerId = null
+                        return@LaunchedEffect
+                    }
+                    if (registrationState !is RegistrationState.Idle) return@LaunchedEffect
+                    if (customerId == lastAutoStartedCustomerId) return@LaunchedEffect
+                    lastAutoStartedCustomerId = customerId
+                    KeyboardUtils.hideKeyboard(this@CustomerIdActivity)
+                    registrationViewModel.startRegistrationFlow()
+                }
+
                 CustomerIdScreen(
                     customerId = customerId,
                     errorMessage = customerIdError,
@@ -153,49 +182,25 @@ class CustomerIdActivity : AppCompatActivity() {
             }
         }
         
-        // Auto trigger if already has ID
-        if (custId != 0) {
-            if (isLicenseValid(licenseEnd)) {
-                // License is valid for more than 0 days, proceed to main activity
-                navigateToMainIfNeeded()
-            } else {
-                // License expired or expiring today, check with server
-                registrationViewModel.startRegistrationFlow()
+        val pendingUpdateVersion = intent.getStringExtra(EXTRA_PENDING_UPDATE_VERSION)
+        if (!pendingUpdateVersion.isNullOrBlank()) {
+            val downloadUrl = intent.getStringExtra(EXTRA_PENDING_UPDATE_URL).orEmpty()
+            if (downloadUrl.isNotBlank()) {
+                registrationViewModel.presentUpdateAvailable(
+                    apkVersion = pendingUpdateVersion,
+                    downloadURL = downloadUrl,
+                    isMandatoryUpdate = intent.getIntExtra(EXTRA_PENDING_UPDATE_MANDATORY, 0),
+                    projectCode = intent.getStringExtra(EXTRA_PENDING_UPDATE_PROJECT).orEmpty(),
+                )
             }
+        } else if (custId != 0 && isLicenseValid(licenseEnd)) {
+            // Skip registration when a stored license is still valid.
+            navigateToMainIfNeeded()
         }
     }
 
     private fun isLicenseValid(licenseEndDateStr: String): Boolean {
-        if (licenseEndDateStr.isEmpty()) return false
-        
-        try {
-            // Attempt common formats. If the server uses a specific one, adjust here.
-            val formats = listOf("yyyy-MM-dd", "dd-MM-yyyy", "yyyy/MM/dd", "dd/MM/yyyy", "MMM dd, yyyy")
-            var expiryDate: Date? = null
-            
-            for (format in formats) {
-                try {
-                    expiryDate = SimpleDateFormat(format, Locale.ROOT).parse(licenseEndDateStr)
-                    if (expiryDate != null) break
-                } catch (e: Exception) { continue }
-            }
-
-            if (expiryDate == null) return false
-
-            val calendar = Calendar.getInstance()
-            // Reset current time to start of day for accurate day comparison
-            calendar.set(Calendar.HOUR_OF_DAY, 0)
-            calendar.set(Calendar.MINUTE, 0)
-            calendar.set(Calendar.SECOND, 0)
-            calendar.set(Calendar.MILLISECOND, 0)
-            val today = calendar.time
-
-            // Compare only dates. If expiryDate is AFTER today, it's valid for at least tomorrow.
-            // If expiryDate is EQUAL to today, it's 0 days left, so we check license.
-            return expiryDate.after(today)
-        } catch (e: Exception) {
-            return false
-        }
+        return com.softland.callqtv.utils.LicenseDateUtils.isLicenseValid(licenseEndDateStr)
     }
 
     @Composable
@@ -371,7 +376,12 @@ class CustomerIdActivity : AppCompatActivity() {
         downloadViewModel.downloadStatus.observe(this) { status ->
             when (status.statusType) {
                 com.softland.callqtv.utils.DownloadStatus.StatusType.SUCCESS -> {
-                    downloadViewModel.triggerApkInstall(status.versionOrResult.orEmpty())
+                    val apkPath = status.filePathOrError
+                    if (!apkPath.isNullOrBlank() && apkPath.endsWith(".apk")) {
+                        downloadViewModel.triggerApkInstall(apkPath)
+                    } else {
+                        Toast.makeText(this, "Download finished but APK path is missing", Toast.LENGTH_LONG).show()
+                    }
                 }
                 com.softland.callqtv.utils.DownloadStatus.StatusType.ERROR -> {
                     Toast.makeText(this, "Download failed: ${status.filePathOrError}", Toast.LENGTH_LONG).show()
@@ -382,35 +392,34 @@ class CustomerIdActivity : AppCompatActivity() {
 
         downloadViewModel.installIntentLiveData.observe(this) { event ->
             if (event != null) {
-                installApk(event.filePath)
+                installApk(event.apkFilePath)
+                downloadViewModel.clearInstallEvent()
             }
         }
     }
 
-    private fun installApk(versionName: String) {
+    private fun installApk(apkFilePath: String) {
         try {
-            val apkFile = File(
-                Environment.getExternalStorageDirectory(),
-                "CallQTV_Version$versionName.apk"
-            )
-
+            val apkFile = File(apkFilePath)
             if (!apkFile.exists()) {
                 Toast.makeText(this, "APK file not found: ${apkFile.absolutePath}", Toast.LENGTH_LONG).show()
                 return
             }
 
-            val apkUri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                FileProvider.getUriForFile(this, "${packageName}.fileprovider", apkFile)
-            } else {
-                Uri.fromFile(apkFile)
+            if (ApkUpdateHelper.needsInstallPermissionSettings(this)) {
+                pendingInstallApkPath = apkFilePath
+                installPermissionLauncher.launch(ApkUpdateHelper.createInstallUnknownAppsIntent(this))
+                Toast.makeText(
+                    this,
+                    "Allow installs from this app, then tap Update again",
+                    Toast.LENGTH_LONG,
+                ).show()
+                return
             }
 
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(apkUri, "application/vnd.android.package-archive")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (!ApkUpdateHelper.startPackageInstall(this, apkFile)) {
+                Toast.makeText(this, "Install failed: could not open package installer", Toast.LENGTH_LONG).show()
             }
-            startActivity(intent)
         } catch (e: Exception) {
             Toast.makeText(this, "Install failed: ${e.message}", Toast.LENGTH_LONG).show()
         }
@@ -526,6 +535,13 @@ private fun CustomerIdScreen(
                     ),
                     textAlign = TextAlign.Center
                 )
+                Text(
+                    text = "License check runs automatically when all 4 digits are entered",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
 
                 Spacer(modifier = Modifier.height(24.dp))
 
@@ -630,7 +646,7 @@ private fun CustomerIdScreen(
 
                         Button(
                             onClick = onCheckLicenseClick,
-                            enabled = !isChecking,
+                            enabled = !isChecking && localCustomerId.length == 4,
                             modifier = Modifier.fillMaxWidth().height(buttonHeight),
                             shape = RoundedCornerShape(10.dp)
                         ) {
@@ -639,7 +655,7 @@ private fun CustomerIdScreen(
                                 Spacer(modifier = Modifier.size(12.dp))
                                 Text(text = "Checking...", color = MaterialTheme.colorScheme.onPrimary)
                             } else {
-                                Text(text = "Check license", color = MaterialTheme.colorScheme.onPrimary)
+                                Text(text = "Retry license check", color = MaterialTheme.colorScheme.onPrimary)
                             }
                         }
 

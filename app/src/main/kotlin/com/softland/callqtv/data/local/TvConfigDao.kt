@@ -16,4 +16,7 @@ interface TvConfigDao {
 
     @Query("SELECT * FROM tv_config WHERE mac_address = :macAddress AND customer_id = :customerId LIMIT 1")
     fun getByMacAndCustomer(macAddress: String, customerId: String): TvConfigEntity?
+
+    @Query("DELETE FROM tv_config WHERE mac_address = :macAddress AND customer_id = :customerId")
+    fun deleteByMacAndCustomer(macAddress: String, customerId: String)
 }

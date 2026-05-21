@@ -15,6 +15,8 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.widget.Toast
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.view.animation.LinearInterpolator
 import android.widget.FrameLayout
@@ -98,11 +100,13 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.ExperimentalFoundationApi
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
+import com.softland.callqtv.AppBackgroundCoordinator
 import com.softland.callqtv.R
 import com.softland.callqtv.utils.*
 import com.softland.callqtv.viewmodel.MqttViewModel
@@ -116,6 +120,8 @@ import com.softland.callqtv.data.local.CounterEntity
 import com.softland.callqtv.data.local.TvConfigEntity
 import com.softland.callqtv.utils.PreferenceHelper
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -195,6 +201,12 @@ class TokenDisplayActivity : ComponentActivity() {
     private lateinit var mqttViewModel: MqttViewModel
     private var launchInstanceId: Long = 0L
 
+    private val storagePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { _ ->
+        StoragePermissionHelper.onRuntimePermissionResult(this)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Belt-and-suspenders guard: if a second instance is created in the same task,
@@ -217,18 +229,38 @@ class TokenDisplayActivity : ComponentActivity() {
         
         viewModel = ViewModelProvider(this)[TokenDisplayViewModel::class.java]
         mqttViewModel = ViewModelProvider(this)[MqttViewModel::class.java]
-        
-        // First launch: show the full-screen loading overlay once
-        viewModel.loadData(mqttViewModel, forceShowOverlay = true)
+        AppBackgroundCoordinator.registerTokenDisplaySession(mqttViewModel, viewModel)
+
+        StoragePermissionHelper.ensureStorageAccess(this, storagePermissionLauncher)
+
+        val refreshAfterApkUpgrade =
+            com.softland.callqtv.utils.AppUpgradeCoordinator.consumePendingConfigRefresh(this)
+        // Use cached config on startup; after an APK upgrade, refresh config once from the server.
+        viewModel.loadData(
+            mqttViewModel,
+            forceShowOverlay = true,
+            clearCacheBeforeFetch = refreshAfterApkUpgrade,
+        )
+
+        lifecycleScope.launch {
+            val pendingUpdate = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                com.softland.callqtv.utils.AppUpdateChecker.checkForUpdate(this@TokenDisplayActivity)
+            }
+            if (pendingUpdate != null && !isFinishing && !isDestroyed) {
+                startActivity(
+                    Intent(this@TokenDisplayActivity, CustomerIdActivity::class.java).apply {
+                        putExtra(CustomerIdActivity.EXTRA_PENDING_UPDATE_VERSION, pendingUpdate.apkVersion)
+                        putExtra(CustomerIdActivity.EXTRA_PENDING_UPDATE_URL, pendingUpdate.downloadUrl)
+                        putExtra(CustomerIdActivity.EXTRA_PENDING_UPDATE_MANDATORY, pendingUpdate.isMandatoryUpdate)
+                        putExtra(CustomerIdActivity.EXTRA_PENDING_UPDATE_PROJECT, pendingUpdate.projectCode)
+                    },
+                )
+            }
+        }
 
         setContent {
             // Theme State - load async to avoid blocking main thread during composition
             val context = LocalContext.current
-            
-            // Check & Request Storage Permissions
-            LaunchedEffect(Unit) {
-                checkAndRequestStoragePermissions()
-            }
 
             var currentThemeHex by remember { mutableStateOf("#2196F3") }
             var counterBgHex by remember { mutableStateOf("#FFFFFF") }
@@ -281,6 +313,7 @@ class TokenDisplayActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        AppBackgroundCoordinator.unregisterTokenDisplaySession()
         android.util.Log.i(
             "TokenDisplayLaunch",
             "onDestroy instance=$launchInstanceId taskId=$taskId isFinishing=$isFinishing isDestroyed=$isDestroyed"
@@ -335,31 +368,6 @@ class TokenDisplayActivity : ComponentActivity() {
         private fun nextLaunchInstanceId(): Long = launchCounter.incrementAndGet()
     }
 
-    private fun checkAndRequestStoragePermissions() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (!Environment.isExternalStorageManager()) {
-                try {
-                    val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-                    intent.data = Uri.parse("package:$packageName")
-                    startActivity(intent)
-                } catch (e: Exception) {
-                    val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-                    startActivity(intent)
-                }
-            }
-        } else {
-            val permissions = arrayOf(
-                android.Manifest.permission.READ_EXTERNAL_STORAGE,
-                android.Manifest.permission.WRITE_EXTERNAL_STORAGE
-            )
-            val needsRequest = permissions.any {
-                ContextCompat.checkSelfPermission(this, it) != android.content.pm.PackageManager.PERMISSION_GRANTED
-            }
-            if (needsRequest) {
-                ActivityCompat.requestPermissions(this, permissions, 1001)
-            }
-        }
-    }
 }
 
 private object UiPerfProbe {
@@ -595,15 +603,20 @@ fun TokenDisplayScreen(
 
     // Pre-warm WebView provider once, so first YouTube ad doesn't pay full Chromium init cost.
     LaunchedEffect(Unit) {
-        // Stagger from Exo warm-up to avoid startup contention on UI thread.
-        delay(2200)
+        val uiMode = context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK
+        val isTv = uiMode == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
+        // TV: defer Chromium init until after config/UI settle (reduces cold-start jank).
+        delay(if (isTv) 8000L else 2200L)
         WebViewWarmup.warmUp(context)
     }
 
-    // State map to track the last call timestamp per counter, used to restart blinking on re-call.
+    // Per-counter timestamps: blink only when a new MQTT call sets this (not on history restore / refresh).
     val blinkTriggers = remember { mutableStateMapOf<String, Long>() }
-    
+
     val isLoading by viewModel.isLoading.observeAsState(false)
+    LaunchedEffect(isLoading) {
+        if (isLoading) blinkTriggers.clear()
+    }
     val isPendingApproval by viewModel.isPendingApproval.observeAsState(false)
     val isLicenseExpired by viewModel.isLicenseExpired.observeAsState(false)
     val errorMessage by viewModel.errorMessage.observeAsState(null)
@@ -749,10 +762,10 @@ fun TokenDisplayScreen(
         }
     }
 
-    // TTS only when token announcement is enabled in TV config; otherwise release the engine.
-    LaunchedEffect(config?.enableTokenAnnouncement, config?.audioLanguage, isLoading) {
+    // TTS when token announcement is enabled — warm as soon as config is known (do not wait for
+    // the config API overlay to finish; first MQTT token often arrives right after connect).
+    LaunchedEffect(config?.enableTokenAnnouncement, config?.audioLanguage) {
         val cfg = config ?: return@LaunchedEffect
-        if (isLoading) return@LaunchedEffect
 
         val announcementEnabled = cfg.enableTokenAnnouncement == true
         TokenAnnouncer.setAnnouncementsEnabled(announcementEnabled)
@@ -765,10 +778,10 @@ fun TokenDisplayScreen(
 
         val lang = cfg.audioLanguage
         val languageChanged = lastInitializedTtsLanguage != lang
-        if (languageChanged) {
+        if (languageChanged && isLoading) {
             showTtsLoading = true
         }
-        TokenAnnouncer.warmUp(context, lang) {
+        TokenAnnouncer.warmUp(context, lang, performPoke = true) {
             Handler(Looper.getMainLooper()).post {
                 showTtsLoading = false
             }
@@ -818,6 +831,21 @@ fun TokenDisplayScreen(
                             )
                         if (!tokenOutcome.playCueUi) return@withLock
 
+                        val willAnnounce =
+                            currentConfig?.enableTokenAnnouncement == true &&
+                                tokenOutcome.speakTokenAnnouncement
+                        val ttsWarmDeferred = if (willAnnounce) {
+                            async {
+                                TokenAnnouncer.awaitReady(
+                                    context,
+                                    currentConfig!!.audioLanguage,
+                                    performPoke = true,
+                                )
+                            }
+                        } else {
+                            null
+                        }
+
                         val publishedAtCueStart = java.util.concurrent.atomic.AtomicBoolean(false)
                         val publishVisualStateAtCueStart = publish@{
                             if (!publishedAtCueStart.compareAndSet(false, true)) return@publish
@@ -828,14 +856,6 @@ fun TokenDisplayScreen(
                             Handler(Looper.getMainLooper()).post {
                                 blinkTriggers[storageKey] = System.currentTimeMillis()
                             }
-                        }
-
-                        if (currentConfig?.enableTokenAnnouncement == true && tokenOutcome.speakTokenAnnouncement) {
-                            TokenAnnouncer.warmUp(
-                                context,
-                                currentConfig.audioLanguage,
-                                performPoke = false,
-                            )
                         }
 
                         val soundKey = ThemeColorManager.getNotificationSoundKey(context)
@@ -850,7 +870,8 @@ fun TokenDisplayScreen(
                         }
                         publishVisualStateAtCueStart()
 
-                        if (currentConfig?.enableTokenAnnouncement == true && tokenOutcome.speakTokenAnnouncement) {
+                        if (willAnnounce) {
+                            ttsWarmDeferred?.await()
                             val displayName =
                                 (actualCounter.name?.takeIf { it.isNotBlank() }
                                     ?: actualCounter.defaultName?.takeIf { it.isNotBlank() }
@@ -878,7 +899,7 @@ fun TokenDisplayScreen(
                             val isSpecial = isSpecialMessageToken(tokenLabel)
                             val decodedSpecial = decodeSpecialMessageToken(tokenLabel)
 
-                            runWithAdvertisementAudioDuckedForSpeech(context) { restore ->
+                            runWithAdvertisementAudioDuckedForSpeech(context) { skipPrime, restore ->
                                 withTimeoutOrNull(6000) {
                                     suspendCancellableCoroutine<Unit> { continuation ->
                                         continuation.invokeOnCancellation { restore() }
@@ -894,6 +915,7 @@ fun TokenDisplayScreen(
                                                 context = context,
                                                 audioLanguage = currentConfig.audioLanguage,
                                                 message = spokenAnnouncement,
+                                                skipSynthesisPrime = skipPrime,
                                                 onDone = {
                                                     restore()
                                                     if (continuation.isActive) continuation.resume(Unit)
@@ -907,6 +929,7 @@ fun TokenDisplayScreen(
                                                 spelledCounterPrefix = if (usePrefix) spokenPrefix else "",
                                                 tokenText = tokenText,
                                                 counterDisplayName = announcementCounterName,
+                                                skipSynthesisPrime = skipPrime,
                                                 onDone = {
                                                     restore()
                                                     if (continuation.isActive) continuation.resume(Unit)
@@ -938,7 +961,14 @@ fun TokenDisplayScreen(
 
                     val buttonIndexKey = counterIdOrName.trim()
                     val actualCounter = findCounterEntityForMqttRoute(currentCounters, buttonIndexKey)
-                        ?: return@launch
+                    if (actualCounter == null) {
+                        android.util.Log.d(
+                            "TokenDisplay",
+                            "Special token '$tokenLabel' — no counter for button_index '$buttonIndexKey'; still reporting MQTT to server"
+                        )
+                        mqttViewModel.markPayloadDisplayed(sourcePayload)
+                        return@launch
+                    }
 
                     val storageKey = actualCounter.buttonIndex?.toString()?.trim()?.takeIf { it.isNotBlank() }
                         ?: buttonIndexKey
@@ -956,6 +986,19 @@ fun TokenDisplayScreen(
                         )
                         if (!replaced) return@withLock
 
+                        val willAnnounce = currentConfig?.enableTokenAnnouncement == true
+                        val ttsWarmDeferred = if (willAnnounce) {
+                            async {
+                                TokenAnnouncer.awaitReady(
+                                    context,
+                                    currentConfig!!.audioLanguage,
+                                    performPoke = true,
+                                )
+                            }
+                        } else {
+                            null
+                        }
+
                         val publishedAtCueStart = java.util.concurrent.atomic.AtomicBoolean(false)
                         val publishVisualStateAtCueStart = publish@{
                             if (!publishedAtCueStart.compareAndSet(false, true)) return@publish
@@ -966,14 +1009,6 @@ fun TokenDisplayScreen(
                             Handler(Looper.getMainLooper()).post {
                                 blinkTriggers[storageKey] = System.currentTimeMillis()
                             }
-                        }
-
-                        if (currentConfig?.enableTokenAnnouncement == true) {
-                            TokenAnnouncer.warmUp(
-                                context,
-                                currentConfig.audioLanguage,
-                                performPoke = false,
-                            )
                         }
 
                         val soundKey = ThemeColorManager.getNotificationSoundKey(context)
@@ -988,7 +1023,8 @@ fun TokenDisplayScreen(
                         }
                         publishVisualStateAtCueStart()
 
-                        if (currentConfig?.enableTokenAnnouncement == true) {
+                        if (willAnnounce) {
+                            ttsWarmDeferred?.await()
                             val displayName =
                                 (actualCounter.name?.takeIf { it.isNotBlank() }
                                     ?: actualCounter.defaultName?.takeIf { it.isNotBlank() }
@@ -1006,7 +1042,7 @@ fun TokenDisplayScreen(
                                 }
                             }
 
-                            runWithAdvertisementAudioDuckedForSpeech(context) { restore ->
+                            runWithAdvertisementAudioDuckedForSpeech(context) { skipPrime, restore ->
                                 withTimeoutOrNull(6000) {
                                     suspendCancellableCoroutine<Unit> { continuation ->
                                         continuation.invokeOnCancellation { restore() }
@@ -1014,6 +1050,7 @@ fun TokenDisplayScreen(
                                             context = context,
                                             audioLanguage = currentConfig.audioLanguage,
                                             message = specialAnnouncement,
+                                            skipSynthesisPrime = skipPrime,
                                             onDone = {
                                                 restore()
                                                 if (continuation.isActive) continuation.resume(Unit)
@@ -1069,7 +1106,7 @@ fun TokenDisplayScreen(
                     onThemeChange = onThemeChange,
                     onCounterBgChange = onCounterBgChange,
                     onTokenBgChange = onTokenBgChange,
-                    onRefresh = { viewModel.loadData(mqttViewModel, forceShowOverlay = true) },
+                    onRefresh = { viewModel.loadData(mqttViewModel, forceShowOverlay = true, clearCacheBeforeFetch = true) },
                     blinkTriggers = blinkTriggers,
                     showReconnectBadge = !stableBrokerConnected && !showMqttRetryDialog,
                     reconnectRetryAttempt = reconnectDisplayTry,
@@ -1119,7 +1156,7 @@ fun TokenDisplayScreen(
                 }
             },
             confirmButton = {
-                Button(onClick = { viewModel.loadData(mqttViewModel) }) {
+                Button(onClick = { viewModel.loadData(mqttViewModel, clearCacheBeforeFetch = true) }) {
                     Text("Retry")
                 }
             }
@@ -1128,7 +1165,7 @@ fun TokenDisplayScreen(
         LicenseExpiredDialog(
             macAddress = macAddress,
             errorMessage = errorMessage,
-            onRefresh = { viewModel.loadData(mqttViewModel, forceShowOverlay = true) }
+            onRefresh = { viewModel.loadData(mqttViewModel, forceShowOverlay = true, clearCacheBeforeFetch = true) }
         )
     } else if (config == null) {
         TvConfigurationUnavailableScreen(
@@ -1136,7 +1173,7 @@ fun TokenDisplayScreen(
             appVersion = appVersion,
             isNetworkAvailable = isNetworkAvailable,
             errorMessage = errorMessage,
-            onRetry = { viewModel.loadData(mqttViewModel, forceShowOverlay = true) },
+            onRetry = { viewModel.loadData(mqttViewModel, forceShowOverlay = true, clearCacheBeforeFetch = true) },
         )
     }
 
@@ -1434,7 +1471,7 @@ private fun TokenDisplayContent(
             onRefresh = onRefresh,
             onClearTokenHistoryAndRefresh = {
                 mqttViewModel.clearTokenHistory()
-                viewModel.loadData(mqttViewModel, forceShowOverlay = true)
+                viewModel.loadData(mqttViewModel, forceShowOverlay = true, clearCacheBeforeFetch = true)
             },
             tokenBlinkMode = tokenBlinkMode,
             onTokenBlinkModeChange = { tokenBlinkMode = it },
@@ -1889,8 +1926,8 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity, counterBgHex: St
     val adSwitchScope = rememberCoroutineScope()
     val transitionHoldMs = 180L
     var visibleAdReady by remember(orderedAds) { mutableStateOf(false) }
-    // Double-buffer: front slot is visible; back slot preloads next video without a black handoff.
-    var frontPlayerSlot by remember(orderedAds) { mutableIntStateOf(0) }
+    // Single ExoPlayer + shared TextureView (alternating two decoders caused frozen frames with audio).
+    val exoPlayerSlot = 0
     val mediaTypeCache = remember { mutableStateMapOf<String, AdMediaType>() }
     val sharedYoutubeWebView = remember(context) {
         buildBaseYoutubeWebView(context)
@@ -1966,6 +2003,7 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity, counterBgHex: St
                 lc.contains("youtube-nocookie.com") -> AdMediaType.YouTube
             isAdVideo(path) -> AdMediaType.Video
             isAdImage(path) -> AdMediaType.Image
+            isServerHostedAdMediaPath(path) && !isLikelyHtmlWebPage(path) -> AdMediaType.Video
             lc.startsWith("http://") || lc.startsWith("https://") -> AdMediaType.Web
             else -> AdMediaType.Image
         }
@@ -2033,11 +2071,22 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity, counterBgHex: St
             // Let preload composables dispose before the shared TextureView is reattached.
             delay(48)
             if (preloadTokenSnapshot != candidateLoadToken) return@launch
-            frontPlayerSlot = 1 - frontPlayerSlot
-            visibleAd = nextAd
-            visibleAdIdx = nextIdx.coerceAtLeast(0)
-            visibleAdReady = true
-            visibleReplayToken += 1
+            applyVisibleAd(nextAd, nextIdx, "preload_ready")
+        }
+    }
+
+    /** Hands off to the next ad after a short hold (keeps last frame visible during Exo/WebView teardown). */
+    fun scheduleExoOrYoutubeHandoff(nextAd: AdFileEntity, nextIdx: Int, reason: String) {
+        val token = candidateLoadToken
+        adSwitchScope.launch {
+            delay(transitionHoldMs)
+            if (token != candidateLoadToken) return@launch
+            if (candidateAd?.id != nextAd.id || candidateAd?.position != nextAd.position) return@launch
+            candidateAd = null
+            candidateAdIdx = -1
+            delay(48)
+            if (token != candidateLoadToken) return@launch
+            applyVisibleAd(nextAd, nextIdx, reason)
         }
     }
 
@@ -2057,22 +2106,19 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity, counterBgHex: St
             "AdLoop",
             "triggerNext current[${currentIdx.coerceAtLeast(0)}]=${visibleAd?.filePath?.take(90)} -> next[$nextIdx]=${next.filePath.take(90)}"
         )
-        // Preload the next ad first, keep current ad on screen meanwhile.
         candidateLoadToken += 1
         candidateAd = next
         candidateAdIdx = nextIdx
         val nextType = mediaTypeCache[next.filePath] ?: fastInferMediaType(next.filePath)
-        if (nextType == AdMediaType.YouTube) {
-            val token = candidateLoadToken
-            adSwitchScope.launch {
-                delay(transitionHoldMs)
-                if (candidateAd?.id == next.id &&
-                    candidateAd?.position == next.position &&
-                    token == candidateLoadToken
-                ) {
-                    promoteCandidateAfterHold(token, next, nextIdx)
-                }
+        when {
+            nextType == AdMediaType.YouTube -> {
+                scheduleExoOrYoutubeHandoff(next, nextIdx, "trigger_next_youtube")
             }
+            usesExoTexturePlayback(nextType, next.filePath) -> {
+                // Exo preload was disabled on TV SoCs; advance explicitly so the playlist never stalls.
+                scheduleExoOrYoutubeHandoff(next, nextIdx, "trigger_next_exo")
+            }
+            // Image / static Web: off-screen preload composable calls promoteCandidateAfterHold on ready.
         }
     }
 
@@ -2083,12 +2129,22 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity, counterBgHex: St
                 visibleAd?.position == expectedCurrentAd.position
             if (!stillSame) return
         }
-        val currentIdx = orderedAds.indexOfFirst { it.id == ad.id && it.position == ad.position }
+        val fromIdx = orderedAds.indexOfFirst { it.id == ad.id && it.position == ad.position }
             .takeIf { it >= 0 } ?: visibleAdIdx.coerceIn(0, orderedAds.lastIndex)
-        val nextIdx = (currentIdx + 1) % orderedAds.size
+        val nextIdx = (fromIdx + 1) % orderedAds.size
+        val next = orderedAds[nextIdx]
         candidateLoadToken += 1
-        candidateAd = orderedAds[nextIdx]
+        candidateAd = next
         candidateAdIdx = nextIdx
+        val nextType = mediaTypeCache[next.filePath] ?: fastInferMediaType(next.filePath)
+        when {
+            nextType == AdMediaType.YouTube -> {
+                scheduleExoOrYoutubeHandoff(next, nextIdx, "trigger_next_from_youtube")
+            }
+            usesExoTexturePlayback(nextType, next.filePath) -> {
+                scheduleExoOrYoutubeHandoff(next, nextIdx, "trigger_next_from_exo")
+            }
+        }
     }
 
     // Ensure non-ended media types always advance by configured interval so the full ad list
@@ -2150,7 +2206,8 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity, counterBgHex: St
             )
         }
         LaunchedEffect(viewportPx.width, viewportPx.height) {
-            delay(350)
+            AdViewportSizing.lastViewport = viewportPx
+            delay(120)
             MediaEngine.updateViewport(context, viewportPx.width, viewportPx.height)
         }
         LaunchedEffect(orderedAds, viewportPx) {
@@ -2183,8 +2240,6 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity, counterBgHex: St
         if (orderedAds.isEmpty()) {
             Text("No Ads", color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
-            val frontSlot = frontPlayerSlot
-            val backSlot = 1 - frontSlot
             val visibleAdSnapshot = visibleAd
             val preloadAd = candidateAd
             val visibleType = visibleAdSnapshot?.let { ad ->
@@ -2210,10 +2265,10 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity, counterBgHex: St
                 }
 
                 if (visibleAdSnapshot != null && visibleType != null) {
-                    key(visibleAdSnapshot.id, visibleAdSnapshot.position, visibleReplayToken, frontSlot) {
+                    key(visibleAdSnapshot.id, visibleAdSnapshot.position, visibleReplayToken) {
                         Log.i(
                             "AdClassifier",
-                            "VISIBLE slot=$frontSlot type=$visibleType url=${visibleAdSnapshot.filePath.take(140)}"
+                            "VISIBLE type=$visibleType url=${visibleAdSnapshot.filePath.take(140)}"
                         )
                         AdUnifiedPlayer(
                             ad = visibleAdSnapshot,
@@ -2226,7 +2281,7 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity, counterBgHex: St
                             } else {
                                 null
                             },
-                            activePlayerIdx = frontSlot,
+                            activePlayerIdx = exoPlayerSlot,
                             videoAttachToTexture = true,
                             videoSurfaceReadySignal = sharedSurfaceGeneration,
                             onReady = {
@@ -2270,7 +2325,7 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity, counterBgHex: St
                         ) {
                             Log.i(
                                 "AdClassifier",
-                                "PRELOAD slot=$backSlot type=$preloadType url=${preloadAd.filePath.take(140)}"
+                                "PRELOAD type=$preloadType url=${preloadAd.filePath.take(140)}"
                             )
                             AdUnifiedPlayer(
                                 ad = preloadAd,
@@ -2279,7 +2334,7 @@ fun AdArea(adFiles: List<AdFileEntity>, config: TvConfigEntity, counterBgHex: St
                                 viewport = viewportPx,
                                 sharedYoutubeWebView = sharedYoutubeWebView,
                                 sharedVideoTextureView = null,
-                                activePlayerIdx = backSlot,
+                                activePlayerIdx = exoPlayerSlot,
                                 videoAttachToTexture = true,
                                 onReady = {
                                     if (preloadTokenSnapshot == candidateLoadToken) {
@@ -2372,6 +2427,7 @@ private fun resolveAdMediaType(path: String, context: Context): AdMediaType {
         lc.contains("youtube.com") || lc.contains("youtu.be") || lc.contains("youtube-nocookie.com") -> AdMediaType.YouTube
         isAdVideo(path) -> AdMediaType.Video
         isAdImage(path) -> AdMediaType.Image
+        isServerHostedAdMediaPath(path) && !isLikelyHtmlWebPage(path) -> AdMediaType.Video
         lc.startsWith("http://") || lc.startsWith("https://") -> AdMediaType.Web
         else -> {
             val mime = detectMimeType(path, context)
@@ -3380,10 +3436,13 @@ internal fun isAdLowBandwidthNetwork(context: Context): Boolean {
 
 
 /** Stops playback and clears the queue so the next ad can bind a fresh decoder (avoids MTK NO_MEMORY). */
-private fun releaseExoVideoDecoder(player: ExoPlayer) {
+private fun releaseExoVideoDecoder(player: ExoPlayer, texture: TextureView? = null) {
     try {
         player.playWhenReady = false
         player.stop()
+        if (texture != null) {
+            player.clearVideoTextureView(texture)
+        }
         player.clearMediaItems()
     } catch (_: Exception) {
     }
@@ -3399,7 +3458,12 @@ private fun prepareAdVideoOnPlayer(
     context: Context,
     viewport: AdViewportPx,
 ) {
+    if (viewport.isValid()) {
+        AdViewportSizing.lastViewport = viewport
+    }
     if (attachToTexture && texture != null) {
+        MediaEngine.detachTextureFromAllPlayers(texture)
+        texture.setTransform(null)
         player.setVideoTextureView(texture)
     }
     applyAdaptiveVideoTrackCap(
@@ -3443,6 +3507,8 @@ fun AdVideoPlayer(
     var readyReported by remember(videoUrl) { mutableStateOf(false) }
     var terminalEventReported by remember(videoUrl) { mutableStateOf(false) }
     var loadStartedAtMs by remember(videoUrl) { mutableStateOf(0L) }
+    var lastSurfaceFrameMs by remember(videoUrl) { mutableLongStateOf(0L) }
+    var surfaceRecoveryAttempts by remember(videoUrl) { mutableIntStateOf(0) }
     val isLowBandwidth = remember(videoUrl) { isAdLowBandwidthNetwork(context) }
 
     DisposableEffect(videoUrl, player) {
@@ -3486,12 +3552,14 @@ fun AdVideoPlayer(
 
             override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
                 latestVideoSize = videoSize
+                lastSurfaceFrameMs = System.currentTimeMillis()
                 videoTextureRef.value?.post {
                     applyFitCenterTransform(videoTextureRef.value, videoSize)
                 }
             }
 
             override fun onRenderedFirstFrame() {
+                lastSurfaceFrameMs = System.currentTimeMillis()
                 if (!readyReported) {
                     readyReported = true
                     Log.i(
@@ -3549,6 +3617,8 @@ fun AdVideoPlayer(
         readyReported = false
         terminalEventReported = false
         loadStartedAtMs = System.currentTimeMillis()
+        lastSurfaceFrameMs = 0L
+        surfaceRecoveryAttempts = 0
         val loadUrl = videoUrl
         val texture = when {
             !attachToTexture -> null
@@ -3572,17 +3642,41 @@ fun AdVideoPlayer(
             return@LaunchedEffect
         }
         try {
-            releaseExoVideoDecoder(player)
-            prepareAdVideoOnPlayer(
-                player = player,
-                texture = texture,
-                attachToTexture = attachToTexture,
-                mediaItem = mediaItem,
-                videoUrl = loadUrl,
-                isLowBandwidth = isLowBandwidth,
-                context = context,
-                viewport = viewport,
-            )
+            val canHandoffFromEnded =
+                attachToTexture &&
+                    texture != null &&
+                    player.playbackState == Player.STATE_ENDED
+            if (canHandoffFromEnded) {
+                // Reuse the same decoder/surface for the next clip to reduce black frames between ads.
+                if (viewport.isValid()) {
+                    AdViewportSizing.lastViewport = viewport
+                }
+                MediaEngine.detachTextureFromAllPlayers(texture)
+                texture.setTransform(null)
+                player.setVideoTextureView(texture)
+                applyAdaptiveVideoTrackCap(
+                    player = player,
+                    videoUrl = loadUrl,
+                    isLowBandwidth = isLowBandwidth,
+                    context = context,
+                    viewport = viewport,
+                )
+                player.setMediaItem(mediaItem)
+                player.prepare()
+                player.playWhenReady = true
+            } else {
+                releaseExoVideoDecoder(player, texture)
+                prepareAdVideoOnPlayer(
+                    player = player,
+                    texture = texture,
+                    attachToTexture = attachToTexture,
+                    mediaItem = mediaItem,
+                    videoUrl = loadUrl,
+                    isLowBandwidth = isLowBandwidth,
+                    context = context,
+                    viewport = viewport,
+                )
+            }
             Log.i(
                 "AdVideoPerf",
                 "Prepared ${if (attachToTexture) "with" else "without"} surface url=${loadUrl.take(120)}"
@@ -3591,6 +3685,52 @@ fun AdVideoPlayer(
             Log.e("AdVideoPlayer", "Failed to prepare video: $loadUrl", e)
             terminalEventReported = true
             latestOnError()
+        }
+    }
+
+    // Detect frozen TextureView (audio continues but last frame sticks).
+    LaunchedEffect(videoUrl, player, attachToTexture) {
+        if (!attachToTexture) return@LaunchedEffect
+        while (true) {
+            delay(2_000L)
+            if (terminalEventReported) return@LaunchedEffect
+            if (!player.isPlaying || player.playbackState != Player.STATE_READY) continue
+            val lastFrame = lastSurfaceFrameMs
+            if (lastFrame <= 0L) continue
+            val staleMs = System.currentTimeMillis() - lastFrame
+            if (staleMs < 3_500L) continue
+
+            val texture = videoTextureRef.value ?: sharedTextureView
+            if (surfaceRecoveryAttempts < 2) {
+                surfaceRecoveryAttempts += 1
+                Log.w(
+                    "AdVideoPlayer",
+                    "Video surface stale ${staleMs}ms; rebinding surface (attempt $surfaceRecoveryAttempts) url=${videoUrl.take(90)}",
+                )
+                mainHandler.post {
+                    try {
+                        texture?.setTransform(null)
+                        if (texture != null) {
+                            MediaEngine.detachTextureFromAllPlayers(texture)
+                            player.setVideoTextureView(texture)
+                        }
+                        val pos = player.currentPosition.coerceAtLeast(1L)
+                        player.seekTo(pos)
+                        player.playWhenReady = true
+                        lastSurfaceFrameMs = System.currentTimeMillis()
+                    } catch (e: Exception) {
+                        Log.w("AdVideoPlayer", "Surface recovery failed: ${e.message}")
+                    }
+                }
+            } else {
+                Log.e(
+                    "AdVideoPlayer",
+                    "Video surface frozen after recovery; skipping url=${videoUrl.take(90)}",
+                )
+                terminalEventReported = true
+                latestOnError()
+                return@LaunchedEffect
+            }
         }
     }
 
@@ -3630,7 +3770,8 @@ fun AdVideoPlayer(
                     texture = texture,
                     player = player,
                     onSurfaceReady = { textureSurfaceGeneration += 1 },
-                    onLayout = { applyFitCenterTransform(texture, latestVideoSize) }
+                    onLayout = { applyFitCenterTransform(texture, latestVideoSize) },
+                    onSurfaceFrame = { lastSurfaceFrameMs = System.currentTimeMillis() },
                 )
                 videoTextureRef.value = texture
                 texture
@@ -3647,7 +3788,8 @@ fun AdVideoPlayer(
                     texture = view,
                     player = player,
                     onSurfaceReady = { textureSurfaceGeneration += 1 },
-                    onLayout = { applyFitCenterTransform(view, latestVideoSize) }
+                    onLayout = { applyFitCenterTransform(view, latestVideoSize) },
+                    onSurfaceFrame = { lastSurfaceFrameMs = System.currentTimeMillis() },
                 )
             },
             modifier = Modifier
@@ -3706,46 +3848,57 @@ private fun bindAdTextureSurfaceOnly(
     }
 }
 
+private class AdTextureCallbackState(
+    var onLayout: () -> Unit,
+    var onSurfaceFrame: () -> Unit,
+    var onSurfaceReady: () -> Unit,
+)
+
 private fun bindAdVideoTextureView(
     texture: TextureView,
     player: ExoPlayer,
     onSurfaceReady: () -> Unit,
     onLayout: () -> Unit,
+    onSurfaceFrame: () -> Unit = {},
 ) {
-    if (texture.tag != "callqtv_ad_texture_bound") {
-        texture.tag = "callqtv_ad_texture_bound"
-        val layoutHandler = Handler(Looper.getMainLooper())
-        var layoutRunnable: Runnable? = null
-        texture.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-            layoutRunnable?.let { layoutHandler.removeCallbacks(it) }
-            layoutRunnable = Runnable { onLayout() }
-            layoutHandler.postDelayed(layoutRunnable!!, 32L)
+    @Suppress("UNCHECKED_CAST")
+    val state = (texture.tag as? AdTextureCallbackState)
+        ?: AdTextureCallbackState(onLayout, onSurfaceFrame, onSurfaceReady).also { created ->
+            texture.tag = created
+            val layoutHandler = Handler(Looper.getMainLooper())
+            var layoutRunnable: Runnable? = null
+            texture.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+                layoutRunnable?.let { layoutHandler.removeCallbacks(it) }
+                layoutRunnable = Runnable { created.onLayout() }
+                layoutHandler.postDelayed(layoutRunnable!!, 32L)
+            }
+            texture.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
+                    created.onSurfaceReady()
+                    created.onLayout()
+                }
+
+                override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
+                    created.onLayout()
+                }
+
+                override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+                    texture.surfaceTextureListener = null
+                    return true
+                }
+
+                override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
+                    created.onSurfaceFrame()
+                }
+            }
         }
-    }
-    fun notifySurfaceReady() {
-        player.setVideoTextureView(texture)
-        onSurfaceReady()
-    }
+    state.onLayout = onLayout
+    state.onSurfaceFrame = onSurfaceFrame
+    state.onSurfaceReady = onSurfaceReady
+
     if (texture.isAvailable) {
-        notifySurfaceReady()
-        return
-    }
-    texture.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-        override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
-            texture.surfaceTextureListener = null
-            notifySurfaceReady()
-        }
-
-        override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
-            onLayout()
-        }
-
-        override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
-            texture.surfaceTextureListener = null
-            return true
-        }
-
-        override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
+        onSurfaceReady()
+        onLayout()
     }
 }
 
@@ -3824,7 +3977,7 @@ private fun applyFitCenterTransform(
     textureView.getTransform(current)
     if (!matrixAlmostEqual(current, matrix)) {
         textureView.setTransform(matrix)
-        // Avoid forcing extra redraws every recomposition/layout pass.
+        textureView.invalidate()
     }
 }
 
@@ -3927,11 +4080,12 @@ private class AdAnnouncementRestoreOnce(private val appContext: Context) {
 
 private suspend fun runWithAdvertisementAudioDuckedForSpeech(
     context: Context,
-    block: suspend (restore: () -> Unit) -> Unit,
+    block: suspend (skipSynthesisPrime: Boolean, restore: () -> Unit) -> Unit,
 ) {
     val prefs = context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
-    if (!prefs.getBoolean("enable_ad_sound", false)) {
-        block { }
+    val adSoundEnabled = prefs.getBoolean("enable_ad_sound", false)
+    if (!adSoundEnabled) {
+        block(false) { }
         return
     }
     val restore = AdAnnouncementRestoreOnce(context.applicationContext)
@@ -3939,8 +4093,9 @@ private suspend fun runWithAdvertisementAudioDuckedForSpeech(
         MediaEngine.duckForAnnouncement()
         TokenAnnouncementAdAudio.applyYoutubeDuck(true)
     }
+    TokenAnnouncer.awaitSynthesisPrimeIfNeeded()
     try {
-        block { restore.run() }
+        block(true) { restore.run() }
     } finally {
         restore.run()
     }
@@ -4079,6 +4234,17 @@ object MediaEngine {
      * Called when the ad pane is laid out. Track caps are applied only while [ExoPlayer] is idle
      * so a resize mid-playback does not reconfigure the decoder (grain / crack / freeze).
      */
+    fun detachTextureFromAllPlayers(texture: TextureView) {
+        try {
+            player1?.clearVideoTextureView(texture)
+        } catch (_: Exception) {
+        }
+        try {
+            player2?.clearVideoTextureView(texture)
+        } catch (_: Exception) {
+        }
+    }
+
     fun updateViewport(context: Context, widthPx: Int, heightPx: Int) {
         val viewport = AdViewportSizing.fromConstraints(widthPx, heightPx, context)
         listOfNotNull(player1, player2).forEach { player ->
@@ -4357,6 +4523,7 @@ private fun CounterTokenSlot(
         else -> formattedToken
     }
     val textColorToUse = if (isFirst) currentTokenTextColor else previousTokenTextColor
+    val isSpecialMsg = isSpecialMessageToken(token) || isSpecialMessageToken(formattedToken)
     TokenCard(
         token = displayToken,
         isPrimary = isFirst,
@@ -4367,6 +4534,28 @@ private fun CounterTokenSlot(
         isInverted = if (isFirst && shouldBlink && token != null) isInverted else false,
         blinkMode = tokenBlinkMode,
         fullSize = true,
+        multiline = isSpecialMsg,
+        specialCounterMessage = isSpecialMsg,
+    )
+}
+
+/** Counter header: centered when it fits; seamless horizontal marquee when the name is wider than the tile. */
+@Composable
+private fun CounterNameLabel(
+    name: String,
+    fontSize: androidx.compose.ui.unit.TextUnit,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    val textColorInt = color.toArgb()
+    val fontSizeSp = fontSize.value
+    AndroidView(
+        factory = { CounterNameTickerView(it) },
+        update = { view -> view.bind(name, textColorInt, fontSizeSp) },
+        modifier = modifier
+            .fillMaxWidth()
+            .fillMaxHeight()
+            .clipToBounds(),
     )
 }
 
@@ -4417,13 +4606,15 @@ fun CounterBoard(
     val shouldBlink = config.blinkCurrentToken ?: false
     val blinkSeconds = config.blinkSeconds ?: 0
 
-    // Blink only for blinkSeconds; if blinkSeconds <= 0, blink indefinitely (backward compat).
-    // Restart blink timer whenever the current token changes.
-    val currentTokenForBlink = tokens.firstOrNull()
-    var blinkActive by remember { mutableStateOf(true) }
-    LaunchedEffect(shouldBlink, blinkSeconds, currentTokenForBlink, blinkTrigger) {
+    // Blink only after a live token call (blinkTrigger); not when tokens are restored from DB on refresh.
+    var blinkActive by remember { mutableStateOf(false) }
+    LaunchedEffect(shouldBlink, blinkSeconds, blinkTrigger) {
+        if (!shouldBlink || blinkTrigger == 0L) {
+            blinkActive = false
+            return@LaunchedEffect
+        }
         blinkActive = true
-        if (shouldBlink && blinkSeconds > 0 && currentTokenForBlink != null) {
+        if (blinkSeconds > 0) {
             delay(blinkSeconds * 1000L)
             blinkActive = false
         }
@@ -4471,13 +4662,13 @@ fun CounterBoard(
                             .fillMaxHeight(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = counterName,
-                            fontWeight = FontWeight.Bold,
+                        CounterNameLabel(
+                            name = counterName,
                             fontSize = (counterFontSize * scale).sp,
                             color = counterColor,
-                            maxLines = 1,
-                            textAlign = TextAlign.Center
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = (counterFontSize * scale * 1.35f).dp.coerceAtLeast(20.dp)),
                         )
                     }
 
@@ -4528,20 +4719,23 @@ fun CounterBoard(
                     }
                 }
             } else {
+                // Cap header height: fillMaxHeight on the name row steals the whole column and hides tokens.
+                val landscapeHeaderHeight = (counterFontSize * scale * 1.45f).dp.coerceIn(22.dp, 52.dp)
                 Column(modifier = Modifier.fillMaxSize().padding(1.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     BoxWithConstraints(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .height(landscapeHeaderHeight)
                             .padding(horizontal = 2.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = counterName,
-                            fontWeight = FontWeight.Bold,
+                        CounterNameLabel(
+                            name = counterName,
                             fontSize = (counterFontSize * scale).sp,
                             color = counterColor,
-                            maxLines = 1,
-                            textAlign = TextAlign.Center
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .fillMaxHeight(),
                         )
                     }
                     Spacer(modifier = Modifier.height(1.dp))
@@ -4609,15 +4803,15 @@ private fun measureTokenAutoFitSp(
     if (text.isEmpty()) return maxSp.coerceAtLeast(minSp)
     if (maxW <= 0f || maxH <= 0f) return minSp
     var lo = minSp
-    var hi = maxSp
+    var hi = maxSp.coerceAtLeast(minSp)
     if (hi <= lo) return lo
     var best = lo
-    // Do not pass huge raw Ints — Constraints packs dimensions and rejects values like Int.MAX_VALUE ushr 2.
-    // Defaults use Compose's internal Infinity, which encodes correctly.
+    val maxWInt = maxW.toInt().coerceAtLeast(1)
+    val maxHInt = maxH.toInt().coerceAtLeast(1)
     val measureConstraints = if (multiline) {
-        Constraints(maxWidth = maxW.toInt().coerceAtLeast(1))
+        Constraints(maxWidth = maxWInt, maxHeight = maxHInt)
     } else {
-        Constraints()
+        Constraints(maxWidth = maxWInt)
     }
     fun styleFor(mid: Float): TextStyle {
         val base = TextStyle(
@@ -4653,6 +4847,103 @@ private fun measureTokenAutoFitSp(
     return best
 }
 
+/** Compose [Constraints] reject very large dimensions (e.g. Int.MAX_VALUE / 4). */
+private fun composeMeasureMaxPx(px: Float): Int = px.toInt().coerceIn(1, 8192)
+
+/** Largest single-line font (sp) that fits in [maxH] px (for horizontal marquee). */
+private fun measureTokenAutoFitHeightSp(
+    textMeasurer: TextMeasurer,
+    text: String,
+    maxH: Float,
+    maxSp: Float,
+    minSp: Float,
+    maxWpx: Float = 8192f,
+    lineHeightEm: Float = 1f,
+): Float {
+    if (text.isEmpty()) return maxSp.coerceAtLeast(minSp)
+    if (maxH <= 0f) return minSp
+    var lo = minSp
+    var hi = maxSp.coerceAtLeast(minSp)
+    if (hi <= lo) return lo
+    var best = lo
+    val maxHInt = composeMeasureMaxPx(maxH)
+    val maxWInt = composeMeasureMaxPx(maxWpx)
+    fun styleFor(mid: Float): TextStyle {
+        val base = TextStyle(fontWeight = FontWeight.Bold, fontSize = mid.sp)
+        return if (lineHeightEm > 1.02f) {
+            base.copy(lineHeight = (mid * lineHeightEm).sp)
+        } else {
+            base
+        }
+    }
+    repeat(24) {
+        val mid = (lo + hi) / 2f
+        val layout = textMeasurer.measure(
+            text = AnnotatedString(text),
+            style = styleFor(mid),
+            overflow = TextOverflow.Clip,
+            softWrap = false,
+            maxLines = 1,
+            constraints = Constraints(maxWidth = maxWInt, maxHeight = maxHInt),
+        )
+        val fits = layout.size.height.toFloat() <= maxH
+        if (fits) {
+            best = mid
+            lo = mid
+        } else {
+            hi = mid
+        }
+    }
+    return best
+}
+
+/** Pack [text] onto lines at word boundaries so Compose never breaks mid-word. */
+private fun buildWordWrappedMessage(
+    textMeasurer: TextMeasurer,
+    text: String,
+    maxWpx: Float,
+    fontSp: Float,
+    lineHeightEm: Float,
+): String {
+    val words = text.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+    if (words.size <= 1) return text.trim()
+    val maxWInt = maxWpx.toInt().coerceAtLeast(1)
+    val style = TextStyle(
+        fontWeight = FontWeight.Bold,
+        fontSize = fontSp.sp,
+        lineHeight = if (lineHeightEm > 1.02f) (fontSp * lineHeightEm).sp else TextUnit.Unspecified,
+    )
+    fun lineWidth(line: String): Float =
+        textMeasurer.measure(
+            text = AnnotatedString(line),
+            style = style,
+            softWrap = false,
+            maxLines = 1,
+            constraints = Constraints(maxWidth = maxWInt),
+        ).size.width.toFloat()
+
+    val lines = mutableListOf<String>()
+    var current = StringBuilder()
+    for (word in words) {
+        val candidate = if (current.isEmpty()) word else "${current} $word"
+        if (lineWidth(candidate) <= maxWpx) {
+            current = StringBuilder(candidate)
+        } else {
+            if (current.isNotEmpty()) {
+                lines.add(current.toString())
+                current = StringBuilder()
+            }
+            if (lineWidth(word) <= maxWpx) {
+                current = StringBuilder(word)
+            } else {
+                lines.add(word)
+            }
+        }
+    }
+    if (current.isNotEmpty()) lines.add(current.toString())
+    return lines.joinToString("\n")
+}
+
 @Composable
 fun TokenCard(
     token: String?,
@@ -4673,13 +4964,12 @@ fun TokenCard(
     // Reduced height multiplier to tighten padding around the text
     val cardHeight = (fontSize * 1.6f * scale).coerceIn(32f, 120f).dp
     val textMeasurer = rememberTextMeasurer()
+    val effectiveMultiline = multiline || specialCounterMessage
     val maxMultilineLines = if (specialCounterMessage) 24 else 4
     val lineHeightEm =
-        if (specialCounterMessage && multiline) SPECIAL_COUNTER_MSG_LINE_HEIGHT_EM else 1f
+        if (specialCounterMessage && effectiveMultiline) SPECIAL_COUNTER_MSG_LINE_HEIGHT_EM else 1f
     // Extra insets so multiline protocol C / __MSG__ text is not clipped and lines are not cramped.
     val outerPad = if (specialCounterMessage) (4f * scale).dp.coerceIn(3.dp, 8.dp) else 1.dp
-    val innerPadH = if (specialCounterMessage) (12f * scale).dp.coerceIn(8.dp, 20.dp) else 4.dp
-    val innerPadV = if (specialCounterMessage) (10f * scale).dp.coerceIn(8.dp, 18.dp) else 2.dp
 
     Card(
         modifier = modifier
@@ -4712,56 +5002,146 @@ fun TokenCard(
             if (fullSize) {
                 val density = LocalDensity.current
                 BoxWithConstraints(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = innerPadH, vertical = innerPadV),
-                    contentAlignment = Alignment.Center
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
                 ) {
                     val maxWpx = with(density) { maxWidth.toPx() }.coerceAtLeast(1f)
                     val maxHpx = with(density) { maxHeight.toPx() }.coerceAtLeast(1f)
+                    val minSidePx = minOf(maxWpx, maxHpx)
+                    val padScale = if (specialCounterMessage) {
+                        (minSidePx / (56f * density.density)).coerceIn(0.35f, 1f)
+                    } else {
+                        1f
+                    }
+                    val innerPadH = if (specialCounterMessage) {
+                        (12f * scale * padScale).dp.coerceIn(2.dp, 20.dp)
+                    } else {
+                        4.dp
+                    }
+                    val innerPadV = if (specialCounterMessage) {
+                        (10f * scale * padScale).dp.coerceIn(2.dp, 18.dp)
+                    } else {
+                        2.dp
+                    }
+                    val innerWpx = (maxWpx - with(density) { (innerPadH * 2).toPx() }).coerceAtLeast(1f)
+                    val innerHpx = (maxHpx - with(density) { (innerPadV * 2).toPx() }).coerceAtLeast(1f)
                     val display = token ?: ""
-                    val maxFontSp = fontSize * scale
-                    val minFontSp = 6f
-                    val fittedSp = remember(
-                        display,
-                        maxWpx,
-                        maxHpx,
-                        maxFontSp,
-                        multiline,
-                        maxMultilineLines,
-                        lineHeightEm,
-                        textMeasurer,
-                    ) {
-                        measureTokenAutoFitSp(
-                            textMeasurer,
+                    val refTileAreaPx = 220f * 72f
+                    val areaScale = kotlin.math.sqrt((innerWpx * innerHpx) / refTileAreaPx)
+                        .coerceIn(0.32f, 1f)
+                    val maxFontSp = if (specialCounterMessage) {
+                        (fontSize * scale * areaScale).coerceAtLeast(8f)
+                    } else {
+                        fontSize * scale
+                    }
+                    val minFontSp = if (specialCounterMessage) 3.5f else 6f
+                    // Narrow tiles: one scrolling line (avoids "NURS"/"E"/"CALLI" mid-word breaks).
+                    val useSpecialMessageTicker =
+                        specialCounterMessage && innerWpx < innerHpx * 0.85f
+                    if (useSpecialMessageTicker) {
+                        val tickerSp = remember(
                             display,
-                            maxWpx,
-                            maxHpx,
+                            innerWpx,
+                            innerHpx,
                             maxFontSp,
                             minFontSp,
-                            multiline,
+                            lineHeightEm,
+                        ) {
+                            measureTokenAutoFitHeightSp(
+                                textMeasurer,
+                                display,
+                                innerHpx,
+                                maxFontSp,
+                                minFontSp,
+                                maxWpx = (innerWpx * 12f).coerceAtLeast(512f),
+                                lineHeightEm = lineHeightEm,
+                            )
+                        }
+                        val messageColorInt = finalTextColor.toArgb()
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = innerPadH, vertical = innerPadV)
+                                .clipToBounds(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            AndroidView(
+                                factory = { CounterNameTickerView(it) },
+                                update = { view ->
+                                    // finalTextColor changes every blink frame; bind updates color only.
+                                    view.bind(display, messageColorInt, tickerSp)
+                                },
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                    } else {
+                        val displayForFit = remember(
+                            display,
+                            innerWpx,
+                            maxFontSp,
+                            specialCounterMessage,
+                        ) {
+                            if (specialCounterMessage) {
+                                buildWordWrappedMessage(
+                                    textMeasurer,
+                                    display,
+                                    innerWpx,
+                                    maxFontSp,
+                                    lineHeightEm,
+                                )
+                            } else {
+                                display
+                            }
+                        }
+                        val fittedSp = remember(
+                            displayForFit,
+                            innerWpx,
+                            innerHpx,
+                            maxFontSp,
+                            minFontSp,
+                            effectiveMultiline,
                             maxMultilineLines,
-                            lineHeightEm = lineHeightEm,
+                            lineHeightEm,
+                        ) {
+                            measureTokenAutoFitSp(
+                                textMeasurer,
+                                displayForFit,
+                                innerWpx,
+                                innerHpx,
+                                maxFontSp,
+                                minFontSp,
+                                effectiveMultiline,
+                                maxMultilineLines,
+                                lineHeightEm = lineHeightEm,
+                            )
+                        }
+                        val messageStyle = TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = fittedSp.sp,
+                            color = finalTextColor,
+                            textAlign = TextAlign.Center,
+                            lineHeight = if (lineHeightEm > 1.02f) {
+                                (fittedSp * lineHeightEm).sp
+                            } else {
+                                TextUnit.Unspecified
+                            },
                         )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = innerPadH, vertical = innerPadV),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = displayForFit,
+                                style = messageStyle,
+                                maxLines = if (effectiveMultiline) maxMultilineLines else 1,
+                                softWrap = effectiveMultiline,
+                                overflow = TextOverflow.Clip,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
                     }
-                    val messageStyle = TextStyle(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = fittedSp.sp,
-                        color = finalTextColor,
-                        textAlign = TextAlign.Center,
-                        lineHeight = if (lineHeightEm > 1.02f) {
-                            (fittedSp * lineHeightEm).sp
-                        } else {
-                            TextUnit.Unspecified
-                        },
-                    )
-                    Text(
-                        text = display,
-                        style = messageStyle,
-                        maxLines = if (multiline) maxMultilineLines else 1,
-                        softWrap = multiline,
-                        overflow = TextOverflow.Clip,
-                    )
                 }
             } else {
                 Text(
@@ -4770,8 +5150,8 @@ fun TokenCard(
                     fontSize = (fontSize * scale).sp,
                     color = finalTextColor,
                     textAlign = TextAlign.Center,
-                    maxLines = if (multiline) maxMultilineLines else 1,
-                    softWrap = multiline
+                    maxLines = if (effectiveMultiline) maxMultilineLines else 1,
+                    softWrap = effectiveMultiline,
                 )
             }
         }
@@ -6251,6 +6631,283 @@ fun ScrollingFooter(
     }
 }
 
+private fun configureAdTickerTextView(tv: TextView, color: Int, sizeSp: Float, isBold: Boolean) {
+    tv.setTextColor(color)
+    tv.textSize = sizeSp
+    tv.setTypeface(tv.typeface, if (isBold) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+    tv.isSingleLine = true
+    tv.includeFontPadding = false
+    tv.gravity = android.view.Gravity.CENTER_VERTICAL
+    tv.setHorizontallyScrolling(true)
+    tv.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
+}
+
+/** Pause at the start of each marquee loop so the label can be read before scrolling again. */
+private const val MARQUEE_RESTART_PAUSE_MS = 3_000L
+
+/** Counter header text must never ellipsize; width is set from paint measure and laid out in [CounterNameTickerView]. */
+private fun configureCounterNameTextView(tv: TextView, color: Int, sizeSp: Float) {
+    tv.setTextColor(color)
+    tv.textSize = sizeSp
+    tv.setTypeface(tv.typeface, android.graphics.Typeface.BOLD)
+    tv.isSingleLine = true
+    tv.maxLines = 1
+    tv.includeFontPadding = false
+    tv.gravity = android.view.Gravity.CENTER_VERTICAL
+    tv.setHorizontallyScrolling(true)
+    tv.ellipsize = null
+    tv.maxWidth = Int.MAX_VALUE
+    tv.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
+}
+
+/**
+ * Counter name header: static centered label when it fits; otherwise the same seamless
+ * horizontal scroll used by the footer ticker so long names (e.g. CARDIOLOGY) stay readable.
+ */
+private class CounterNameTickerView(context: Context) : FrameLayout(context) {
+    private val text1 = TextView(context)
+    private val text2 = TextView(context)
+    private var animator: ValueAnimator? = null
+    private var cachedName: String = ""
+    private var cachedTextColor: Int = Int.MIN_VALUE
+    private var cachedTextSizeSp: Float = -1f
+    private var currentOffset: Float = 0f
+    private var marqueeActive: Boolean = false
+    private var marqueePauseRunnable: Runnable? = null
+    private var marqueeDistance: Float = 0f
+    private var marqueeDurationMs: Long = 1L
+
+    init {
+        clipToPadding = true
+        clipChildren = true
+        setWillNotDraw(true)
+        val lp = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT)
+        text1.layoutParams = lp
+        text2.layoutParams = lp
+        addView(text1)
+        addView(text2)
+        text2.visibility = GONE
+    }
+
+    fun bind(name: String, textColor: Int, textSizeSp: Float) {
+        val colorChanged = cachedTextColor != textColor
+        val sizeChanged = cachedTextSizeSp != textSizeSp
+        if (colorChanged || sizeChanged) {
+            cachedTextColor = textColor
+            cachedTextSizeSp = textSizeSp
+            configureCounterNameTextView(text1, textColor, textSizeSp)
+            configureCounterNameTextView(text2, textColor, textSizeSp)
+        }
+        val nameChanged = cachedName != name
+        if (nameChanged) {
+            cachedName = name
+            restartLayout(preservePhase = false)
+            return
+        }
+        if (sizeChanged) {
+            restartLayout(preservePhase = true)
+            return
+        }
+        if (marqueeActive && animator?.isRunning != true && marqueePauseRunnable == null) {
+            restartLayout(preservePhase = true)
+        }
+    }
+
+    private fun cancelMarqueeAnimation() {
+        animator?.cancel()
+        animator = null
+        marqueePauseRunnable?.let { removeCallbacks(it) }
+        marqueePauseRunnable = null
+    }
+
+    private fun applyMarqueeOffset(offset: Float) {
+        currentOffset = offset
+        text1.translationX = -offset
+        text2.translationX = marqueeDistance - offset
+    }
+
+    private fun scheduleMarqueePause() {
+        if (!marqueeActive) return
+        applyMarqueeOffset(0f)
+        marqueePauseRunnable = Runnable {
+            if (marqueeActive) runMarqueeScroll(0f)
+        }
+        postDelayed(marqueePauseRunnable!!, MARQUEE_RESTART_PAUSE_MS)
+    }
+
+    private fun runMarqueeScroll(fromOffset: Float) {
+        if (!marqueeActive) return
+        val distance = marqueeDistance
+        val clampedFrom = fromOffset.coerceIn(0f, distance)
+        applyMarqueeOffset(clampedFrom)
+        val remainingFraction =
+            if (distance > 0f) 1f - (clampedFrom / distance) else 0f
+        val animDuration = (marqueeDurationMs * remainingFraction).toLong().coerceAtLeast(1L)
+        animator = ValueAnimator.ofFloat(clampedFrom, distance).apply {
+            duration = animDuration
+            interpolator = LinearInterpolator()
+            addUpdateListener { va ->
+                applyMarqueeOffset(va.animatedValue as Float)
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    applyMarqueeOffset(0f)
+                    scheduleMarqueePause()
+                }
+
+                override fun onAnimationCancel(animation: Animator) {
+                    marqueePauseRunnable?.let { removeCallbacks(it) }
+                }
+            })
+            start()
+        }
+    }
+
+    /** Measure children at full text width so Android does not ellipsize inside a narrow tile. */
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val viewportWidth = MeasureSpec.getSize(widthMeasureSpec)
+        val childWidthSpec = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+        val parentHeight = MeasureSpec.getSize(heightMeasureSpec)
+        val childHeightSpec = when (MeasureSpec.getMode(heightMeasureSpec)) {
+            MeasureSpec.EXACTLY -> MeasureSpec.makeMeasureSpec(parentHeight, MeasureSpec.EXACTLY)
+            MeasureSpec.AT_MOST -> MeasureSpec.makeMeasureSpec(parentHeight.coerceAtLeast(0), MeasureSpec.AT_MOST)
+            else -> MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+        }
+        var maxChildHeight = 0
+        for (i in 0 until childCount) {
+            val child = getChildAt(i)
+            if (child.visibility == GONE) continue
+            child.measure(childWidthSpec, childHeightSpec)
+            maxChildHeight = maxOf(maxChildHeight, child.measuredHeight)
+        }
+        val resolvedHeight = when (MeasureSpec.getMode(heightMeasureSpec)) {
+            MeasureSpec.EXACTLY -> parentHeight
+            MeasureSpec.AT_MOST -> minOf(maxChildHeight, parentHeight)
+            else -> maxChildHeight
+        }
+        setMeasuredDimension(viewportWidth, resolvedHeight.coerceAtLeast(0))
+    }
+
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        val viewportHeight = bottom - top
+        for (i in 0 until childCount) {
+            val child = getChildAt(i)
+            if (child.visibility == GONE) continue
+            val childTop = ((viewportHeight - child.measuredHeight) / 2).coerceAtLeast(0)
+            child.layout(0, childTop, child.measuredWidth, childTop + child.measuredHeight)
+        }
+    }
+
+    private fun measureContentWidth(content: String): Float {
+        return text1.paint.measureText(content).coerceAtLeast(1f)
+    }
+
+    private fun applyContent(tv: TextView, content: String) {
+        tv.text = content
+        val contentWidth = kotlin.math.ceil(measureContentWidth(content).toDouble()).toInt().coerceAtLeast(1)
+        val lp = tv.layoutParams as LayoutParams
+        if (lp.width != contentWidth) {
+            lp.width = contentWidth
+            tv.layoutParams = lp
+        }
+    }
+
+    private fun restartLayout(preservePhase: Boolean) {
+        post {
+            val previousOffset = currentOffset
+            cancelMarqueeAnimation()
+
+            val viewWidth = width.toFloat()
+            if (viewWidth <= 0f) return@post
+
+            val label = cachedName
+            applyContent(text1, label)
+            applyContent(text2, "")
+            text2.visibility = GONE
+            requestLayout()
+            post {
+                applyMeasuredLayout(viewWidth, label, previousOffset, preservePhase)
+            }
+        }
+    }
+
+    /**
+     * Decide static vs marquee from **measured** text width. Never center with negative translationX
+     * (that clips the middle of long names, e.g. "RDIOLOG" instead of "CARDIOLOGY 1").
+     */
+    private fun applyMeasuredLayout(
+        viewWidth: Float,
+        label: String,
+        previousOffset: Float,
+        preservePhase: Boolean,
+    ) {
+        val horizontalPad = 4f * resources.displayMetrics.density
+        val laidOutWidth = text1.measuredWidth.toFloat().coerceAtLeast(measureContentWidth(label))
+        val needsMarquee = laidOutWidth > viewWidth - horizontalPad
+
+        if (!needsMarquee) {
+            marqueeActive = false
+            text2.visibility = GONE
+            text1.translationX = ((viewWidth - laidOutWidth) / 2f).coerceAtLeast(0f)
+            text2.translationX = viewWidth
+            currentOffset = 0f
+            return
+        }
+
+        marqueeActive = true
+        text2.visibility = VISIBLE
+        val loopText = "$label   "
+        applyContent(text1, loopText)
+        applyContent(text2, loopText)
+        requestLayout()
+        post {
+            startMarquee(viewWidth, loopText, previousOffset, preservePhase)
+        }
+    }
+
+    private fun startMarquee(
+        viewWidth: Float,
+        loopText: String,
+        previousOffset: Float,
+        preservePhase: Boolean,
+    ) {
+        cancelMarqueeAnimation()
+
+        val gap = 20f * resources.displayMetrics.density
+        val loopWidth = text1.measuredWidth.toFloat().coerceAtLeast(measureContentWidth(loopText))
+        val distance = loopWidth + gap
+        val speedDpPerSec = 18f
+        val speedPxPerSec = speedDpPerSec * resources.displayMetrics.density
+        val durationMs = ((distance / speedPxPerSec) * 1000f).toLong().coerceAtLeast(1L)
+        val startFraction = if (preservePhase && distance > 0f) {
+            ((previousOffset % distance) / distance).coerceIn(0f, 1f)
+        } else {
+            0f
+        }
+
+        marqueeDistance = distance
+        marqueeDurationMs = durationMs
+
+        if (startFraction > 0f && preservePhase) {
+            runMarqueeScroll(distance * startFraction)
+        } else {
+            scheduleMarqueePause()
+        }
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        if (w > 0) {
+            restartLayout(preservePhase = true)
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        cancelMarqueeAnimation()
+        super.onDetachedFromWindow()
+    }
+}
+
 private class SeamlessTickerView(context: Context) : FrameLayout(context) {
     private val text1 = TextView(context)
     private val text2 = TextView(context)
@@ -6262,6 +6919,9 @@ private class SeamlessTickerView(context: Context) : FrameLayout(context) {
     private var cachedIsBold: Boolean = false
     private var currentOffset: Float = 0f
     private var lastDistance: Float = 1f
+    private var marqueePauseRunnable: Runnable? = null
+    private var marqueeDistance: Float = 0f
+    private var marqueeDurationMs: Long = 1L
 
     init {
         clipToPadding = true
@@ -6282,81 +6942,106 @@ private class SeamlessTickerView(context: Context) : FrameLayout(context) {
         isBold: Boolean,
         speedDpPerSec: Float
     ) {
-        val styleChanged =
-            cachedTextColor != textColor || cachedTextSizeSp != textSizeSp || cachedIsBold != isBold
-        if (styleChanged) {
+        val colorChanged = cachedTextColor != textColor
+        val sizeChanged = cachedTextSizeSp != textSizeSp
+        val boldChanged = cachedIsBold != isBold
+        if (colorChanged || sizeChanged || boldChanged) {
             cachedTextColor = textColor
             cachedTextSizeSp = textSizeSp
             cachedIsBold = isBold
-            configureTextView(text1, textColor, textSizeSp, isBold)
-            configureTextView(text2, textColor, textSizeSp, isBold)
+            configureAdTickerTextView(text1, textColor, textSizeSp, isBold)
+            configureAdTickerTextView(text2, textColor, textSizeSp, isBold)
         }
 
         val textChanged = cachedText != text
-        val speedChanged = cachedSpeedDpPerSec != speedDpPerSec
         if (textChanged) {
             cachedText = text
             text1.text = text
             text2.text = text
         }
+        val speedChanged = cachedSpeedDpPerSec != speedDpPerSec
         if (speedChanged) {
             cachedSpeedDpPerSec = speedDpPerSec
         }
-        if (textChanged || speedChanged || styleChanged) {
-            restartAnimation(preservePhase = true)
-        } else if (animator?.isRunning != true) {
-            restartAnimation(preservePhase = true)
+
+        when {
+            textChanged -> restartAnimation(preservePhase = false)
+            sizeChanged || speedChanged -> restartAnimation(preservePhase = true)
+            animator?.isRunning != true && marqueePauseRunnable == null ->
+                restartAnimation(preservePhase = true)
         }
     }
 
-    private fun configureTextView(tv: TextView, color: Int, sizeSp: Float, isBold: Boolean) {
-        tv.setTextColor(color)
-        tv.textSize = sizeSp
-        tv.setTypeface(tv.typeface, if (isBold) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
-        tv.isSingleLine = true
-        tv.includeFontPadding = false
-        tv.gravity = android.view.Gravity.CENTER_VERTICAL
-        tv.setHorizontallyScrolling(true)
-        tv.setLayerType(LAYER_TYPE_HARDWARE, null)
+    private fun cancelMarqueeAnimation() {
+        animator?.cancel()
+        animator = null
+        marqueePauseRunnable?.let { removeCallbacks(it) }
+        marqueePauseRunnable = null
+    }
+
+    private fun applyMarqueeOffset(offset: Float) {
+        currentOffset = offset
+        text1.translationX = -offset
+        text2.translationX = marqueeDistance - offset
+    }
+
+    private fun scheduleMarqueePause() {
+        applyMarqueeOffset(0f)
+        marqueePauseRunnable = Runnable { runMarqueeScroll(0f) }
+        postDelayed(marqueePauseRunnable!!, MARQUEE_RESTART_PAUSE_MS)
+    }
+
+    private fun runMarqueeScroll(fromOffset: Float) {
+        val distance = marqueeDistance
+        val clampedFrom = fromOffset.coerceIn(0f, distance)
+        applyMarqueeOffset(clampedFrom)
+        val remainingFraction =
+            if (distance > 0f) 1f - (clampedFrom / distance) else 0f
+        val animDuration = (marqueeDurationMs * remainingFraction).toLong().coerceAtLeast(1L)
+        animator = ValueAnimator.ofFloat(clampedFrom, distance).apply {
+            duration = animDuration
+            interpolator = LinearInterpolator()
+            addUpdateListener { va ->
+                applyMarqueeOffset(va.animatedValue as Float)
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    applyMarqueeOffset(0f)
+                    scheduleMarqueePause()
+                }
+
+                override fun onAnimationCancel(animation: Animator) {
+                    marqueePauseRunnable?.let { removeCallbacks(it) }
+                }
+            })
+            start()
+        }
     }
 
     private fun restartAnimation(preservePhase: Boolean) {
         post {
             val previousOffset = currentOffset
-            animator?.cancel()
+            cancelMarqueeAnimation()
             val w = width.toFloat()
             if (w <= 0f) return@post
 
             val textWidth = text1.paint.measureText(text1.text?.toString().orEmpty()).coerceAtLeast(1f)
-            // Keep inter-copy gap small for a seamless continuous reading flow.
             val gap = 16f * resources.displayMetrics.density
             val distance = textWidth + gap
             lastDistance = distance
+            marqueeDistance = distance
             val speedPxPerSec = (cachedSpeedDpPerSec.coerceAtLeast(8f)) * resources.displayMetrics.density
-            val durationMs = ((distance / speedPxPerSec) * 1000f).toLong().coerceAtLeast(1L)
-            val startFraction = if (preservePhase) {
+            marqueeDurationMs = ((distance / speedPxPerSec) * 1000f).toLong().coerceAtLeast(1L)
+            val startFraction = if (preservePhase && distance > 0f) {
                 ((previousOffset % distance) / distance).coerceIn(0f, 1f)
             } else {
                 0f
             }
 
-            val updatePositions: (Float) -> Unit = { offset ->
-                currentOffset = offset
-                text1.translationX = -offset
-                text2.translationX = distance - offset
-            }
-            updatePositions(distance * startFraction)
-
-            animator = ValueAnimator.ofFloat(0f, distance).apply {
-                duration = durationMs
-                repeatCount = ValueAnimator.INFINITE
-                repeatMode = ValueAnimator.RESTART
-                interpolator = LinearInterpolator()
-                addUpdateListener { va ->
-                    updatePositions(va.animatedValue as Float)
-                }
-                start()
-                currentPlayTime = (durationMs * startFraction).toLong().coerceIn(0L, durationMs)
+            if (startFraction > 0f && preservePhase) {
+                runMarqueeScroll(distance * startFraction)
+            } else {
+                scheduleMarqueePause()
             }
         }
     }
@@ -6364,46 +7049,49 @@ private class SeamlessTickerView(context: Context) : FrameLayout(context) {
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         if (w > 0 && oldw > 0 && w != oldw) {
-            // Width changes during startup/composition can otherwise cause visible jumps.
             restartAnimation(preservePhase = true)
         }
     }
 
     override fun onDetachedFromWindow() {
-        animator?.cancel()
-        animator = null
+        cancelMarqueeAnimation()
         super.onDetachedFromWindow()
     }
 }
 
 private fun getTokensForCounter(counter: CounterEntity, tokensPerCounter: Map<String, List<String>>): List<String> {
-    val cid = counter.counterId.orEmpty().trim()
-    val cname = counter.name.orEmpty().trim()
-    val dname = counter.defaultName.orEmpty().trim()
+    // Match MQTT storage keys (button_index first). Do not scan the whole map or match by
+    // keypad_index when button_index is set — that caused one counter's tokens to appear on all boards.
+    val storageKey = counterStorageLookupKey(counter)
     val btnKey = counter.buttonIndex?.toString()?.trim().orEmpty()
-    val keypadKey = counter.keypadIndex?.trim().orEmpty()
-
-    val rawList = (if (btnKey.isNotBlank()) tokensPerCounter[btnKey] else null)
-        ?: (if (keypadKey.isNotBlank()) tokensPerCounter[keypadKey] else null)
-        ?: (if (cid.isNotBlank()) tokensPerCounter[cid] else null)
-        ?: (if (cname.isNotBlank()) tokensPerCounter[cname] else null)
-        ?: (if (dname.isNotBlank()) tokensPerCounter[dname] else null)
-        ?: tokensPerCounter.entries.find {
-            mqttRouteMatchesButtonIndex(counter.buttonIndex, it.key.trim())
-        }?.value
-        ?: tokensPerCounter.entries.find {
-            mqttRouteMatchesKeypadIndex(counter.keypadIndex, it.key.trim())
-        }?.value
-        ?: (if (tokensPerCounter.containsKey("__default__")) tokensPerCounter["__default__"] else null)
-        ?: emptyList()
-        
-    val cleaned = rawList.map { it.trim() }.filter { it.isNotBlank() }.distinct()
-    val normalTokens = cleaned.filter { token ->
-        !isSpecialMessageToken(token) && token != "0" && !token.contains("CAL", ignoreCase = true)
+    val lookupKeys = linkedSetOf<String>()
+    if (storageKey.isNotBlank()) lookupKeys.add(storageKey)
+    counter.counterId?.trim()?.takeIf { it.isNotBlank() }?.let { lookupKeys.add(it) }
+    counter.name?.trim()?.takeIf { it.isNotBlank() }?.let { lookupKeys.add(it) }
+    counter.defaultName?.trim()?.takeIf { it.isNotBlank() }?.let { lookupKeys.add(it) }
+    if (btnKey.isBlank()) {
+        counter.keypadIndex?.trim()?.takeIf { it.isNotBlank() }?.let { lookupKeys.add(it) }
     }
-    // If normal tokens exist, suppress any special-message placeholders from token list display.
-    if (normalTokens.isNotEmpty()) return normalTokens
-    return cleaned.filter { isSpecialMessageToken(it) }
+
+    var rawList: List<String>? = null
+    for (key in lookupKeys) {
+        val candidate = tokensPerCounter[key]
+        if (!candidate.isNullOrEmpty()) {
+            rawList = candidate
+            break
+        }
+    }
+    if (rawList == null && storageKey == "__default__") {
+        rawList = tokensPerCounter["__default__"]
+    }
+    rawList = rawList ?: emptyList()
+
+    return rawList
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+    // When a protocol-C / __MSG__ overlay is at index 0, [CounterBoard] shows it until a new
+    // normal token arrives (MqttViewModel removes __MSG__ entries on the next token update).
 }
 
 private fun resolveCountersToDisplay(

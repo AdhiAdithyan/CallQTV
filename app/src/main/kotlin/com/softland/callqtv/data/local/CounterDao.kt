@@ -16,6 +16,9 @@ interface CounterDao {
     )
     fun deleteByDeviceAndCustomer(deviceId: Int, macAddress: String, customerId: String)
 
+    @Query("DELETE FROM counters WHERE mac_address = :macAddress AND customer_id = :customerId")
+    fun deleteByMacAndCustomer(macAddress: String, customerId: String)
+
     @Query(
         "SELECT * FROM counters WHERE device_id = :deviceId ORDER BY button_index ASC"
     )

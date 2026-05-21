@@ -2,9 +2,8 @@ package com.softland.callqtv.viewmodel
 
 import android.app.Application
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
 import android.os.PowerManager
+import com.softland.callqtv.utils.ApkUpdateHelper
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -18,7 +17,7 @@ import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
-data class InstallEvent(val filePath: String)
+data class InstallEvent(val apkFilePath: String)
 
 class DownloadViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -50,8 +49,8 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
 
                     val fileLength = connection.contentLength
                     val input = connection.inputStream
-                    val outputDir = context.getExternalFilesDir(null)
-                    val outputFile = File(outputDir, "CallQTV_Version$versionName.apk")
+                    val outputFile = ApkUpdateHelper.apkFileForVersion(context, versionName)
+                    outputFile.parentFile?.mkdirs()
                     val output = FileOutputStream(outputFile)
 
                     val data = ByteArray(4096)
@@ -84,8 +83,12 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun triggerApkInstall(versionName: String) {
-        _installIntentLiveData.value = InstallEvent(versionName)
+    fun triggerApkInstall(apkFilePath: String) {
+        _installIntentLiveData.value = InstallEvent(apkFilePath)
+    }
+
+    fun clearInstallEvent() {
+        _installIntentLiveData.value = null
     }
 
     override fun onCleared() {

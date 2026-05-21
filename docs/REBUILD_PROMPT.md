@@ -105,7 +105,7 @@ On **valid CLR** (serial passes validation):
 ## 7) Runtime UX
 
 - **Startup:** Load cache → render immediately; background sync; loading overlay only if no cache.
-- **TTS:** Separate “preparing voice engine” state from config loading.
+- **TTS:** “Preparing voice engine…” when audio language changes; early `warmUp` from cached config during `loadData` when announcements enabled.
 - **Connectivity:** Multiple brokers; “connected” if **any broker connected** OR **recent MQTT traffic**; reconnect badge (“Connecting to BLUCON…”, try count, timer); **~30s** reconnect cycle.
 - **Counter tiles:** Left dot = **dispense**, right = **keypad**; red default → green on activity → red after **~5 min** idle.
 - **Grid:** When counter count **> 4**, split into **2 rows or columns**.
@@ -116,7 +116,7 @@ On **valid CLR** (serial passes validation):
 ## 8) Announcements (`TokenAnnouncer` + `TokenUiProcessResult`)
 
 - **Serialized** under `announcementMutex`; **UI highlight at chime cue start**.
-- **`playTokenChime`**: after chime **starts**, wait **`chimeLeadInBeforeSpeechMs`** (**80–180 ms**) then begin TTS (do not wait for full tone/clip). Custom chimes may overlap speech tail; release `MediaPlayer` on completion.
+- **`playTokenChime`**: chime + UI at cue start; parallel **`TokenAnnouncer.awaitReady()`** (engine bind only). Await ready, then duck/prime/speak (do not wait for full chime clip). Custom chimes may overlap speech; release `MediaPlayer` on completion.
 - **`processTokenUpdateForKeys`** returns **`TokenUiProcessResult`**:
   - **`playCueUi`**: chime + snapshot + blink when map/VIP changed or primary re-call after **>10s**.
   - **`speakTokenAnnouncement`**: TTS only when primary-key announce rules pass and `enable_token_announcement` is on.
@@ -124,7 +124,8 @@ On **valid CLR** (serial passes validation):
 - **Normal:** space-separated — “Token”, optional **spelled counter prefix**, token label, optional counter name when `enable_counter_announcement` on.
 - **Special (`C` / `__MSG__`):** message + optional counter name (space, no comma).
 - **TTS:** NFC normalize, strip controls, collapse whitespace; optional letter-spaced collapse; long ALL-CAPS handling for special messages.
-- **Ad sound (`enable_ad_sound`):** During TTS, **duck ExoPlayer** and **lower YouTube WebView video** via JS; restore on end/cancel; skip if ad sound off.
+- **Ad sound (`enable_ad_sound`):** `runWithAdvertisementAudioDuckedForSpeech` ducks Exo + YouTube **before** `awaitSynthesisPrimeIfNeeded` and real TTS; restore on end/cancel; skip duck if ad sound off.
+- **Synthesis prime:** `SYNTHESIS_PRIME_PHRASE` = **`wellcome`** at 2% volume when `needsSpeechWake()` (first speech or idle **>20s**); debounced 4s; not on a timer; silent heartbeat every 3s does not replace prime.
 
 ---
 
@@ -177,13 +178,13 @@ As required by features: `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`
 
 ## 13) QA checklist (acceptance)
 
-- Debug build; cached-first startup; separate TTS init.
+- Debug build; cached-first startup; early TTS warm when announcements enabled.
 - Multi-broker MQTT + reconnect badge behavior.
 - CLR: `"$000-AbCAL0K000101CLR0*"`, `"$000-AbCAL0K000303CLR0*"` — correct SN/route clearing; `keypadsJson` must list SN + `counters[]` for predictable resolution.
 - `"$0PA-AeCAL0K0001lo-0008*"` → token `8`.
 - After CLR, `"$0KJ-AbCAL0K000111-0015*"` → token `15`.
 - Type `B` → **no** token tile change (DB-only).
-- Ad sound on → TTS ducks ads, restores after speech.
+- Ad sound on → duck before prime + real TTS; restore after speech; prime **wellcome** not over full-volume ads.
 - Special message multiline readability.
 - Payload log retention: uploaded >2 days removed; pending preserved.
 - Token blink: whole-tile vs text-only when server blink on; **gradient** app theme: primary accents vs full counter/token brushes vs **horizontal** footer strip.

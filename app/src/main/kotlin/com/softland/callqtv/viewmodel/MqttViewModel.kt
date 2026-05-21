@@ -331,12 +331,16 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
             stateMutex.withLock {
                 try {
                     val persisted = tokenHistoryRepo.loadAll()
-                    // If MQTT updates arrived before we loaded from DB, merge them
-                    // This is safer than internalTokenMap.clear()
+                    val coldStart = !isHistoryLoaded
+                    // Cold start: merge DB with any MQTT tokens that arrived early.
+                    // After history is loaded, never re-insert keys removed by CLR (only update existing keys).
                     persisted.forEach { (key, tokens) ->
+                        if (!coldStart && !internalTokenMap.containsKey(key)) return@forEach
                         val current = internalTokenMap[key] ?: emptyList()
                         val combined = trimTokenHistory((tokens + current).distinct())
-                        internalTokenMap[key] = combined
+                        if (combined.isNotEmpty()) {
+                            internalTokenMap[key] = combined
+                        }
                     }
                     isHistoryLoaded = true
                     _tokensPerCounter.postValue(internalTokenMap.toMap())
@@ -352,15 +356,25 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearTokenHistory() {
         viewModelScope.launch(Dispatchers.IO) {
+            clearTokenHistorySync()
+        }
+    }
+
+    /** Clears in-memory and persisted token state; use before a full TV config refresh. */
+    suspend fun clearTokenHistorySync() {
+        withContext(Dispatchers.IO) {
             stateMutex.withLock {
                 try {
                     tokenHistoryRepo.clearAll()
                     internalTokenMap.clear()
-                    isHistoryLoaded = true // Resetting counts as loaded
+                    isHistoryLoaded = true
                     _tokensPerCounter.postValue(emptyMap())
                     announcedTokenTimestamps.clear()
                     vipEmergencyTopTokenByKey.clear()
                     _vipEmergencyTopTokenByKey.postValue(emptyMap())
+                    queuedTokenTimestamps.clear()
+                    queuedPayloadTimestamps.clear()
+                    announcementQueueSize.set(0)
                 } catch (e: Exception) {
                     android.util.Log.w(
                         "MqttViewModel",
@@ -456,12 +470,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 val route = routeIndex.trim()
                 val matching = when {
                     route.isEmpty() -> configs
-                    else -> {
-                        val m = configs.filter { cc ->
-                            routeMatches(cc.keypadIndex, route)
-                        }
-                        if (m.isNotEmpty()) m else configs
-                    }
+                    else -> configs.filter { counterConfigMatchesRoute(it, route) }
                 }
 
                 val keys = linkedSetOf<String>()
@@ -514,15 +523,11 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 val keypadCounter = keypads
                     .firstOrNull { it.keypadSn?.trim().equals(serial.trim(), ignoreCase = true) }
                     ?.counters
-                    ?.firstOrNull {
-                        routeMatches(it.keypadIndex, routeIndex)
-                    }
+                    ?.firstOrNull { counterConfigMatchesRoute(it, routeIndex) }
 
                 val matched = keypadCounter?.let { cc ->
                     counters.firstOrNull { counter -> counterEntityMatchesKeypadCounter(counter, cc) }
-                } ?: counters.firstOrNull {
-                    routeMatches(it.keypadIndex, routeIndex)
-                }
+                } ?: counters.firstOrNull { counterEntityMatchesRoute(it, routeIndex) }
 
                 if (matched == null) return@withContext emptySet()
 
@@ -749,8 +754,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                             _lastPayload.postValue(trimmed)
                             val clrSerial = clearInfo?.serial ?: extractedKeypadSerial
                             if (!clrSerial.isNullOrBlank()) {
-                                // Route may be absent if extractClearPayloadInfo fails; still clear every counter
-                                // listed for this keypad SN in tv_config (see collectTokenMapKeysForClrKeypad).
+                                // Route digit matches button_index or keypad_index; only that counter's tokens are cleared.
                                 clearTokensForResolvedCounter(
                                     clrSerial,
                                     clearInfo?.routeIndex.orEmpty(),
@@ -1413,8 +1417,8 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Replaces the full visible token list for the given key(s) with a single value.
-     * Used by fixed-protocol type 'C' payloads.
+     * Shows a protocol-C / special-message token at the top of the counter list without
+     * clearing previously called normal tokens. Prior `__MSG__` placeholders are removed first.
      */
     suspend fun replaceTokenForKeys(
         primaryKey: String,
@@ -1433,10 +1437,21 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 keysToUpdate.add(trimmedFallback)
             }
 
+            val isSpecialOverlay = trimmedToken.contains("__MSG__", ignoreCase = false)
             keysToUpdate.forEach { key ->
-                internalTokenMap[key] = listOf(trimmedToken)
+                val list = (internalTokenMap[key] ?: emptyList()).toMutableList()
+                list.removeAll { it.contains("__MSG__", ignoreCase = false) }
+                val existingPosition = list.indexOf(trimmedToken)
+                if (existingPosition > 0) {
+                    list.removeAt(existingPosition)
+                }
+                list.add(0, trimmedToken)
+                internalTokenMap[key] = trimTokenHistory(list)
                 announcedTokenTimestamps.remove("${key}_$trimmedToken")
-                persistToken(key, trimmedToken)
+                // Special messages are ephemeral UI overlays; do not rewrite persisted token history.
+                if (!isSpecialOverlay) {
+                    persistToken(key, trimmedToken)
+                }
                 vipEmergencyTopTokenByKey.remove(key)
             }
             postVipEmergencyTopTokenSnapshot()
@@ -1649,7 +1664,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
 
                 val route = routeIndex.trim()
                 val keypadCounter = if (route.isNotEmpty()) {
-                    configs.firstOrNull { routeMatches(it.keypadIndex, route) }
+                    configs.firstOrNull { counterConfigMatchesRoute(it, route) }
                 } else {
                     configs.singleOrNull()
                         ?: configs.firstOrNull { cc ->
@@ -1694,7 +1709,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 android.util.Log.i(
                     "MqttViewModel",
                     "resolveCounter: SN=${normalizeKeypadSerial(serial)}" +
-                        (if (route.isNotEmpty()) " route(keypad_index)=$route" else "") +
+                        (if (route.isNotEmpty()) " route=$route" else "") +
                         " UI key(button_index)=$storageKey -> counter=$counterLabel"
                 )
 
@@ -1741,6 +1756,17 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         return leftNumber != null && rightNumber != null && leftNumber == rightNumber
     }
 
+    /** CLR route digit from payload (char before `CLR`) — matches TV config `button_index` or `keypad_index`. */
+    private fun counterConfigMatchesRoute(cc: CounterConfig, route: String): Boolean {
+        if (routeMatches(cc.keypadIndex, route)) return true
+        return routeMatches(cc.buttonIndex?.toString(), route)
+    }
+
+    private fun counterEntityMatchesRoute(counter: CounterEntity, route: String): Boolean {
+        if (routeMatches(counter.keypadIndex, route)) return true
+        return routeMatches(counter.buttonIndex?.toString(), route)
+    }
+
     private suspend fun resolveButtonStringValue(
         serial: String,
         buttonStringId: String,
@@ -1785,6 +1811,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 mqttPayloadLogRepo.markDisplayed(payload)
+                scheduleMqttPayloadSync(force = true)
             } catch (_: Exception) {
             }
         }
@@ -1883,6 +1910,8 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                     keypadSerialNumber = serial,
                     calledTime = calledTime
                 )
+                // Same audit path as normal tokens: upload raw MQTT payload after record is stored.
+                scheduleMqttPayloadSync()
             } catch (e: Exception) {
                 android.util.Log.e("MqttViewModel", "Failed to save detailed token record", e)
             }
@@ -1893,13 +1922,26 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 mqttPayloadLogRepo.saveIncomingPayload(payload)
-                val now = System.currentTimeMillis()
-                if (now - lastPayloadSyncAtMs >= MQTT_PAYLOAD_SYNC_DEBOUNCE_MS) {
-                    lastPayloadSyncAtMs = now
-                    mqttPayloadLogRepo.syncPendingPayloads()
-                }
+                scheduleMqttPayloadSync()
             } catch (e: Exception) {
                 android.util.Log.e("MqttViewModel", "Failed to save MQTT payload log", e)
+            }
+        }
+    }
+
+    /**
+     * Uploads pending MQTT payload logs to `api/external/token-report`.
+     * [force] is used after [markPayloadDisplayed] so displayed timestamps reach the server.
+     */
+    private fun scheduleMqttPayloadSync(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && now - lastPayloadSyncAtMs < MQTT_PAYLOAD_SYNC_DEBOUNCE_MS) return
+        lastPayloadSyncAtMs = now
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                mqttPayloadLogRepo.syncPendingPayloads()
+            } catch (e: Exception) {
+                android.util.Log.w("MqttViewModel", "MQTT payload sync failed: ${e.message}")
             }
         }
     }
@@ -2088,25 +2130,42 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    override fun onCleared() {
-        super.onCleared()
+    /** Stops MQTT connections, timers, and publish loops when the app is backgrounded. */
+    fun stopAllBackgroundWork() {
         messageLivenessWatchdogJob?.cancel()
         messageLivenessWatchdogJob = null
         indicatorWatchdogJob?.cancel()
         indicatorWatchdogJob = null
-        val toClose = managers.values.toList()
-        managers.clear()
+        timerJob?.cancel()
+        timerJob = null
+        continuousPublishJob?.cancel()
+        continuousPublishJob = null
+        retryJobs.values.forEach { it.cancel() }
+        retryJobs.clear()
         reachabilityJobs.values.forEach { it.cancel() }
         reachabilityJobs.clear()
+        staleReconnectInFlight.clear()
+        val toClose = managers.values.toList()
+        managers.clear()
+        connectionDetailsMap.clear()
+        _connectionStatus.postValue(false)
+        _connectionStatusMap.postValue(emptyMap())
+        _isConnectingToMqtt.postValue(false)
+        announcementQueueSize.set(0)
         viewModelScope.launch(Dispatchers.IO) {
-            toClose.forEach { it.close() }
+            toClose.forEach { runCatching { it.close() } }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        stopAllBackgroundWork()
     }
 }
 
 /**
- * Drives [TokenDisplayViewModel.loadData]. [forceImmediate] is used for CLR so the configuration API
- * always runs (same path as the Refresh button), bypassing MQTT debounce and the TV VM min-interval throttle.
+ * Drives [TokenDisplayViewModel.loadData]. [forceImmediate] is used for CLR so config refresh is not
+ * debounced or dropped while another sync is active; cache/UI are not cleared before fetch.
  */
 data class TvConfigRefreshSignal(
     val reason: String,

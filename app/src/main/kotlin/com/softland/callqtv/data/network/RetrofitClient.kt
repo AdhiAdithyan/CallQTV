@@ -75,6 +75,42 @@ object RetrofitClient {
 
     private var retrofit: Retrofit? = null
     private var licenseRetrofit: Retrofit? = null
+    private var tvConfigRetrofit: Retrofit? = null
+
+    /**
+     * OkHttp client for large TV config payloads (`/config/api/android/config`).
+     * Must not share the license client's short read/call limits — Android TV on Wi‑Fi often needs
+     * 60–120s to download megabyte-scale JSON even when the Wi‑Fi icon shows "connected".
+     */
+    private val tvConfigPayloadClient: OkHttpClient by lazy {
+        val loggingInterceptor = HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.HEADERS
+        }
+        UnsafeOkHttpClient.getUnsafeOkHttpClient()
+            .newBuilder()
+            .addInterceptor(loggingInterceptor)
+            .addInterceptor(responseLoggingInterceptor)
+            .addInterceptor(RetryInterceptor(maxRetries = 2))
+            .addInterceptor { chain ->
+                val original = chain.request()
+                val request = original.newBuilder()
+                    .header(
+                        "User-Agent",
+                        "Mozilla/5.0 (Linux; Android 10; BRAVIA 4K VH2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+                    )
+                    .header("Accept", "application/json")
+                    .header("Content-Type", "application/json")
+                    .header("Connection", "keep-alive")
+                    .method(original.method, original.body)
+                    .build()
+                chain.proceed(request)
+            }
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(120, TimeUnit.SECONDS)
+            .writeTimeout(90, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
+    }
 
     private val sharedClient: OkHttpClient by lazy {
         val loggingInterceptor = HttpLoggingInterceptor().apply {
@@ -101,11 +137,11 @@ object RetrofitClient {
             .connectTimeout(60, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
             .build()
     }
 
-    // License APIs can be slower / occasionally stall; use a separate client with longer timeouts
-    // so we don't fail fast while the license server is still processing.
+    // License APIs: no RetryInterceptor here (ProjectRepository handles flow); avoid stacking delays.
     private val licenseClient: OkHttpClient by lazy {
         val loggingInterceptor = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.HEADERS
@@ -115,7 +151,6 @@ object RetrofitClient {
             .newBuilder()
             .addInterceptor(loggingInterceptor)
             .addInterceptor(responseLoggingInterceptor)
-            .addInterceptor(RetryInterceptor(maxRetries = 3))
             .addInterceptor { chain ->
                 val original = chain.request()
                 val request = original.newBuilder()
@@ -133,11 +168,13 @@ object RetrofitClient {
             .connectTimeout(60, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
             .build()
     }
 
     private var cachedApiService: ApiService? = null
     private var cachedApiLicenseService: ApiService? = null
+    private var cachedTvConfigApiService: ApiService? = null
 
     @JvmStatic
     fun getApiService(context: Context): ApiService {
@@ -175,5 +212,27 @@ object RetrofitClient {
             cachedApiLicenseService = instance.create(ApiService::class.java)
         }
         return cachedApiLicenseService!!
+    }
+
+    /**
+     * Retrofit instance for TV configuration fetch only — longer timeouts for large JSON on TV/Wi‑Fi.
+     * Uses [BASE_URL] as a placeholder; actual requests use absolute [@Url] from prefs.
+     */
+    @JvmStatic
+    fun getTvConfigApiService(context: Context): ApiService {
+        appContext = context.applicationContext
+        val instance = tvConfigRetrofit
+        if (instance == null || instance.baseUrl().toString() != BASE_URL) {
+            val newRetrofit = Retrofit.Builder()
+                .baseUrl(BASE_URL)
+                .client(tvConfigPayloadClient)
+                .addConverterFactory(GsonConverterFactory.create())
+                .build()
+            tvConfigRetrofit = newRetrofit
+            cachedTvConfigApiService = newRetrofit.create(ApiService::class.java)
+        } else if (cachedTvConfigApiService == null) {
+            cachedTvConfigApiService = instance.create(ApiService::class.java)
+        }
+        return cachedTvConfigApiService!!
     }
 }

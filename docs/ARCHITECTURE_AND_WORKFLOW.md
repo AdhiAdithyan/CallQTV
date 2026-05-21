@@ -56,7 +56,7 @@ Technical architecture, component responsibilities, MQTT semantics, and data flo
 |---------|------|
 | `SemanticMqttParser` | Fixed `$...*` types A–E, actions |
 | `KeypadPayloadParser` | Serial extraction (fixed, CLR, short wrapper) |
-| `TokenAnnouncer` | TTS queue, normalization |
+| `TokenAnnouncer` | TTS bind/warm, synthesis prime, announce APIs, heartbeat, normalization |
 | `ThemeColorManager` | ThemePrefs, brushes, chimes, blink mode |
 | `DiagnosticsExporter` | Support ZIP export |
 
@@ -103,8 +103,8 @@ MqttClientManager.onMessageReceived
   → resolveCounterIdentityFromSerial(keypad SN; CLR may use route-before-CLR)
   → findCounterEntityForMqttRoute (button_index, then keypad_index)
   → processTokenUpdateForKeys | replaceTokenForKeys
-  → playTokenChime (short lead-in ~80–180 ms) + publishTokensSnapshot + blink
-  → optional TTS (TokenAnnouncer)
+  → playTokenChime + publishTokensSnapshot + blink (parallel TokenAnnouncer.awaitReady)
+  → runWithAdvertisementAudioDuckedForSpeech → optional synthesis prime → TTS
   → tokensPerCounter → CountersArea (getTokensForCounter)
 ```
 
@@ -139,7 +139,8 @@ If route does not match any `counters[]` row, clear **all** counters under that 
 - **`playCueUi`**: map changed, VIP overlay changed, or primary re-call after >10s → chime + UI + blink.
 - **`speakTokenAnnouncement`**: primary-key move/re-call rules → TTS if `enable_token_announcement`.
 - Chime: counter URL → global URL → `notification_sound_key` system tone.
-- **Chime → TTS:** `chimeLeadInBeforeSpeechMs` (**80–180 ms** after cue start); TTS does not wait for full chime length (`playTokenChime` in `TokenDisplayActivity.kt`).
+- **Chime → TTS:** `awaitReady()` overlaps chime; then duck (if ad sound) → `awaitSynthesisPrimeIfNeeded()` (quiet **wellcome** when cold) → `announceMessage` / `announceTokenCall`.
+- **Early warm:** `TokenDisplayViewModel.warmTokenAnnouncerIfEnabled` on cached/fresh config; UI `LaunchedEffect` also calls `warmUp`.
 
 ## 7.1 Token display (`token_format`)
 

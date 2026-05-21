@@ -7,6 +7,7 @@ import android.util.Log
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebViewClient
 import android.webkit.WebView
 import android.view.TextureView
@@ -42,6 +43,42 @@ internal fun detachViewFromParent(view: android.view.View) {
 internal fun isWmvAdPath(path: String): Boolean {
     val lc = path.lowercase()
     return lc.contains(".wmv") || lc.contains("x-ms-wmv") || lc.endsWith("/wmv")
+}
+
+internal fun isWebViewErrorPageUrl(url: String?): Boolean {
+    val u = url?.lowercase().orEmpty()
+    return u.startsWith("chrome-error://") ||
+        u.startsWith("about:neterror") ||
+        u.contains("chromewebdata")
+}
+
+/** True for pages meant to render in WebView (not direct image/video file URLs). */
+internal fun isLikelyHtmlWebPage(url: String): Boolean {
+    val base = url.lowercase().substringBefore('?').substringBefore('#')
+    return base.endsWith(".html") ||
+        base.endsWith(".htm") ||
+        base.endsWith(".php") ||
+        base.endsWith(".asp") ||
+        base.endsWith(".aspx")
+}
+
+/** CallQ server paths that serve binary ad media, often without a file extension. */
+internal fun isServerHostedAdMediaPath(url: String): Boolean {
+    val lc = url.lowercase()
+    return lc.contains("/ad_files/") ||
+        lc.contains("/media/ad") ||
+        lc.contains("/callq/media/")
+}
+
+internal fun isDirectMediaResourceUrl(path: String): Boolean {
+    val lc = path.lowercase().substringBefore('?').substringBefore('#')
+    return lc.endsWith(".jpg") || lc.endsWith(".jpeg") || lc.endsWith(".png") ||
+        lc.endsWith(".gif") || lc.endsWith(".webp") || lc.endsWith(".bmp") ||
+        lc.endsWith(".svg") ||
+        lc.endsWith(".mp4") || lc.endsWith(".webm") || lc.endsWith(".mkv") ||
+        lc.endsWith(".mov") || lc.endsWith(".m4v") || lc.endsWith(".3gp") ||
+        lc.endsWith(".avi") || lc.endsWith(".wmv") || lc.endsWith(".m3u8") ||
+        lc.endsWith(".mpd") || isWmvAdPath(path)
 }
 
 @Composable
@@ -125,8 +162,14 @@ fun AdUnifiedPlayer(
                     contentScale = ContentScale.Fit,
                     onSuccess = { onReady() },
                     onError = {
-                        Log.w("AdPlayer", "Image load failed, trying WebView: ${ad.filePath}")
-                        if (canWebFallback) coilFailed = true else onError()
+                        val canWebPageFallback = canWebFallback && isLikelyHtmlWebPage(ad.filePath)
+                        if (canWebPageFallback) {
+                            Log.w("AdPlayer", "Image load failed, trying WebView HTML fallback: ${ad.filePath}")
+                            coilFailed = true
+                        } else {
+                            Log.w("AdPlayer", "Image load failed, skipping ad: ${ad.filePath}")
+                            onError()
+                        }
                     }
                 )
             }
@@ -189,8 +232,13 @@ private fun AdVideoWithWebFallback(
             onVideoEnded = onEnded,
             onReady = onReady,
             onError = {
-                Log.w("AdPlayer", "ExoPlayer failed; WebView fallback for: $path")
-                useWeb = true
+                if (isLikelyHtmlWebPage(path)) {
+                    Log.w("AdPlayer", "ExoPlayer failed; WebView fallback for: $path")
+                    useWeb = true
+                } else {
+                    Log.w("AdPlayer", "ExoPlayer failed, skipping non-HTML ad: $path")
+                    onError()
+                }
             }
         )
     }
@@ -222,6 +270,39 @@ internal fun isLikelyLiveStreamUrl(url: String): Boolean {
         u.contains("stream")
 }
 
+private fun WebView.clearAdErrorPage() {
+    try {
+        stopLoading()
+        loadUrl("about:blank")
+    } catch (_: Exception) {
+    }
+}
+
+private fun reportWebAdLoadFailure(
+    view: WebView?,
+    errorSent: AtomicBoolean,
+    reloadedOnce: AtomicBoolean,
+    onError: () -> Unit,
+    allowRetry: Boolean,
+) {
+    view?.setBackgroundColor(android.graphics.Color.BLACK)
+    view?.clearAdErrorPage()
+    if (allowRetry && view != null && reloadedOnce.compareAndSet(false, true)) {
+        view.postDelayed(
+            {
+                try {
+                    view.reload()
+                } catch (_: Exception) {
+                    if (errorSent.compareAndSet(false, true)) onError()
+                }
+            },
+            900L,
+        )
+        return
+    }
+    if (errorSent.compareAndSet(false, true)) onError()
+}
+
 @Composable
 private fun WebLinkAdPlayer(
     url: String,
@@ -241,15 +322,46 @@ private fun WebLinkAdPlayer(
             settings.cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
             isFocusable = false
             isFocusableInTouchMode = false
-            setBackgroundColor(android.graphics.Color.WHITE)
+            setBackgroundColor(android.graphics.Color.BLACK)
             webChromeClient = object : WebChromeClient() {}
             webViewClient = object : WebViewClient() {
+                private fun handleLoadFailure(
+                    view: WebView?,
+                    allowRetry: Boolean,
+                ) {
+                    reportWebAdLoadFailure(
+                        view = view,
+                        errorSent = errorSent,
+                        reloadedOnce = reloadedOnce,
+                        onError = onError,
+                        allowRetry = allowRetry,
+                    )
+                }
+
                 override fun onPageCommitVisible(view: WebView?, pageUrl: String?) {
+                    if (isWebViewErrorPageUrl(pageUrl)) return
                     if (readySent.compareAndSet(false, true)) onReady()
                 }
 
                 override fun onPageFinished(view: WebView?, pageUrl: String?) {
+                    if (isWebViewErrorPageUrl(pageUrl)) {
+                        handleLoadFailure(view, allowRetry = !reloadedOnce.get())
+                        return
+                    }
                     if (readySent.compareAndSet(false, true)) onReady()
+                }
+
+                override fun onReceivedHttpError(
+                    view: WebView?,
+                    request: WebResourceRequest?,
+                    errorResponse: WebResourceResponse?,
+                ) {
+                    if (request != null && !request.isForMainFrame) return
+                    val code = errorResponse?.statusCode ?: 0
+                    if (code >= 400) {
+                        Log.w("AdPlayer", "WebView HTTP $code for ${url.take(100)}")
+                        handleLoadFailure(view, allowRetry = false)
+                    }
                 }
 
                 override fun onReceivedError(
@@ -258,21 +370,30 @@ private fun WebLinkAdPlayer(
                     error: WebResourceError?
                 ) {
                     if (request != null && !request.isForMainFrame) return
-                    if (!reloadedOnce.get() && view != null) {
-                        reloadedOnce.set(true)
-                        view.postDelayed({ view.reload() }, 1200)
-                        return
-                    }
-                    if (errorSent.compareAndSet(false, true)) onError()
+                    val errorCode = error?.errorCode ?: 0
+                    val description = error?.description?.toString().orEmpty()
+                    Log.w(
+                        "AdPlayer",
+                        "WebView error ($errorCode) for ${url.take(100)}: $description"
+                    )
+                    val fatal = errorCode == ERROR_HOST_LOOKUP ||
+                        errorCode == ERROR_CONNECT ||
+                        errorCode == ERROR_TIMEOUT ||
+                        description.contains("ERR_CONNECTION", ignoreCase = true) ||
+                        description.contains("TIMED_OUT", ignoreCase = true) ||
+                        description.contains("ERR_NAME_NOT_RESOLVED", ignoreCase = true)
+                    handleLoadFailure(view, allowRetry = !fatal && !reloadedOnce.get())
                 }
             }
         }
     }
 
     LaunchedEffect(url) {
-        val timeoutMs = if (isLowBandwidth) 70_000L else 45_000L
+        val timeoutMs = if (isLowBandwidth) 50_000L else 28_000L
         delay(timeoutMs)
         if (!readySent.get() && !errorSent.get()) {
+            Log.w("AdPlayer", "WebView load timeout for ${url.take(100)}")
+            webView.clearAdErrorPage()
             errorSent.set(true)
             onError()
         }

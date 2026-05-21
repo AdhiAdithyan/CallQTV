@@ -67,7 +67,10 @@ CallQTV is an Android TV application for **real-time queue token display** and *
 | FR-46 | When `enable_ad_sound` is on, duck ExoPlayer and YouTube WebView video during TTS; restore after speech. |
 | FR-47 | Support configurable notification chime (~51 system tones in `ThemeColorManager.notificationSoundOptions`). |
 | FR-48 | Optional per-counter or global custom chime URL before system tone. |
-| FR-49 | After chime **starts**, begin TTS after a short lead-in (**~80–180 ms**), not after the full chime duration. |
+| FR-49 | When speech is required, bind/warm TTS **in parallel** with chime (`awaitReady`); do not block speech on full chime duration. |
+| FR-50 | Warm TTS from cached/fresh `tv_config` during config load when `enable_token_announcement` is on (`warmTokenAnnouncerIfEnabled`). |
+| FR-51 | Before the first real utterance after cold/idle synthesis, play a quiet prime phrase (`SYNTHESIS_PRIME_PHRASE`, currently **wellcome** at 2% volume). |
+| FR-52 | When `enable_ad_sound` is on, run synthesis prime **only after** ad ducking, not over full-volume ads. |
 
 ### 2.5 Token display
 

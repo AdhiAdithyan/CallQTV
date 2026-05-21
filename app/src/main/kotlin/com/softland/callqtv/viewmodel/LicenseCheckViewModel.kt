@@ -7,13 +7,10 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import com.softland.callqtv.data.local.AppSharedPreferences
+import com.softland.callqtv.utils.LicenseDateUtils
 import com.softland.callqtv.utils.PreferenceHelper
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
-import java.util.*
 
 class LicenseCheckViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -54,27 +51,15 @@ class LicenseCheckViewModel(application: Application) : AndroidViewModel(applica
      * Public method matching SplashScreenActivity usage.
      */
     fun checkLicenseValidity(rawEnd: String) {
-        if (rawEnd.isBlank()) {
+        val days = LicenseDateUtils.daysUntilExpiry(rawEnd)
+        if (days == null) {
             _daysRemaining.value = null
             _isExpired.value = true
             _isLicenseValid.value = false
             return
         }
-
-        try {
-            val datePart = rawEnd.trim().split(" ").getOrElse(0) { "" }
-            val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault())
-            val endDate = LocalDate.parse(datePart, formatter)
-            val today = LocalDate.now()
-            val days = ChronoUnit.DAYS.between(today, endDate).toInt()
-            
-            _daysRemaining.value = days
-            _isExpired.value = days < 0
-            _isLicenseValid.value = days >= 0
-        } catch (e: Exception) {
-            _daysRemaining.value = null
-            _isExpired.value = true
-            _isLicenseValid.value = false
-        }
+        _daysRemaining.value = days
+        _isExpired.value = days < 0
+        _isLicenseValid.value = days >= 0
     }
 }

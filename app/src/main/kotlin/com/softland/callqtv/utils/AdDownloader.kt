@@ -1,6 +1,7 @@
 package com.softland.callqtv.utils
 
 import android.content.Context
+import android.os.Build
 import android.os.Environment
 import android.util.Log
 import com.softland.callqtv.data.local.AdFileEntity
@@ -34,6 +35,61 @@ object AdDownloader {
     }
 
     /**
+     * Deletes all files in [AD_FOLDER] under public Downloads.
+     * Called before each TV configuration refresh so offline ads are re-synced from scratch.
+     */
+    fun clearOfflineAdStorage(context: Context) {
+        listOf(resolvePublicAdDirectory(), resolveAppScopedAdDirectory(context))
+            .distinctBy { it.absolutePath }
+            .forEach { adDir ->
+                if (adDir.exists()) {
+                    adDir.deleteRecursively()
+                    Log.i(TAG, "Cleared offline ad folder: ${adDir.absolutePath}")
+                }
+            }
+    }
+
+    /** Public Downloads/CALLQ_ADV when the OS allows writes; otherwise app-scoped storage. */
+    private fun resolveAdDirectory(context: Context): File {
+        val publicDir = resolvePublicAdDirectory()
+        if (canWriteToDirectory(publicDir)) {
+            return publicDir
+        }
+        val appDir = resolveAppScopedAdDirectory(context)
+        if (!appDir.exists()) appDir.mkdirs()
+        Log.i(TAG, "Using app-scoped offline ad folder: ${appDir.absolutePath}")
+        return appDir
+    }
+
+    private fun resolvePublicAdDirectory(): File {
+        val downloadsDir =
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        return File(downloadsDir, AD_FOLDER)
+    }
+
+    private fun resolveAppScopedAdDirectory(context: Context): File {
+        val root = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+            ?: context.getExternalFilesDir(null)
+            ?: context.filesDir
+        return File(root, AD_FOLDER)
+    }
+
+    private fun canWriteToDirectory(dir: File): Boolean {
+        if (!dir.exists()) {
+            try {
+                dir.mkdirs()
+            } catch (_: Exception) {
+                return false
+            }
+        }
+        if (!dir.exists() || !dir.canWrite()) return false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            return Environment.isExternalStorageManager()
+        }
+        return true
+    }
+
+    /**
      * Synchronizes local ad files with provided entities.
      * 1. Deletes all existing files in CALLQ_ADV (if exists).
      * 2. If offline enabled: Downloads new files and returns local paths.
@@ -41,8 +97,7 @@ object AdDownloader {
      */
     suspend fun syncAds(context: Context, ads: List<AdFileEntity>): List<AdFileEntity> = withContext(Dispatchers.IO) {
         val isOfflineEnabled = PreferenceHelper.isOfflineAdsEnabled(context)
-        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-        val adDir = File(downloadsDir, AD_FOLDER)
+        val adDir = resolveAdDirectory(context)
 
         if (!isOfflineEnabled) {
             // Online mode: cleanup folder if it exists and return remote ads

@@ -12,7 +12,9 @@ import com.softland.callqtv.data.repository.TvConfigRepository
 import com.softland.callqtv.data.repository.TvConfigResult
 import com.softland.callqtv.utils.AdDownloader
 import com.softland.callqtv.utils.FileLogger
+import com.softland.callqtv.utils.LicenseDateUtils
 import com.softland.callqtv.utils.PreferenceHelper
+import com.softland.callqtv.utils.TokenAnnouncer
 import com.softland.callqtv.utils.Variables
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -126,23 +128,18 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
-    private fun computeDaysUntilExpiry(): Int? {
-        val rawEnd = authPrefs.getString(PreferenceHelper.product_license_end, null).orEmpty()
-        if (rawEnd.isBlank()) return null
-        return try {
-            val datePart = rawEnd.trim().split(" ").getOrElse(0) { "" }
-            val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault())
-            val endDate = LocalDate.parse(datePart, formatter)
-            val today = LocalDate.now()
-            ChronoUnit.DAYS.between(today, endDate).toInt()
-        } catch (_: Exception) {
-            null
-        }
-    }
+    private fun computeDaysUntilExpiry(): Int? = LicenseDateUtils.daysUntilExpiry(
+        authPrefs.getString(PreferenceHelper.product_license_end, null),
+    )
 
-    fun loadData(mqttViewModel: MqttViewModel, forceShowOverlay: Boolean = false) {
-        // Prevent overlapping config reloads unless the caller explicitly wants overlay UX.
-        if (!forceShowOverlay && currentConfigLoadJob?.isActive == true) return
+    fun loadData(
+        mqttViewModel: MqttViewModel,
+        forceShowOverlay: Boolean = false,
+        clearCacheBeforeFetch: Boolean = false,
+        bypassActiveLoadGuard: Boolean = false,
+    ) {
+        // Prevent overlapping config reloads unless manual/startup or CLR (immediate MQTT refresh).
+        if (!forceShowOverlay && !bypassActiveLoadGuard && currentConfigLoadJob?.isActive == true) return
 
         // Start a single collector that triggers config refresh based on MQTT responses.
         if (!mqttConfigRefreshListenerStarted) {
@@ -158,13 +155,18 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                             return@collect
                         }
                         lastMqttRefreshHandledAtMs = now
-                        // CLR: same configuration API path as the Refresh button (overlay rules included).
-                        // Other MQTT triggers stay quiet (no overlay) and remain throttled above.
-                        loadData(mqttViewModel, forceShowOverlay = signal.forceImmediate)
+                        // CLR: refresh config in background; token clear is handled in MqttViewModel before this runs.
+                        loadData(
+                            mqttViewModel,
+                            forceShowOverlay = false,
+                            clearCacheBeforeFetch = false,
+                            bypassActiveLoadGuard = signal.forceImmediate,
+                        )
                     }
             }
         }
 
+        currentConfigLoadJob?.cancel()
         currentConfigLoadJob = viewModelScope.launch {
             val loadStartMs = System.currentTimeMillis()
             if (forceShowOverlay) {
@@ -193,48 +195,46 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
             val customerId = String.format(Locale.ROOT, "%04d", customerIdInt)
             val offlineEnabled = PreferenceHelper.isOfflineAdsEnabled(getApplication())
 
-            // Cached-first strategy: render local data immediately while API is in flight.
-            // Fetch all cache pieces in one IO block, then publish together on main.
-            val cacheStartMs = System.currentTimeMillis()
-            val cachedSnapshot = loadCachedSnapshot(_macAddress, customerId)
-            _config.value = cachedSnapshot.config
-            _counters.value = cachedSnapshot.counters
-            val cachedAds = cachedSnapshot.adFiles
-            _adFiles.value = cachedAds
-            _localAdFiles.value = buildEffectiveAdList(
-                remoteAds = cachedAds,
-                offlineEnabled = offlineEnabled,
-                syncedAds = lastOfflineSyncedAds
-            )
-            _connectedDevices.value = cachedSnapshot.connectedDevices
-            mqttViewModel.applyTokenHistoryLimitFromConfig(cachedSnapshot.config)
-            val hasRenderableCache = _config.value != null
-            android.util.Log.i(
-                "TokenDisplayVMPerf",
-                "Cache pre-load took ${System.currentTimeMillis() - cacheStartMs} ms"
-            )
-
-            // Connect to BLUCON/MQTT from cached broker rows immediately — do not wait for
-            // fetchAndCacheTvConfig (can take minutes on slow or offline networks).
-            cachedSnapshot.config?.let {
-                launch {
-                    val mqttStartMs = System.currentTimeMillis()
-                    initMqttIfNeeded(mqttViewModel)
-                    android.util.Log.i(
-                        "TokenDisplayVMPerf",
-                        "MQTT bootstrap from cache took ${System.currentTimeMillis() - mqttStartMs} ms"
-                    )
+            // Only app launch and explicit manual refresh wipe cache up front so the UI never blanks
+            // during background/MQTT config sync. On success, fetchAndCacheTvConfig replaces DB rows.
+            if (clearCacheBeforeFetch) {
+                // Bind TTS using the previous session's cached language while the config API runs.
+                warmTokenAnnouncerIfEnabled(loadCachedSnapshot(_macAddress, customerId).config)
+                offlineAdSyncJob?.cancel()
+                offlineAdSyncJob = null
+                lastOfflineSyncedAds = emptyList()
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    repository.clearCachedConfiguration(_macAddress, customerId)
+                    AdDownloader.clearOfflineAdStorage(getApplication())
                 }
+                _config.value = null
+                _counters.value = emptyList()
+                _adFiles.value = emptyList()
+                _localAdFiles.value = emptyList()
+                _connectedDevices.value = emptyList()
+                mqttViewModel.invalidateKeypadSerialCache()
             }
 
-            // UX optimization: if we already have cache, stop blocking UI with the
-            // full-screen "Loading TV configuration" overlay and continue API sync
-            // in the background.
-            if (forceShowOverlay && hasRenderableCache) {
-                _isLoading.value = false
-            }
-
+            var showedCacheFirst = false
             try {
+                // Stale-while-revalidate: paint Room cache immediately, then sync from API and refresh UI.
+                if (!clearCacheBeforeFetch) {
+                    val cachedSnapshot = loadCachedSnapshot(_macAddress, customerId)
+                    if (cachedSnapshot.config != null) {
+                        applyUiFromSnapshot(cachedSnapshot, offlineEnabled, bumpAdAreaReload = false)
+                        showedCacheFirst = true
+                        if (forceShowOverlay) {
+                            _isLoading.value = false
+                        }
+                        mqttViewModel.applyTokenHistoryLimitFromConfig(cachedSnapshot.config)
+                        launch { initMqttIfNeeded(mqttViewModel) }
+                        android.util.Log.i(
+                            "TokenDisplayVMPerf",
+                            "Applied cached TV config before API sync"
+                        )
+                    }
+                }
+
                 // Safety timeout: allow the network layer (60s x retries) to exhaust itself first
                 kotlinx.coroutines.withTimeoutOrNull(300_000L) {
                     val apiStartMs = System.currentTimeMillis()
@@ -245,103 +245,65 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                     )
                     when (result) {
                         is TvConfigResult.Success -> {
-                            _config.value = result.entity
                             _isLicenseExpired.value = false
                             _errorMessage.value = null
-                            
-                            // Successful sync: back up the database
                             com.softland.callqtv.utils.DatabaseBackup.backupDatabase(getApplication())
                         }
                         is TvConfigResult.Pending -> {
-                            _config.value = repository.getCachedConfig(_macAddress, customerId)
                             _isPendingApproval.value = true
                             _errorMessage.value = result.message
                         }
                         is TvConfigResult.Error -> {
-                            _config.value = repository.getCachedConfig(_macAddress, customerId)
                             val msg = if (result.licenceStatus != null) {
                                 "${result.message}\n\n${result.licenceStatus}"
                             } else {
                                 result.message
                             }
-
-                            if (msg.contains("license expired", ignoreCase = true) || result.licenceStatus?.contains("expire", ignoreCase = true) == true) {
+                            if (msg.contains("license expired", ignoreCase = true) ||
+                                result.licenceStatus?.contains("expire", ignoreCase = true) == true
+                            ) {
                                 _isLicenseExpired.value = true
                             }
-                            // Log error and show dialog; user can manually retry with the Refresh button.
                             _errorMessage.value = msg
                             FileLogger.logError(getApplication(), "TVConfig", "Error: $msg")
                         }
                     }
-                    // Refresh all DB-backed UI data in one IO snapshot.
+                    // After API (success or handled error/pending), replace UI with latest DB snapshot.
                     val refreshedSnapshot = loadCachedSnapshot(_macAddress, customerId)
-                    _counters.value = refreshedSnapshot.counters
-                    val remoteFiles = refreshedSnapshot.adFiles
-                    _adFiles.value = remoteFiles
-                    // Resolve what the ad area should play right now based on offline mode.
-                    _localAdFiles.value = buildEffectiveAdList(
-                        remoteAds = remoteFiles,
-                        offlineEnabled = offlineEnabled,
-                        syncedAds = lastOfflineSyncedAds
-                    )
-
-                    // If offline mode is enabled, download in background and switch to local
-                    // paths only after sync is complete.
-                    if (offlineEnabled) {
-                        offlineAdSyncJob?.cancel()
-                        offlineAdSyncJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                            try {
-                                val synced = AdDownloader.syncAds(getApplication(), remoteFiles)
-                                if (isActive) {
-                                    lastOfflineSyncedAds = synced
-                                    _localAdFiles.postValue(
-                                        buildEffectiveAdList(
-                                            remoteAds = remoteFiles,
-                                            offlineEnabled = true,
-                                            syncedAds = synced
-                                        )
-                                    )
-                                }
-                            } catch (e: Exception) {
-                                FileLogger.logError(
-                                    getApplication(),
-                                    "OfflineAds",
-                                    "Background offline ad sync failed",
-                                    e
-                                )
-                            }
-                        }
-                    } else {
-                        offlineAdSyncJob?.cancel()
-                        lastOfflineSyncedAds = emptyList()
+                    val uiSnapshot = when (result) {
+                        is TvConfigResult.Success ->
+                            refreshedSnapshot.copy(config = result.entity)
+                        else -> refreshedSnapshot
                     }
-
-                    _connectedDevices.value = refreshedSnapshot.connectedDevices
-                    mqttViewModel.applyTokenHistoryLimitFromConfig(_config.value)
-
-                    if (_config.value != null) {
-                        // After config sync: reconnect only when broker host/topic/credentials changed.
+                    applyUiFromSnapshot(uiSnapshot, offlineEnabled, bumpAdAreaReload = true)
+                    startOfflineAdSyncIfNeeded(remoteFiles = uiSnapshot.adFiles, offlineEnabled = offlineEnabled)
+                    mqttViewModel.applyTokenHistoryLimitFromConfig(uiSnapshot.config)
+                    if (uiSnapshot.config != null) {
                         launch { initMqttIfNeeded(mqttViewModel) }
                     }
+                    android.util.Log.i(
+                        "TokenDisplayVMPerf",
+                        "UI updated from post-API snapshot (cacheFirst=$showedCacheFirst)"
+                    )
                 } ?: run {
                     // Timeout: log and fall back to cache. User can retry via Refresh button or MQTT.
                     FileLogger.logError(getApplication(), "TVConfig", "Config API timed out; using cached data")
+                    if (_config.value == null) {
+                        val fallbackSnapshot = loadCachedSnapshot(_macAddress, customerId)
+                        if (fallbackSnapshot.config != null) {
+                            applyUiFromSnapshot(fallbackSnapshot, offlineEnabled, bumpAdAreaReload = false)
+                        }
+                    }
                     if (_config.value != null) {
                         launch { initMqttIfNeeded(mqttViewModel) }
                     }
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // New loadData, CLR refresh, or stopBackgroundWork cancelled this run — ignore.
+                throw e
             } catch (e: Exception) {
                 val fallbackSnapshot = loadCachedSnapshot(_macAddress, customerId)
-                _config.value = fallbackSnapshot.config
-                _counters.value = fallbackSnapshot.counters
-                val cachedAds = fallbackSnapshot.adFiles
-                _adFiles.value = cachedAds
-                _localAdFiles.value = buildEffectiveAdList(
-                    remoteAds = cachedAds,
-                    offlineEnabled = offlineEnabled,
-                    syncedAds = lastOfflineSyncedAds
-                )
-                _connectedDevices.value = fallbackSnapshot.connectedDevices
+                applyUiFromSnapshot(fallbackSnapshot, offlineEnabled, bumpAdAreaReload = false)
                 val isTimeoutLike = e.message?.contains("timeout", ignoreCase = true) == true ||
                     e.message?.contains("timed out", ignoreCase = true) == true
                 if (_config.value == null) {
@@ -356,7 +318,6 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                 }
             } finally {
                 _isLoading.value = false
-                _adAreaReloadToken.value = (_adAreaReloadToken.value ?: 0) + 1
                 // Connected devices may have changed; invalidate keypad serial cache so that
                 // subsequent keypad validation uses the latest mapping.
                 mqttViewModel.invalidateKeypadSerialCache()
@@ -424,6 +385,70 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
+    /** Pushes config, counters, ads, and connected devices into LiveData. */
+    private fun applyUiFromSnapshot(
+        snapshot: CachedUiSnapshot,
+        offlineEnabled: Boolean,
+        bumpAdAreaReload: Boolean,
+    ) {
+        _config.value = snapshot.config
+        warmTokenAnnouncerIfEnabled(snapshot.config)
+        _counters.value = snapshot.counters
+        val remoteFiles = snapshot.adFiles
+        _adFiles.value = remoteFiles
+        _localAdFiles.value = buildEffectiveAdList(
+            remoteAds = remoteFiles,
+            offlineEnabled = offlineEnabled,
+            syncedAds = lastOfflineSyncedAds,
+        )
+        _connectedDevices.value = snapshot.connectedDevices
+        if (bumpAdAreaReload) {
+            _adAreaReloadToken.value = (_adAreaReloadToken.value ?: 0) + 1
+        }
+    }
+
+    private fun startOfflineAdSyncIfNeeded(
+        remoteFiles: List<AdFileEntity>,
+        offlineEnabled: Boolean,
+    ) {
+        if (offlineEnabled) {
+            offlineAdSyncJob?.cancel()
+            offlineAdSyncJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    val synced = AdDownloader.syncAds(getApplication(), remoteFiles)
+                    if (isActive) {
+                        lastOfflineSyncedAds = synced
+                        _localAdFiles.postValue(
+                            buildEffectiveAdList(
+                                remoteAds = remoteFiles,
+                                offlineEnabled = true,
+                                syncedAds = synced,
+                            ),
+                        )
+                    }
+                } catch (e: Exception) {
+                    FileLogger.logError(
+                        getApplication(),
+                        "OfflineAds",
+                        "Background offline ad sync failed",
+                        e,
+                    )
+                }
+            }
+        } else {
+            offlineAdSyncJob?.cancel()
+            lastOfflineSyncedAds = emptyList()
+        }
+    }
+
+    /** Start TTS bind/warm as soon as TV config is known so the first MQTT token is not delayed. */
+    private fun warmTokenAnnouncerIfEnabled(cfg: TvConfigEntity?) {
+        if (cfg?.enableTokenAnnouncement != true) return
+        val app = getApplication<Application>()
+        TokenAnnouncer.setAnnouncementsEnabled(true)
+        TokenAnnouncer.warmUp(app, cfg.audioLanguage, performPoke = true)
+    }
+
     private fun buildEffectiveAdList(
         remoteAds: List<AdFileEntity>,
         offlineEnabled: Boolean,
@@ -446,5 +471,13 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
     private fun isYouTubePath(path: String): Boolean {
         val lc = path.lowercase()
         return lc.contains("youtube.com") || lc.contains("youtu.be") || lc.contains("youtube-nocookie.com")
+    }
+
+    /** Cancels in-flight config sync and ad downloads when the app is backgrounded. */
+    fun stopBackgroundWork() {
+        offlineAdSyncJob?.cancel()
+        offlineAdSyncJob = null
+        currentConfigLoadJob?.cancel()
+        currentConfigLoadJob = null
     }
 }

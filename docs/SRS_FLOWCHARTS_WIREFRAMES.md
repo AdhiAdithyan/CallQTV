@@ -60,18 +60,20 @@ flowchart TD
     C --> D{playCueUi?}
     D -->|No| Z[Skip UI/audio]
     D -->|Yes| E[Publish UI + blink at cue start]
-    E --> F[Play chime]
-    F --> F2[Short lead-in 80-180ms]
-    F2 --> G{Ad sound enabled?}
-    G -->|Yes| H[Duck ExoPlayer + YouTube WebView audio]
-    G -->|No| I[Skip ducking]
-    H --> J{enable_token_announcement AND speakTokenAnnouncement?}
-    I --> J
-    J -->|No| K[Restore ad audio if ducked]
-    J -->|Yes special| L[Speak message + optional counter name]
-    J -->|Yes normal| M[Speak Token + prefix + token + optional counter name]
-    L --> K
-    M --> K
+    E --> F[Play chime + parallel awaitReady]
+    F --> G{enable_token_announcement AND speakTokenAnnouncement?}
+    G -->|No| Z2[Done]
+    G -->|Yes| H[runWithAdvertisementAudioDuckedForSpeech]
+    H --> I{Ad sound on?}
+    I -->|Yes| J[Duck Exo + YouTube]
+    I -->|No| K[No duck]
+    J --> L[awaitSynthesisPrimeIfNeeded if cold]
+    K --> L
+    L --> M{Special or normal?}
+    M -->|Special| N[announceMessage]
+    M -->|Normal| O[announceTokenCall]
+    N --> P[Restore ad audio]
+    O --> P
 ```
 
 ---

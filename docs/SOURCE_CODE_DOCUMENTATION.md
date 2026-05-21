@@ -48,6 +48,7 @@ Developer index of packages, classes, persistence, and tests. For product behavi
 | `PresetColorDialog` / `PresetColorSwatchTile` | TV-focusable theme/background pickers |
 | `NotificationSoundDialog` | Notification chime picker |
 | `playTokenChime` / `playSystemTone` | Chime playback |
+| `runWithAdvertisementAudioDuckedForSpeech` | Duck ads → `awaitSynthesisPrimeIfNeeded` → announce; passes `skipSynthesisPrime` |
 | `MediaEngine` | Dual ExoPlayer pool, `updateViewport`, 500MB cache, ducking, adaptive track selector |
 | `AdArea` | Round-robin loop, preload `candidateAd`, `BoxWithConstraints` → `viewportPx` |
 | `AdVideoPlayer` / `YouTubeAdPlayer` | Texture fit-center; WebView YouTube kiosk |
@@ -82,7 +83,7 @@ tv_config.ad_files[] → AdFileEntity (Room)
 | `MqttViewModel.kt` | Multi-broker MQTT, keypad validation, `parseMqttMessage`, CLR, token map, channels, `TokenUiProcessResult`, payload log save, config refresh signals |
 | `MqttCounterRouting.kt` | **`findCounterEntityForMqttRoute`**, `mqttRouteMatchesButtonIndex`, `mqttRouteMatchesKeypadIndex` |
 | `KeypadPayloadParser.kt` | Keypad serial extraction (fixed, `000-` CLR, short wrapper) |
-| `TokenDisplayViewModel.kt` | Cache-first `loadData`, ads, consumer of `configRefreshRequests` |
+| `TokenDisplayViewModel.kt` | Cache-first `loadData`, ads, `warmTokenAnnouncerIfEnabled`, consumer of `configRefreshRequests` |
 | `RegistrationViewModel.kt` | Device registration / customer ID |
 | `ServiceUrlViewModel.kt` | Service URL discovery |
 | `LicenseCheckViewModel.kt` | License validation |
@@ -180,7 +181,7 @@ private data class ResolvedCounterIdentity(
 | File | Purpose |
 |------|---------|
 | `SemanticMqttParser.kt` | Fixed `$...*` frame: types `A`–`E`, `B` transferred, `C`, `D`, `-`; legacy regex parsers |
-| `TokenAnnouncer.kt` | TTS singleton; normalization, letter-spaced collapse, multi-language |
+| `TokenAnnouncer.kt` | TTS singleton: `warmUp`, `awaitReady`, `awaitSynthesisPrimeIfNeeded`, quiet prime `"wellcome"`, `announceMessage` / `announceTokenCall`, heartbeat, normalization, multi-language |
 | `ThemeColorManager.kt` | `ThemePrefs`, gradients, `notificationSoundOptions`, blink mode, brush caches |
 | `KeypadPayloadParser` | Lives in **`viewmodel/`** (not utils) — see §3 |
 | `DiagnosticsExporter.kt` | Settings → export ZIP snapshot |
@@ -251,7 +252,8 @@ Run: `./gradlew test` or `./gradlew testCallQTVDebugUnitTest`.
 | Payload audit upload | `MqttPayloadLogRepository.kt`, `ApiService.uploadMqttPayloadLogs` |
 | Token records (server) | `MqttViewModel.saveTokenRecord`, `TokenRecordRepository.kt` |
 | Chime sounds | `ThemeColorManager.notificationSoundOptions`, `playSystemTone` |
-| TTS phrasing | `TokenDisplayActivity.kt`, `TokenAnnouncer.kt` |
+| TTS phrasing / prime / duck order | `TokenDisplayActivity.kt` (`runWithAdvertisementAudioDuckedForSpeech`), `TokenAnnouncer.kt` |
+| TTS early warm on config load | `TokenDisplayViewModel.kt` (`warmTokenAnnouncerIfEnabled`) |
 | Theme / gradients | `ThemeColorManager.kt`, `TokenDisplayActivity` theme state |
 | TV color/sound pickers | `PresetColorDialog`, `PresetColorSwatchTile`, `NotificationSoundDialog` |
 | Ads / viewport sizing | `AdArea`, `AdViewportSizing.kt`, `MediaEngine`, `AdUnifiedPlayer.kt`, `AdDownloader.kt` |

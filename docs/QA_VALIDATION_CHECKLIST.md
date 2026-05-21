@@ -16,7 +16,8 @@ Acceptance tests aligned with current source (May 2026). Full context: [MASTER_D
 
 - [ ] Cached-first: with existing DB, main UI appears without long blocking overlay
 - [ ] Cold install: loading overlay until first config available
-- [ ] TTS “preparing voice engine” separate from config loading overlay
+- [ ] TTS “preparing voice engine” overlay only when audio **language** changes during config load (not for entire config overlay)
+- [ ] First announcement after cold start or long idle (~20s+): no multi-second gap before real speech
 - [ ] Settings **Refresh** fetches latest config (counters, ads, devices)
 
 ---
@@ -46,12 +47,14 @@ Acceptance tests aligned with current source (May 2026). Full context: [MASTER_D
 ## 4. Announcements
 
 - [ ] Chime plays on new token (`playCueUi`)
-- [ ] TTS starts shortly after chime begins (**~80–180 ms**), not after full chime/tone ends
+- [ ] TTS engine bind overlaps chime (`awaitReady`); real speech after duck/prime path, not after full chime clip ends
 - [ ] Chime on UI-only updates (e.g. VIP overlay change) even when TTS does not speak
 - [ ] TTS only when `enable_token_announcement` and primary announce rules (`speakTokenAnnouncement`)
 - [ ] Re-call same top token after **10s** → chime + blink + TTS again
 - [ ] Identical raw payload within **10s** → single handling
-- [ ] With **ad sound** on: TTS ducks ads; volume restores after speech
+- [ ] With **ad sound** on: ads duck before speech; quiet **wellcome** prime (if needed) plays **after** duck, then real announcement; volume restores after speech
+- [ ] With **ad sound** off: no duck; prime (if needed) immediately before real announcement
+- [ ] **wellcome** prime is **not** on a fixed interval (only when synthesis is cold / after ~20s idle)
 
 ---
 

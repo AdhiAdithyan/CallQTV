@@ -78,7 +78,7 @@ This file is the **canonical** reference for architecture, product behavior, MQT
 - Cached config, counters, ads, and devices are loaded first to reduce startup wait.
 - If cache exists, the UI renders immediately while config sync continues in background.
 - If cache is absent, a loading overlay is shown until data is available.
-- TTS initialization is shown separately from config loading (`Preparing voice engine...` behavior).
+- TTS engine binding can start as soon as `tv_config` is known (including cached config during API fetch); the **“Preparing voice engine…”** overlay is shown only when the audio language changes during an active config load, not for the whole loading overlay.
 
 ### 3.2 MQTT Token Processing
 - MQTT payloads are validated by extracting keypad serial from the payload and matching it against DB-mapped keypad/device data.
@@ -123,19 +123,48 @@ This file is the **canonical** reference for architecture, product behavior, MQT
 - **Chime** therefore runs for more UI updates than TTS (e.g. fallback-key sync, VIP overlay-only change, `__MSG__` list cleanup at slot 0) — not only when speech fires.
 - **`replaceTokenForKeys`** (type `C`) always runs chime + publish when replace succeeds.
 - UI publication/highlight happens at the **chime cue start** (`playTokenChime` `onAudioStart` + fallback publish).
-- **Chime → TTS gap:** After the chime **starts**, the app waits only **`chimeLeadInBeforeSpeechMs`** (**80–180 ms**, scaled from chime length) before TTS — it does **not** block on the full chime duration. Custom URL chimes keep playing in the background until completion (`MediaPlayer` `OnCompletionListener`). Constants: `MIN_CHIME_LEAD_IN_BEFORE_SPEECH_MS`, `MAX_CHIME_LEAD_IN_BEFORE_SPEECH_MS` in `TokenDisplayActivity.kt`.
+- **Chime → TTS overlap:** When speech is required, `TokenAnnouncer.awaitReady()` runs **in parallel** with chime playback and UI publish (`async` + `ttsWarmDeferred` in `TokenDisplayScreen`). The collector **awaits** engine readiness, then enters the duck/prime/speak path — it does **not** wait for the full chime clip to finish. Custom URL chimes keep playing until `MediaPlayer` completion.
 - **Normal tokens (spoken phrase)**: space-separated — `Token`, optional **spelled counter prefix** (letters/digits with spaces when counter prefix is enabled), token label, optional **counter display name** when `enable_counter_announcement` is on (same ordering as on-screen emphasis).
 - **Special messages (`__MSG__` / type `C`)**: spoken as **message** then optional **counter name** (single space, no comma) when counter announcement is enabled.
 - If counter prefix is enabled for normal tokens, the prefix is part of the same utterance as the token (spelled with spaces between characters).
-- **Advertisement sound (`ThemePrefs` `enable_ad_sound`)**: While token/special TTS runs, **ExoPlayer** ad volume is ducked and the shared **YouTube `WebView`** `<video>` volume is lowered via injected JS; volumes restore on utterance completion / cancellation (`TokenAnnouncementAdAudio`, `MediaEngine` in `TokenDisplayActivity`). If ad sound is off, ducking is skipped.
+- **Advertisement sound (`ThemePrefs` `enable_ad_sound`)**: `runWithAdvertisementAudioDuckedForSpeech` lowers **ExoPlayer** and **YouTube `WebView`** video volume **before** synthesis prime and the real announcement. Volumes restore on utterance completion / cancellation (`TokenAnnouncementAdAudio`, `MediaEngine`). If ad sound is off, ducking is skipped and synthesis prime runs immediately before speak (see §3.5.1).
 - Special messages: use `TokenAnnouncer.announceMessage` path; blink using existing current-token blink timing.
 - Identical raw payloads received within 10 seconds are announced only once.
 
 #### 3.5.1 TTS implementation notes (`TokenAnnouncer`)
-- Speech strings are normalized (NFC, strip odd control characters, collapse whitespace) before `TextToSpeech.speak`.
-- Letter-spaced runs in payloads (e.g. `R O U N C E`) are optionally collapsed so the engine reads a word instead of spelling letters (see `collapseLetterSpacedRuns`).
-- Long ALL-CAPS words in special-message speech may be lowercased for TTS so uncommon tokens are pronounced as words rather than letter-by-letter.
-- Optional debug: when the spoken text still contains the internal `__MSG__` envelope marker, a log line can record the normalized phrase (tag `TokenAnnouncer`).
+
+**Early engine warm (`TokenDisplayViewModel` + UI)**
+
+- `warmTokenAnnouncerIfEnabled()` calls `TokenAnnouncer.setAnnouncementsEnabled(true)` and `warmUp(..., performPoke = true)` when `enable_token_announcement` is on:
+  - Before cache clear on launch (last session’s cached language, while config API runs).
+  - During config API when cache is not cleared first.
+  - Again when fresh `tv_config` is written after API success / pending / error / fallback.
+- `TokenDisplayScreen` `LaunchedEffect(config…)` also warms TTS when config arrives (not gated on the full-screen loading overlay).
+
+**APIs**
+
+| API | Purpose |
+|-----|---------|
+| `warmUp` / `initialize` | Bind `TextToSpeech` on main thread; optional silent poke |
+| `awaitReady` | Suspend until engine is bound (used during chime; **no** synthesis prime) |
+| `awaitSynthesisPrimeIfNeeded` | Suspend until quiet prime finishes when synthesis is cold |
+| `announceTokenCall` / `announceMessage` | Real speech; `skipSynthesisPrime` when prime already ran |
+
+**Synthesis prime (cold voice load)**
+
+- Constant `SYNTHESIS_PRIME_PHRASE` = **`"wellcome"`** at **`PRIME_VOLUME` (0.02)** — loads the active voice without a loud duplicate announcement.
+- Runs when `needsSpeechWake()` is true: no real speech yet, or idle **> `SPEECH_WAKE_IDLE_MS` (20 s)** since last prime or real utterance (`token_*` / `msg_*` ids).
+- **Debounced:** at most once per **`PRIME_DEBOUNCE_MS` (4 s)**.
+- **With ad sound on:** prime runs only **after** `MediaEngine.duckForAnnouncement()` inside `runWithAdvertisementAudioDuckedForSpeech`, then `announce*` with `skipSynthesisPrime = true`.
+- **With ad sound off:** prime runs inline in `speakRawNowOnMain` before the real phrase (`skipSynthesisPrime = false`).
+- **Not** played on a timer; silent **heartbeat** (`playSilentUtterance` every **3 s**) keeps the engine bound but does not replace synthesis prime.
+
+**Speech text**
+
+- Normalized (NFC, strip controls, collapse whitespace) before `speak`.
+- Letter-spaced runs optionally collapsed (`collapseLetterSpacedRuns`).
+- Long ALL-CAPS words in special messages may be lowercased for word pronunciation.
+- Optional debug log when input still contains `__MSG__` (tag `TokenAnnouncer`).
 
 ### 3.6 Special Message Rendering
 - Payload type `C` uses `button_strings` value substitution.
@@ -490,18 +519,23 @@ flowchart TD
     C --> D{playCueUi?}
     D -->|No| Z[Skip UI/audio]
     D -->|Yes| E[Publish UI + blink at cue start]
-    E --> F[Play chime]
-    F --> F2[Short lead-in 80-180ms]
-    F2 --> G{Ad sound enabled?}
-    G -->|Yes| H[Duck ExoPlayer + YouTube WebView audio]
-    G -->|No| I[Skip ducking]
-    H --> J{enable_token_announcement AND speakTokenAnnouncement?}
-    I --> J
-    J -->|No| K[Restore ad audio if ducked]
-    J -->|Yes special| L[Speak message + optional counter name]
-    J -->|Yes normal| M[Speak Token + prefix + token + optional counter name]
-    L --> K
-    M --> K
+    E --> F[Play chime + parallel awaitReady engine bind]
+    F --> G{enable_token_announcement AND speakTokenAnnouncement?}
+    G -->|No| Z2[Done]
+    G -->|Yes| H[runWithAdvertisementAudioDuckedForSpeech]
+    H --> I{Ad sound enabled?}
+    I -->|Yes| J[Duck Exo + YouTube]
+    I -->|No| K[Skip duck]
+    J --> L{needsSpeechWake?}
+    K --> L
+    L -->|Yes| M[Quiet prime wellcome 2pct vol]
+    L -->|No| N[Skip prime]
+    M --> N
+    N --> O{Special or normal?}
+    O -->|Special| P[announceMessage]
+    O -->|Normal| Q[announceTokenCall]
+    P --> R[Restore ad audio]
+    Q --> R
 ```
 
 ### 7.4 MQTT Payload Upload Flow
@@ -530,7 +564,8 @@ flowchart TD
 ### 8.2 Validation Checklist
 - Build debug app successfully.
 - Validate cached-first startup.
-- Validate separate TTS initialization behavior.
+- Validate TTS warm-up (cached config during load; first announcement without multi-second delay after idle).
+- Validate with **ad sound** on: quiet **wellcome** prime plays **after** ads duck, before the real call (not over full-volume ads).
 - Validate multi-broker MQTT reconnect behavior.
 - Validate per-counter indicator transitions.
 - Validate:
@@ -582,5 +617,5 @@ flowchart TD
 - **May 2026**: **`AdViewportSizing.kt`** — `BoxWithConstraints` in `AdArea`; Coil decode + preload at pane size; ExoPlayer `updateViewport` + per-clip track/bitrate caps; faster ad buffer; §3.10 expanded (types, pane layout, limitations).
 - **May 2026**: **MQTT token routing** — normal/special fixed payloads resolve counter by **`keypad_sn` only**; fixed-frame index **18** is not `keypad_index`; `SemanticMqttParser.FixedPayload` no longer carries `routeIndex` (§3.4).
 - **May 2026**: **`token_format`** — `T1`/`T2` patterns pad digits only (no literal **`T`** on screen); counter prefix → `CODE-token` (§3.4.1, `TokenFormatTest`).
-- **May 2026**: **Chime → TTS** — `chimeLeadInBeforeSpeechMs` (**80–180 ms** after cue start) instead of blocking on full chime duration (§3.5).
+- **May 2026**: **TTS cold-start** — `TokenAnnouncer.awaitReady` + `awaitSynthesisPrimeIfNeeded`; early `warmTokenAnnouncerIfEnabled` in `TokenDisplayViewModel`; quiet synthesis prime **`wellcome`** at 2% volume after ad duck when `enable_ad_sound` is on; parallel engine bind during chime (§3.5.1).
 

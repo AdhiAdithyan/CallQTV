@@ -8,12 +8,14 @@ import android.speech.tts.TextToSpeech
 import android.util.Log
 import java.text.Normalizer
 import java.util.Locale
+import kotlin.coroutines.resume
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * Enhanced TokenAnnouncer for robust cross-device voice support.
@@ -32,6 +34,17 @@ object TokenAnnouncer {
     private const val HEARTBEAT_INTERVAL_MS = 3_000L
     private const val HEARTBEAT_SILENT_MS = 120L
     private const val HEARTBEAT_FAILURES_BEFORE_REINIT = 6
+    /**
+     * Silent heartbeats keep the engine bound but many TV TTS stacks still load voice data on the
+     * first audible [speak]. Re-prime after this idle gap (covers tokens minutes after cold start).
+     */
+    private const val SPEECH_WAKE_IDLE_MS = 20_000L
+    private const val PRIME_DEBOUNCE_MS = 4_000L
+    private const val PRIME_TIMEOUT_MS = 4_500L
+    /** Nearly silent; loads the active voice without a noticeable announcement. */
+    private const val PRIME_VOLUME = 0.01f
+    /** Quiet warm-up phrase (not the localized token word). */
+    private const val SYNTHESIS_PRIME_PHRASE = "wellcome"
 
     private var tts: TextToSpeech? = null
     private var isInitialized = false
@@ -49,6 +62,11 @@ object TokenAnnouncer {
     private val mainHandler: Handler by lazy { Handler(Looper.getMainLooper()) }
 
     private val completionCallbacks = java.util.concurrent.ConcurrentHashMap<String, () -> Unit>()
+
+    @Volatile
+    private var lastRealSpeechAtMs = 0L
+    @Volatile
+    private var lastPrimeAtMs = 0L
 
     fun isAnnouncementsEnabled(): Boolean = announcementsEnabled
 
@@ -90,6 +108,60 @@ object TokenAnnouncer {
 
     fun initialize(context: Context, audioLanguage: String? = null, onInitComplete: (Boolean) -> Unit = {}) {
         warmUp(context, audioLanguage, performPoke = false, onReady = onInitComplete)
+    }
+
+    /**
+     * Suspends until the TTS engine is bound and warmed, or returns false when announcements are
+     * disabled or initialization fails. Use before the first spoken token on cold start.
+     */
+    suspend fun awaitReady(
+        context: Context,
+        audioLanguage: String? = null,
+        performPoke: Boolean = true,
+    ): Boolean = suspendCancellableCoroutine { cont ->
+        if (!announcementsEnabled) {
+            cont.resume(false)
+            return@suspendCancellableCoroutine
+        }
+        warmUp(context, audioLanguage, performPoke = false) { ready ->
+            if (!ready) {
+                if (cont.isActive) cont.resume(false)
+                return@warmUp
+            }
+            val finish: () -> Unit = {
+                if (performPoke) mainHandler.post { performEnginePokeOnMain() }
+                if (cont.isActive) cont.resume(true)
+            }
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                finish()
+            } else {
+                mainHandler.post { finish() }
+            }
+        }
+    }
+
+    /**
+     * Runs the quiet [SYNTHESIS_PRIME_PHRASE] warm-up when synthesis is cold. Call from
+     * [runWithAdvertisementAudioDuckedForSpeech] (after ads are ducked) before the real announcement.
+     */
+    suspend fun awaitSynthesisPrimeIfNeeded() {
+        if (!announcementsEnabled) return
+        suspendCancellableCoroutine { cont ->
+            val run = {
+                if (needsSpeechWake()) {
+                    primeSpeechSynthesisOnMain {
+                        if (cont.isActive) cont.resume(Unit)
+                    }
+                } else {
+                    cont.resume(Unit)
+                }
+            }
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                run()
+            } else {
+                mainHandler.post(run)
+            }
+        }
     }
 
     private fun ensureEngineReadyOnMain(
@@ -149,7 +221,12 @@ object TokenAnnouncer {
                 Log.i(TAG, "TTS initialized successfully")
                 applyTokenSpeechStyle()
                 tts?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
-                    override fun onStart(utteranceId: String?) {}
+                    override fun onStart(utteranceId: String?) {
+                        utteranceId ?: return
+                        if (utteranceId.startsWith("token_") || utteranceId.startsWith("msg_")) {
+                            lastRealSpeechAtMs = System.currentTimeMillis()
+                        }
+                    }
                     override fun onDone(utteranceId: String?) {
                         utteranceId?.let { id -> completionCallbacks.remove(id)?.invoke() }
                     }
@@ -165,10 +242,11 @@ object TokenAnnouncer {
                 isInitialized = false
             }
         }
-        if (status == TextToSpeech.SUCCESS) {
+        val success = status == TextToSpeech.SUCCESS
+        finishInitAttempt(success)
+        if (success) {
             performEnginePoke()
         }
-        finishInitAttempt(status == TextToSpeech.SUCCESS)
     }
 
     private fun finishInitAttempt(success: Boolean) {
@@ -200,6 +278,75 @@ object TokenAnnouncer {
             } catch (e: Exception) {
                 Log.w(TAG, "Engine poke failed: ${e.message}")
             }
+        }
+    }
+
+    /** True when the engine is bound but voice synthesis has not run (or not recently). */
+    private fun needsSpeechWake(): Boolean {
+        val lastWake = maxOf(lastRealSpeechAtMs, lastPrimeAtMs)
+        if (lastWake == 0L) return true
+        return System.currentTimeMillis() - lastWake > SPEECH_WAKE_IDLE_MS
+    }
+
+    /**
+     * Runs [action] on the main thread after a quiet prime utterance when synthesis is cold.
+     * Silent heartbeats do not load voice data on many TV TTS engines.
+     */
+    private fun runOnMainAfterSpeechWake(action: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            primeSpeechSynthesisOnMain(action)
+        } else {
+            mainHandler.post { primeSpeechSynthesisOnMain(action) }
+        }
+    }
+
+    /**
+     * Speaks a nearly silent phrase in the configured language so the first user-facing
+     * announcement does not pay multi-second voice-load latency.
+     */
+    private fun primeSpeechSynthesisOnMain(onComplete: () -> Unit) {
+        if (!announcementsEnabled) {
+            onComplete()
+            return
+        }
+        synchronized(this) {
+            if (!isInitialized || tts == null) {
+                onComplete()
+                return
+            }
+            val now = System.currentTimeMillis()
+            if (now - lastPrimeAtMs < PRIME_DEBOUNCE_MS) {
+                onComplete()
+                return
+            }
+        }
+        val primePhrase = SYNTHESIS_PRIME_PHRASE
+        val utteranceId = "prime_${System.nanoTime()}"
+        val timeoutRunnable = Runnable {
+            if (completionCallbacks.remove(utteranceId) != null) {
+                Log.w(TAG, "Synthesis prime timed out after ${PRIME_TIMEOUT_MS}ms")
+                onComplete()
+            }
+        }
+        mainHandler.postDelayed(timeoutRunnable, PRIME_TIMEOUT_MS)
+        completionCallbacks[utteranceId] = {
+            mainHandler.removeCallbacks(timeoutRunnable)
+            lastPrimeAtMs = System.currentTimeMillis()
+            onComplete()
+        }
+        applyTokenSpeechStyle()
+        val params = Bundle().apply {
+            putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
+            putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, PRIME_VOLUME)
+        }
+        val result = tts?.speak(primePhrase, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
+        if (result == TextToSpeech.ERROR) {
+            mainHandler.removeCallbacks(timeoutRunnable)
+            completionCallbacks.remove(utteranceId)
+            Log.w(TAG, "Synthesis prime speak() returned ERROR")
+            onComplete()
+        } else {
+            Log.d(TAG, "Synthesis prime started ($primePhrase)")
         }
     }
 
@@ -485,6 +632,7 @@ object TokenAnnouncer {
         tokenText: String,
         counterDisplayName: String = "",
         onDone: (() -> Unit)? = null,
+        skipSynthesisPrime: Boolean = false,
     ) {
         val tokenWord = localizedTokenWord(audioLanguage)
         val tokenBody = buildTokenAnnouncementBody(
@@ -499,7 +647,7 @@ object TokenAnnouncer {
             context,
             audioLanguage,
             onNotReady = { onDone?.invoke() },
-            pokeEngine = false,
+            pokeEngine = true,
         ) {
             val phrase = buildString {
                 append(tokenWord)
@@ -520,6 +668,7 @@ object TokenAnnouncer {
                 onDone = onDone,
                 collapseSpelledWords = false,
                 queueMode = TextToSpeech.QUEUE_FLUSH,
+                skipSynthesisPrime = skipSynthesisPrime,
             )
         }
     }
@@ -562,13 +711,14 @@ object TokenAnnouncer {
         audioLanguage: String?,
         message: String,
         speechRate: Float = INFO_MESSAGE_SPEECH_RATE,
-        onDone: (() -> Unit)? = null
+        onDone: (() -> Unit)? = null,
+        skipSynthesisPrime: Boolean = false,
     ) {
         runWithReadyEngine(
             context,
             audioLanguage,
             onNotReady = { onDone?.invoke() },
-            pokeEngine = false,
+            pokeEngine = true,
         ) {
             speakRawNow(
                 message,
@@ -577,6 +727,7 @@ object TokenAnnouncer {
                 audioLanguage,
                 onDone,
                 queueMode = TextToSpeech.QUEUE_FLUSH,
+                skipSynthesisPrime = skipSynthesisPrime,
             )
         }
     }
@@ -727,7 +878,17 @@ object TokenAnnouncer {
             onDone?.invoke()
             return
         }
+        runOnMainAfterSpeechWake {
+            deliverTokenSpeechOnMain(counter, token, includeTokenWord, onDone)
+        }
+    }
 
+    private fun deliverTokenSpeechOnMain(
+        counter: String,
+        token: String,
+        includeTokenWord: Boolean,
+        onDone: (() -> Unit)?,
+    ) {
         val lang = normalizeLanguageCode(currentLanguage)
         val phrase = buildTokenAnnouncementBody(
             tokenText = token,
@@ -837,6 +998,7 @@ object TokenAnnouncer {
         onDone: (() -> Unit)? = null,
         collapseSpelledWords: Boolean = true,
         queueMode: Int = TextToSpeech.QUEUE_ADD,
+        skipSynthesisPrime: Boolean = false,
     ) {
         val deliver = {
             speakRawNowOnMain(
@@ -847,12 +1009,45 @@ object TokenAnnouncer {
                 onDone,
                 collapseSpelledWords,
                 queueMode,
+                skipSynthesisPrime,
             )
         }
         if (Looper.myLooper() == Looper.getMainLooper()) deliver() else mainHandler.post(deliver)
     }
 
     private fun speakRawNowOnMain(
+        message: String,
+        speechRate: Float,
+        speechPitch: Float,
+        audioLanguage: String?,
+        onDone: (() -> Unit)?,
+        collapseSpelledWords: Boolean,
+        queueMode: Int,
+        skipSynthesisPrime: Boolean,
+    ) {
+        if (!isInitialized || tts == null) {
+            onDone?.invoke()
+            return
+        }
+        val deliverSpeech = {
+            deliverRawSpeechOnMain(
+                message,
+                speechRate,
+                speechPitch,
+                audioLanguage,
+                onDone,
+                collapseSpelledWords,
+                queueMode,
+            )
+        }
+        if (skipSynthesisPrime) {
+            deliverSpeech()
+        } else {
+            runOnMainAfterSpeechWake(deliverSpeech)
+        }
+    }
+
+    private fun deliverRawSpeechOnMain(
         message: String,
         speechRate: Float,
         speechPitch: Float,
@@ -917,5 +1112,7 @@ object TokenAnnouncer {
         isInitialized = false
         currentLanguage = null
         lastHeartbeatErrorCount = 0
+        lastRealSpeechAtMs = 0L
+        lastPrimeAtMs = 0L
     }
 }

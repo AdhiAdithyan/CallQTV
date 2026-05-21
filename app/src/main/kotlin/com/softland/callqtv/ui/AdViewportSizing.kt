@@ -41,9 +41,10 @@ object AdViewportSizing {
     fun decodeTarget(viewport: AdViewportPx, context: Context): AdViewportPx {
         if (!viewport.isValid()) return lastViewport
         val dm = context.resources.displayMetrics
-        val headroom = if (dm.density >= 2f) 1.08f else 1.04f
-        val minW = (viewport.width * 0.9f).roundToInt().coerceAtLeast(640)
-        val minH = (viewport.height * 0.9f).roundToInt().coerceAtLeast(360)
+        // Slight headroom avoids grain when the pane is letterboxed on high-DPI TVs.
+        val headroom = if (dm.density >= 2f) 1.14f else 1.08f
+        val minW = (viewport.width * 0.96f).roundToInt().coerceAtLeast(720)
+        val minH = (viewport.height * 0.96f).roundToInt().coerceAtLeast(404)
         val w = (viewport.width * headroom).roundToInt()
             .coerceIn(minW, dm.widthPixels)
         val h = (viewport.height * headroom).roundToInt()
@@ -87,12 +88,16 @@ object AdViewportSizing {
         val maxBitrate = maxVideoBitrateForViewport(target, isLowBandwidth, isLikelyLive, videoUrl)
         val minBitrate = when {
             isLowBandwidth -> 0
-            isLikelyLive -> 800_000
-            else -> 1_500_000
+            isLikelyLive -> 1_200_000
+            else -> 2_800_000
         }
+        val minW = (target.width * 0.82f).roundToInt().coerceAtLeast(480)
+        val minH = (target.height * 0.82f).roundToInt().coerceAtLeast(270)
         try {
             val updated = player.trackSelectionParameters.buildUpon()
                 .setMaxVideoSize(target.width, target.height)
+                .setMinVideoSize(minW, minH)
+                .setViewportSize(target.width, target.height, true)
                 .setMaxVideoFrameRate(60)
                 .setMinVideoBitrate(minBitrate)
                 .setMaxVideoBitrate(maxBitrate)

@@ -133,8 +133,9 @@ class MqttClientManager(
             // multi-minute waits until the broker drops the ghost client.
             isCleanSession = useCleanSessionOnNextConnect
             isAutomaticReconnect = true
-            // Fail fast on unreachable brokers so the next attempt (Paho + app scheduler) runs sooner.
-            connectionTimeout = 5
+            // Seconds to establish TCP + MQTT handshake. 5s was too aggressive on Android TV / Wi‑Fi
+            // (socket timeouts and flaky "connected" Wi‑Fi without full internet path).
+            connectionTimeout = 30
             // Cap Paho exponential backoff (ms). Lower value = faster reconnect after drops.
             maxReconnectDelay = 5_000
             // Shorter keep-alive helps detect dead sockets sooner (broker-dependent).

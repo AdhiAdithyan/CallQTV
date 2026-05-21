@@ -1,20 +1,13 @@
 package com.softland.callqtv.ui
 
-import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
-import android.os.Environment
-import android.provider.Settings
-import androidx.appcompat.app.AlertDialog
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -48,6 +41,8 @@ import androidx.lifecycle.lifecycleScope
 import com.softland.callqtv.R
 import com.softland.callqtv.data.local.AppSharedPreferences
 import com.softland.callqtv.utils.PreferenceHelper
+import com.softland.callqtv.utils.AppUpdateChecker
+import com.softland.callqtv.utils.StoragePermissionHelper
 import com.softland.callqtv.utils.ThemeColorManager
 import com.softland.callqtv.utils.Variables
 import com.softland.callqtv.viewmodel.LicenseCheckViewModel
@@ -73,13 +68,13 @@ class SplashScreenActivity : AppCompatActivity() {
         permissions.entries.forEach {
             Log.d("SplashScreen", "Storage permission ${it.key}: ${it.value}")
         }
+        StoragePermissionHelper.onRuntimePermissionResult(this@SplashScreenActivity)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        requestStoragePermissionsIfNeeded()
-        checkManageExternalStoragePermission()
+        StoragePermissionHelper.ensureStorageAccess(this, storagePermissionLauncher)
 
         // Set up Jetpack Compose UI - load theme async to avoid blocking main thread
         setContent {
@@ -139,7 +134,19 @@ class SplashScreenActivity : AppCompatActivity() {
                     )
                     navigateToDeviceRegistration()
                 } else {
-                    navigateToMainDisplay()
+                    val customerId = authSharedPrefs.getInt(PreferenceHelper.customer_id, 0)
+                    if (customerId == 0) {
+                        navigateToDeviceRegistration()
+                        return@launch
+                    }
+                    val pendingUpdate = withContext(Dispatchers.IO) {
+                        AppUpdateChecker.checkForUpdate(this@SplashScreenActivity)
+                    }
+                    if (pendingUpdate != null) {
+                        navigateToDeviceRegistration(pendingUpdate)
+                    } else {
+                        navigateToMainDisplay()
+                    }
                 }
             }
         }
@@ -159,55 +166,7 @@ class SplashScreenActivity : AppCompatActivity() {
         // Clear binding reference
     }
 
-    private fun requestStoragePermissionsIfNeeded() {
-        val permissions = mutableListOf<String>()
-        
-        if (Build.VERSION.SDK_INT >= 33) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO) != PackageManager.PERMISSION_GRANTED) {
-                permissions.add(Manifest.permission.READ_MEDIA_VIDEO)
-            }
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-            }
-        } else {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-            }
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-            }
-        }
-
-        if (permissions.isNotEmpty()) {
-            storagePermissionLauncher.launch(permissions.toTypedArray())
-        }
-    }
-
-    private fun checkManageExternalStoragePermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (!Environment.isExternalStorageManager()) {
-                AlertDialog.Builder(this)
-                    .setTitle("Storage Permission Required")
-                    .setMessage("To manage, delete, and download advertisements in the Download folder, the app needs 'All Files Access' permission. Please enable it in the next screen.")
-                    .setPositiveButton("Grant") { _, _ ->
-                        try {
-                            val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-                            intent.addCategory("android.intent.category.DEFAULT")
-                            intent.data = android.net.Uri.parse(String.format("package:%s", applicationContext.packageName))
-                            startActivity(intent)
-                        } catch (e: Exception) {
-                            val intent = Intent()
-                            intent.action = Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION
-                            startActivity(intent)
-                        }
-                    }
-                    .setNegativeButton("Cancel", null)
-                    .show()
-            }
-        }
-    }
-
-    private fun navigateToDeviceRegistration() {
+    private fun navigateToDeviceRegistration(pendingUpdate: AppUpdateChecker.UpdateInfo? = null) {
         if (hasNavigatedFromSplash || isFinishing || isDestroyed) return
         hasNavigatedFromSplash = true
         lifecycleScope.launch {
@@ -215,8 +174,14 @@ class SplashScreenActivity : AppCompatActivity() {
                 putString("TokenNo", "")
                 apply()
             }
-            delay(2500L)
-            val intent = Intent(this@SplashScreenActivity, CustomerIdActivity::class.java)
+            val intent = Intent(this@SplashScreenActivity, CustomerIdActivity::class.java).apply {
+                pendingUpdate?.let { update ->
+                    putExtra(CustomerIdActivity.EXTRA_PENDING_UPDATE_VERSION, update.apkVersion)
+                    putExtra(CustomerIdActivity.EXTRA_PENDING_UPDATE_URL, update.downloadUrl)
+                    putExtra(CustomerIdActivity.EXTRA_PENDING_UPDATE_MANDATORY, update.isMandatoryUpdate)
+                    putExtra(CustomerIdActivity.EXTRA_PENDING_UPDATE_PROJECT, update.projectCode)
+                }
+            }
             startActivity(intent)
             overridePendingTransition(
                 com.softland.callqtv.R.anim.fade_in,

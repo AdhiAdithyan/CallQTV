@@ -3,11 +3,18 @@ package com.softland.callqtv
 import android.app.Application
 import android.content.pm.PackageManager
 import android.util.Log
+import com.softland.callqtv.utils.Variables
 
 class MyApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+
+        Variables.IS_LIVE = BuildConfig.IS_LIVE
+        Log.i("MyApplication", "License environment=${Variables.getLicenseEnvironmentLabel()} url=${Variables.getLicenseBaseUrl()}")
+
+        AppBackgroundCoordinator.install(this)
+        com.softland.callqtv.utils.AppUpgradeCoordinator.onApplicationStart(this)
 
         // Set up global exception handler to suppress MIUI/Xiaomi SDK errors
         setupGlobalExceptionHandler()

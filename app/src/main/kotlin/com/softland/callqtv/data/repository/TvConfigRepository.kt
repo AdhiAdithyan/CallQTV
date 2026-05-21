@@ -38,7 +38,8 @@ sealed class TvConfigResult {
 
 class TvConfigRepository(private val context: Context) {
 
-    private val api: ApiService = RetrofitClient.getApiLicenseService(context)
+    /** Dedicated client with long read timeout — do not use license OkHttp (short limits). */
+    private val api: ApiService = RetrofitClient.getTvConfigApiService(context)
     private val authPrefs = context.getSharedPreferences(AppSharedPreferences.AUTHENTICATION, Context.MODE_PRIVATE)
     private val dao = AppDatabase.getInstance(context).tvConfigDao()
     private val mappedBrokerDao = AppDatabase.getInstance(context).mappedBrokerDao()
@@ -101,6 +102,9 @@ class TvConfigRepository(private val context: Context) {
             }
 
             return@withContext TvConfigResult.Error("HTTP error ${e.code()}")
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Superseded refresh, app backgrounded, or loadData job replaced — not a network fault.
+            throw e
         } catch (e: Exception) {
             val msg = "Request failed at $url"
             com.softland.callqtv.utils.FileLogger.logError(context, "TvConfigRepo", msg, e)
@@ -188,7 +192,7 @@ class TvConfigRepository(private val context: Context) {
                 val counterMapMs = measureTimeMillis {
                     counterEntities = body.toCounterEntities(macAddress, customerId)
                 }
-                counterDao.deleteByDeviceAndCustomer(entity.deviceId, macAddress, customerId)
+                counterDao.deleteByMacAndCustomer(macAddress, customerId)
                 if (counterEntities.isNotEmpty()) {
                     counterDao.insertAll(counterEntities)
                 }
@@ -198,7 +202,7 @@ class TvConfigRepository(private val context: Context) {
                     adFileEntities = body.toAdFileEntities(macAddress, customerId)
                 }
                 val adDbMs = measureTimeMillis {
-                adFileDao.deleteByDeviceAndCustomer(entity.deviceId, macAddress, customerId)
+                adFileDao.deleteByMacAndCustomer(macAddress, customerId)
                 if (adFileEntities.isNotEmpty()) {
                     adFileDao.insertAll(adFileEntities)
                 }
@@ -208,7 +212,7 @@ class TvConfigRepository(private val context: Context) {
                 val connectedDeviceMapMs = measureTimeMillis {
                     connectedDeviceEntities = body.toConnectedDeviceEntities(macAddress, customerId)
                 }
-                connectedDeviceDao.deleteByDeviceAndCustomer(entity.deviceId, macAddress, customerId)
+                connectedDeviceDao.deleteByMacAndCustomer(macAddress, customerId)
                 if (connectedDeviceEntities.isNotEmpty()) {
                     connectedDeviceDao.insertAll(connectedDeviceEntities)
                 }
@@ -240,6 +244,23 @@ class TvConfigRepository(private val context: Context) {
     ): TvConfigEntity? = withContext(Dispatchers.IO) {
         dao.getByMacAndCustomer(macAddress, customerId)
     }
+
+    /**
+     * Removes all locally stored TV configuration for this device before a refresh,
+     * so the next API response fully replaces prior settings (counters, ads, brokers, etc.).
+     */
+    suspend fun clearCachedConfiguration(macAddress: String, customerId: String) =
+        withContext(Dispatchers.IO) {
+            val db = AppDatabase.getInstance(context)
+            db.runInTransaction {
+                dao.deleteByMacAndCustomer(macAddress, customerId)
+                mappedBrokerDao.deleteByMacAndCustomer(macAddress, customerId)
+                counterDao.deleteByMacAndCustomer(macAddress, customerId)
+                adFileDao.deleteByMacAndCustomer(macAddress, customerId)
+                connectedDeviceDao.deleteByMacAndCustomer(macAddress, customerId)
+            }
+            Log.i("TvConfigRepo", "Cleared cached TV configuration for mac=$macAddress customer=$customerId")
+        }
 
     /**
      * Get the list of counters for a given device (by mac + customer).
@@ -404,8 +425,7 @@ class TvConfigRepository(private val context: Context) {
         val list = this.counters ?: emptyList()
         if (list.isEmpty()) return emptyList()
 
-        return list.mapNotNull { c ->
-            if (c == null) return@mapNotNull null
+        return list.map { c ->
             CounterEntity(
                 deviceId = deviceIdLocal,
                 macAddress = macAddress,
@@ -508,8 +528,7 @@ class TvConfigRepository(private val context: Context) {
         val list = cfg.adFiles ?: emptyList()
         if (list.isEmpty()) return emptyList()
 
-        return list.mapIndexedNotNull { index, path ->
-            if (path == null) return@mapIndexedNotNull null
+        return list.mapIndexed { index, path ->
             AdFileEntity(
                 deviceId = deviceIdLocal,
                 macAddress = macAddress,
@@ -529,8 +548,7 @@ class TvConfigRepository(private val context: Context) {
         val list = this.connectedDevices ?: emptyList()
         if (list.isEmpty()) return emptyList()
 
-        return list.mapNotNull { d ->
-            if (d == null) return@mapNotNull null
+        return list.map { d ->
             ConnectedDeviceEntity(
                 deviceId = deviceIdLocal,
                 macAddress = macAddress,
