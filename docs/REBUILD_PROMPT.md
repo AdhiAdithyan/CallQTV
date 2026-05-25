@@ -72,7 +72,7 @@ Match extracted serial against **DB-mapped** keypad / `connected_devices` cache;
 | `A`, `E` | DB-only; **no** live token UI update |
 | `B` | **Transferred token** — same as A/E (**DB-only**, not on token UI) |
 | `C` | Special message: `button_strings` text; **replaces** token area; blink; dedicated TTS path |
-| `D`, `-`, normal | Standard token flow; `D` adds VIP/emergency handling per app/config |
+| `D`, `-`, normal | Standard token flow; **`D`** = VIP/emergency → always **`ER-{token}`** + TTS **`ER`** (even if counter prefix off) |
 
 ### 5.4 UI routing vs persistence
 
@@ -85,6 +85,7 @@ Match extracted serial against **DB-mapped** keypad / `connected_devices` cache;
 
 - **`tv_config.token_format`**: `T1`, `T2`, `00`, `000`, etc. Patterns **`T{n}`** pad the numeric token to **n** digits **without** a literal `T` (e.g. `2` + `T1` → `2`; `5` + `T2` → `05`).
 - With **`enable_counter_prefix`**, show **`{counter.code}-{formattedToken}`** (e.g. `NU-2`).
+- **VIP/emergency (index 4 = `D`):** always **`ER-{formattedToken}`** on the top slot and spell **`ER`** in TTS, even when **`enable_counter_prefix`** is off (`SemanticMqttParser.isVipEmergency` → `vipEmergencyTopTokenByKey` → `CounterTokenSlot`).
 
 ---
 
@@ -115,17 +116,23 @@ On **valid CLR** (serial passes validation):
 
 ## 8) Announcements (`TokenAnnouncer` + `TokenUiProcessResult`)
 
-- **Serialized** under `announcementMutex`; **UI highlight at chime cue start**.
-- **`playTokenChime`**: chime + UI at cue start; parallel **`TokenAnnouncer.awaitReady()`** (engine bind only). Await ready, then duck/prime/speak (do not wait for full chime clip). Custom chimes may overlap speech; release `MediaPlayer` on completion.
+- **Serialized** under `announcementMutex`; mutex held through TTS **`onDone`** so the **next** token cannot update its tile until the previous announcement finishes.
+- **Current token** tile + blink at **chime cue start** (`publishTokenTile` via `onAudioStart` + fallback).
+- **`playTokenChime`**: awaited; starts after **`withTimeoutOrNull(12s) { awaitReady() }`** when speech is required (timeout logs warning; **TTS still attempted**). `async { awaitReady() }` begins **before** `processTokenUpdateForKeys` when announcements are enabled.
+- **`awaitReady`**: wait for engine **bind**, then optional **`awaitSynthesisPrimeIfNeeded()`** (`primeSynthesis` default true). **`warmUp(performPoke=true)`** returns immediately; prime is async.
+- **`warmTokenAnnouncerIfEnabled`**: `warmUp` only (non-blocking on config load); does not block the token collector.
+- **Config `LaunchedEffect`**: `launch { awaitReady }` in background for “Preparing voice engine…” overlay.
 - **`processTokenUpdateForKeys`** returns **`TokenUiProcessResult`**:
   - **`playCueUi`**: chime + snapshot + blink when map/VIP changed or primary re-call after **>10s**.
   - **`speakTokenAnnouncement`**: TTS only when primary-key announce rules pass and `enable_token_announcement` is on.
 - **Dedupe:** identical raw payload within **10s** → single channel event; **re-call after 10s** allowed with fresh blink/TTS.
 - **Normal:** space-separated — “Token”, optional **spelled counter prefix**, token label, optional counter name when `enable_counter_announcement` on.
+- **VIP/emergency (`D`):** always spell **`ER`** before the token in TTS; on-screen **`ER-{token}`** regardless of `enable_counter_prefix`.
 - **Special (`C` / `__MSG__`):** message + optional counter name (space, no comma).
 - **TTS:** NFC normalize, strip controls, collapse whitespace; optional letter-spaced collapse; long ALL-CAPS handling for special messages.
 - **Ad sound (`enable_ad_sound`):** `runWithAdvertisementAudioDuckedForSpeech` ducks Exo + YouTube **before** `awaitSynthesisPrimeIfNeeded` and real TTS; restore on end/cancel; skip duck if ad sound off.
-- **Synthesis prime:** `SYNTHESIS_PRIME_PHRASE` = **`wellcome`** at 2% volume when `needsSpeechWake()` (first speech or idle **>20s**); debounced 4s; not on a timer; silent heartbeat every 3s does not replace prime.
+- **Synthesis prime:** `SYNTHESIS_PRIME_PHRASE` = **`wellcome`** at **`PRIME_VOLUME` 0.01**. **`finishInitAttempt(true)`** when engine binds; prime **async** (must not block waiters — first token hung otherwise). `synthesisPrimeInFlight` + `pendingAfterPrime` queue overlapping primes. Idle keep-warm **15s**; token re-prime after **60s** idle.
+- **`publishTokenTile`:** single publish per token (atomic guard); at chime cue, not after TTS.
 
 ---
 
@@ -172,7 +179,7 @@ As required by features: `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`
 
 ## 12) MQTT → UI (reference)
 
-- Incoming message → `rawMessageQueue` → coroutine → `parseMqttMessage` → **`tokenUpdateChannel`** / **`tokenReplaceChannel`** → Compose **`collect`** + **`announcementMutex`** → `publishTokensSnapshot()` → **`tokensPerCounter`** → **`getTokensForCounter`** in grid.
+- Incoming message → `rawMessageQueue` → coroutine → `parseMqttMessage` → **`tokenUpdateChannel`** / **`tokenReplaceChannel`** → Compose **`collect`** + **`announcementMutex`** → chime → **`publishTokensSnapshot()`** (cue start) → TTS → next event → **`tokensPerCounter`** → **`getTokensForCounter`** in grid.
 
 ---
 
@@ -189,6 +196,9 @@ As required by features: `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`
 - Payload log retention: uploaded >2 days removed; pending preserved.
 - Token blink: whole-tile vs text-only when server blink on; **gradient** app theme: primary accents vs full counter/token brushes vs **horizontal** footer strip.
 - Chime on all **`playCueUi`** paths; TTS only when **`speakTokenAnnouncement`**.
+- Back-to-back tokens: second tile must not appear until first TTS completes (mutex).
+- Idle 2+ min with announcements on: next token speaks without multi-second cold delay (15s idle prime).
+- VIP payload (index 4 = `D`) with counter prefix **off**: tile shows **ER-{token}** and TTS spells **ER**.
 - Color/sound pickers: no ANR; TV focus on current selection; visible focus ring while navigating.
 - Support export / diagnostics; error log file behavior; **CLR** forces **immediate** config `loadData` (verify via network or server state); export ZIP appears on **removable** path when SD/USB mounted, else Downloads / app-scoped per Toast.
 

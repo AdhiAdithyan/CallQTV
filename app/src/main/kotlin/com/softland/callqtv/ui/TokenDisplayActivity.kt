@@ -178,7 +178,7 @@ import java.util.concurrent.atomic.AtomicLong
 private const val SPECIAL_MSG_PREFIX = "__MSG__:"
 /** Multiline special counter messages: line height vs font size (reduces cramped / clipped lines). */
 private const val SPECIAL_COUNTER_MSG_LINE_HEIGHT_EM = 1.42f
-/** Fixed-protocol index-4 `D` (VIP / emergency): counter prefix when prefix mode is on. */
+/** Fixed-protocol index-4 `D` (VIP / emergency): always shown/spoken as this prefix (even if counter prefix is off). */
 private const val VIP_EMERGENCY_COUNTER_PREFIX = "ER"
 
 private fun encodeSpecialMessageToken(value: String): String = SPECIAL_MSG_PREFIX + value
@@ -394,7 +394,7 @@ private const val MAX_CUSTOM_CHIME_STARTUP_MS = 1200L
 private const val MAX_CUSTOM_CHIME_PLAYBACK_MS = 1500L
 
 // Play a short built-in chime or a custom audio URL before announcing a token.
-// Returns as soon as the cue starts; chime tail may overlap token TTS.
+// Returns when the cue starts; [onAudioStart] is the right place to publish the current token tile.
 suspend fun playTokenChime(
     context: Context,
     soundKey: String,
@@ -781,8 +781,18 @@ fun TokenDisplayScreen(
         if (languageChanged && isLoading) {
             showTtsLoading = true
         }
-        TokenAnnouncer.warmUp(context, lang, performPoke = true) {
-            Handler(Looper.getMainLooper()).post {
+        launch {
+            try {
+                val ready = TokenAnnouncer.awaitReady(
+                    context,
+                    lang,
+                    performPoke = true,
+                    primeSynthesis = true,
+                )
+                if (!ready) {
+                    android.util.Log.w("TokenDisplay", "TTS awaitReady returned false in LaunchedEffect")
+                }
+            } finally {
                 showTtsLoading = false
             }
         }
@@ -821,20 +831,9 @@ fun TokenDisplayScreen(
                     }
 
                     announcementMutex.withLock {
-                        val tokenOutcome =
-                            mqttViewModel.processTokenUpdateForKeys(
-                                storageKey,
-                                tokenLabel,
-                                fallbackKey = keypadFallback,
-                                publishImmediately = false,
-                                isVipEmergency = pair.isVipEmergency,
-                            )
-                        if (!tokenOutcome.playCueUi) return@withLock
-
-                        val willAnnounce =
-                            currentConfig?.enableTokenAnnouncement == true &&
-                                tokenOutcome.speakTokenAnnouncement
-                        val ttsWarmDeferred = if (willAnnounce) {
+                        val announcementsOn = currentConfig?.enableTokenAnnouncement == true
+                        // Bind + synthesis prime in parallel with map update and chime (not after UI publish).
+                        val ttsWarmDeferred = if (announcementsOn) {
                             async {
                                 TokenAnnouncer.awaitReady(
                                     context,
@@ -846,9 +845,22 @@ fun TokenDisplayScreen(
                             null
                         }
 
-                        val publishedAtCueStart = java.util.concurrent.atomic.AtomicBoolean(false)
-                        val publishVisualStateAtCueStart = publish@{
-                            if (!publishedAtCueStart.compareAndSet(false, true)) return@publish
+                        val tokenOutcome =
+                            mqttViewModel.processTokenUpdateForKeys(
+                                storageKey,
+                                tokenLabel,
+                                fallbackKey = keypadFallback,
+                                publishImmediately = false,
+                                isVipEmergency = pair.isVipEmergency,
+                            )
+                        if (!tokenOutcome.playCueUi) return@withLock
+
+                        val willAnnounce =
+                            announcementsOn && tokenOutcome.speakTokenAnnouncement
+
+                        val publishedVisualState = java.util.concurrent.atomic.AtomicBoolean(false)
+                        val publishTokenTile = publish@{
+                            if (!publishedVisualState.compareAndSet(false, true)) return@publish
                             mqttViewModel.publishTokensSnapshot()
                             mqttViewModel.markAsAnnounced(storageKey, tokenLabel)
                             mqttViewModel.markPayloadDisplayed(sourcePayload)
@@ -859,19 +871,28 @@ fun TokenDisplayScreen(
                         }
 
                         val soundKey = ThemeColorManager.getNotificationSoundKey(context)
-                        launch(Dispatchers.Main.immediate) {
-                            playTokenChime(
-                                context = context,
-                                soundKey = soundKey,
-                                tokenAudioUrl = currentConfig?.tokenAudioUrl,
-                                counterAudioUrl = actualCounter.audioUrl,
-                                onAudioStart = publishVisualStateAtCueStart,
-                            )
+                        if (willAnnounce) {
+                            val warmed = withTimeoutOrNull(12_000L) {
+                                ttsWarmDeferred?.await() ?: false
+                            }
+                            if (warmed != true) {
+                                android.util.Log.w(
+                                    "TokenDisplay",
+                                    "TTS not ready before announce (timeout=$warmed); attempting speech anyway",
+                                )
+                            }
                         }
-                        publishVisualStateAtCueStart()
+                        playTokenChime(
+                            context = context,
+                            soundKey = soundKey,
+                            tokenAudioUrl = currentConfig?.tokenAudioUrl,
+                            counterAudioUrl = actualCounter.audioUrl,
+                            onAudioStart = publishTokenTile,
+                        )
+                        // Fallback if the chime never invoked onAudioStart (prepare error / timeout).
+                        publishTokenTile()
 
                         if (willAnnounce) {
-                            ttsWarmDeferred?.await()
                             val displayName =
                                 (actualCounter.name?.takeIf { it.isNotBlank() }
                                     ?: actualCounter.defaultName?.takeIf { it.isNotBlank() }
@@ -884,62 +905,58 @@ fun TokenDisplayScreen(
                                 actualCounter.defaultCode.orEmpty().trim()
                             }
                             val usePrefix = currentConfig.enableCounterPrefix != false
-                            val effectiveSpeechCounterCode = when {
-                                pair.isVipEmergency && usePrefix -> VIP_EMERGENCY_COUNTER_PREFIX
-                                else -> counterCode
+                            // VIP/emergency (index 4 = D): always ER prefix for speech, even when counter prefix is off.
+                            val spokenPrefix = when {
+                                pair.isVipEmergency ->
+                                    VIP_EMERGENCY_COUNTER_PREFIX.toCharArray().joinToString(" ")
+                                usePrefix && counterCode.isNotBlank() ->
+                                    counterCode.toCharArray().joinToString(" ")
+                                else -> ""
                             }
-                            // When prefix is enabled (same as on-screen "CODE-token"), spell the code for TTS.
-                            val spokenPrefix =
-                                if (usePrefix && effectiveSpeechCounterCode.isNotBlank()) {
-                                    effectiveSpeechCounterCode.toCharArray().joinToString(" ")
-                                } else {
-                                    ""
-                                }
 
                             val isSpecial = isSpecialMessageToken(tokenLabel)
                             val decodedSpecial = decodeSpecialMessageToken(tokenLabel)
 
                             runWithAdvertisementAudioDuckedForSpeech(context) { skipPrime, restore ->
-                                withTimeoutOrNull(6000) {
-                                    suspendCancellableCoroutine<Unit> { continuation ->
-                                        continuation.invokeOnCancellation { restore() }
-                                        if (isSpecial && decodedSpecial != null) {
-                                            val spokenAnnouncement = buildString {
-                                                append(decodedSpecial)
-                                                if (announcementCounterName.isNotBlank()) {
-                                                    append(' ')
-                                                    append(announcementCounterName)
-                                                }
+                                suspendCancellableCoroutine<Unit> { continuation ->
+                                    continuation.invokeOnCancellation { restore() }
+                                    if (isSpecial && decodedSpecial != null) {
+                                        val spokenAnnouncement = buildString {
+                                            append(decodedSpecial)
+                                            if (announcementCounterName.isNotBlank()) {
+                                                append(' ')
+                                                append(announcementCounterName)
                                             }
-                                            TokenAnnouncer.announceMessage(
-                                                context = context,
-                                                audioLanguage = currentConfig.audioLanguage,
-                                                message = spokenAnnouncement,
-                                                skipSynthesisPrime = skipPrime,
-                                                onDone = {
-                                                    restore()
-                                                    if (continuation.isActive) continuation.resume(Unit)
-                                                },
-                                            )
-                                        } else {
-                                            val tokenText = TokenAnnouncer.sanitizeTokenLabelForSpeech(tokenLabel)
+                                        }
+                                        TokenAnnouncer.announceMessage(
+                                            context = context,
+                                            audioLanguage = currentConfig.audioLanguage,
+                                            message = spokenAnnouncement,
+                                            skipSynthesisPrime = skipPrime,
+                                            onDone = {
+                                                restore()
+                                                if (continuation.isActive) continuation.resume(Unit)
+                                            },
+                                        )
+                                    } else {
+                                        val tokenText = TokenAnnouncer.sanitizeTokenLabelForSpeech(tokenLabel)
                                             TokenAnnouncer.announceTokenCall(
                                                 context = context,
                                                 audioLanguage = currentConfig.audioLanguage,
-                                                spelledCounterPrefix = if (usePrefix) spokenPrefix else "",
-                                                tokenText = tokenText,
-                                                counterDisplayName = announcementCounterName,
-                                                skipSynthesisPrime = skipPrime,
-                                                onDone = {
-                                                    restore()
-                                                    if (continuation.isActive) continuation.resume(Unit)
-                                                },
-                                            )
-                                        }
+                                                spelledCounterPrefix = spokenPrefix,
+                                            tokenText = tokenText,
+                                            counterDisplayName = announcementCounterName,
+                                            skipSynthesisPrime = skipPrime,
+                                            onDone = {
+                                                restore()
+                                                if (continuation.isActive) continuation.resume(Unit)
+                                            },
+                                        )
                                     }
                                 }
                             }
                         }
+                        // Next token waits on announcementMutex until TTS onDone above; tile already shown at chime.
                     }
                 } finally {
                     mqttViewModel.announcementQueueSize.decrementAndGet()
@@ -977,17 +994,8 @@ fun TokenDisplayScreen(
                     }
 
                     announcementMutex.withLock {
-                        val specialToken = encodeSpecialMessageToken(tokenLabel)
-                        val replaced = mqttViewModel.replaceTokenForKeys(
-                            storageKey,
-                            specialToken,
-                            fallbackKey = keypadFallback,
-                            publishImmediately = false
-                        )
-                        if (!replaced) return@withLock
-
-                        val willAnnounce = currentConfig?.enableTokenAnnouncement == true
-                        val ttsWarmDeferred = if (willAnnounce) {
+                        val announcementsOn = currentConfig?.enableTokenAnnouncement == true
+                        val ttsWarmDeferred = if (announcementsOn) {
                             async {
                                 TokenAnnouncer.awaitReady(
                                     context,
@@ -999,9 +1007,20 @@ fun TokenDisplayScreen(
                             null
                         }
 
-                        val publishedAtCueStart = java.util.concurrent.atomic.AtomicBoolean(false)
-                        val publishVisualStateAtCueStart = publish@{
-                            if (!publishedAtCueStart.compareAndSet(false, true)) return@publish
+                        val specialToken = encodeSpecialMessageToken(tokenLabel)
+                        val replaced = mqttViewModel.replaceTokenForKeys(
+                            storageKey,
+                            specialToken,
+                            fallbackKey = keypadFallback,
+                            publishImmediately = false
+                        )
+                        if (!replaced) return@withLock
+
+                        val willAnnounce = announcementsOn
+
+                        val publishedVisualState = java.util.concurrent.atomic.AtomicBoolean(false)
+                        val publishTokenTile = publish@{
+                            if (!publishedVisualState.compareAndSet(false, true)) return@publish
                             mqttViewModel.publishTokensSnapshot()
                             mqttViewModel.markAsAnnounced(storageKey, tokenLabel)
                             mqttViewModel.markPayloadDisplayed(sourcePayload)
@@ -1012,19 +1031,27 @@ fun TokenDisplayScreen(
                         }
 
                         val soundKey = ThemeColorManager.getNotificationSoundKey(context)
-                        launch(Dispatchers.Main.immediate) {
-                            playTokenChime(
-                                context = context,
-                                soundKey = soundKey,
-                                tokenAudioUrl = currentConfig?.tokenAudioUrl,
-                                counterAudioUrl = actualCounter.audioUrl,
-                                onAudioStart = publishVisualStateAtCueStart,
-                            )
+                        if (willAnnounce) {
+                            val warmed = withTimeoutOrNull(12_000L) {
+                                ttsWarmDeferred?.await() ?: false
+                            }
+                            if (warmed != true) {
+                                android.util.Log.w(
+                                    "TokenDisplay",
+                                    "TTS not ready before special announce (timeout=$warmed); attempting speech anyway",
+                                )
+                            }
                         }
-                        publishVisualStateAtCueStart()
+                        playTokenChime(
+                            context = context,
+                            soundKey = soundKey,
+                            tokenAudioUrl = currentConfig?.tokenAudioUrl,
+                            counterAudioUrl = actualCounter.audioUrl,
+                            onAudioStart = publishTokenTile,
+                        )
+                        publishTokenTile()
 
                         if (willAnnounce) {
-                            ttsWarmDeferred?.await()
                             val displayName =
                                 (actualCounter.name?.takeIf { it.isNotBlank() }
                                     ?: actualCounter.defaultName?.takeIf { it.isNotBlank() }
@@ -1043,20 +1070,18 @@ fun TokenDisplayScreen(
                             }
 
                             runWithAdvertisementAudioDuckedForSpeech(context) { skipPrime, restore ->
-                                withTimeoutOrNull(6000) {
-                                    suspendCancellableCoroutine<Unit> { continuation ->
-                                        continuation.invokeOnCancellation { restore() }
-                                        TokenAnnouncer.announceMessage(
-                                            context = context,
-                                            audioLanguage = currentConfig.audioLanguage,
-                                            message = specialAnnouncement,
-                                            skipSynthesisPrime = skipPrime,
-                                            onDone = {
-                                                restore()
-                                                if (continuation.isActive) continuation.resume(Unit)
-                                            }
-                                        )
-                                    }
+                                suspendCancellableCoroutine<Unit> { continuation ->
+                                    continuation.invokeOnCancellation { restore() }
+                                    TokenAnnouncer.announceMessage(
+                                        context = context,
+                                        audioLanguage = currentConfig.audioLanguage,
+                                        message = specialAnnouncement,
+                                        skipSynthesisPrime = skipPrime,
+                                        onDone = {
+                                            restore()
+                                            if (continuation.isActive) continuation.resume(Unit)
+                                        },
+                                    )
                                 }
                             }
                         }
@@ -4510,15 +4535,18 @@ private fun CounterTokenSlot(
     val formattedToken = remember(token, config.tokenFormat) {
         formatTokenByPattern(token, config.tokenFormat)
     }
-    val prefixForSlot = when {
-        usePrefix && isFirst &&
+    val isVipEmergencyTop =
+        isFirst &&
             !vipEmergencyTopRawToken.isNullOrBlank() &&
-            token?.trim().orEmpty() == vipEmergencyTopRawToken.trim() -> VIP_EMERGENCY_COUNTER_PREFIX
+            token?.trim().orEmpty() == vipEmergencyTopRawToken.trim()
+    val prefixForSlot = when {
+        isVipEmergencyTop -> VIP_EMERGENCY_COUNTER_PREFIX
         else -> counterCode
     }
     val displayToken = when {
         formattedToken == null -> null
         isSpecialMessageToken(formattedToken) -> decodeSpecialMessageToken(formattedToken)
+        isVipEmergencyTop -> "$VIP_EMERGENCY_COUNTER_PREFIX-$formattedToken"
         usePrefix && prefixForSlot.isNotBlank() -> "$prefixForSlot-$formattedToken"
         else -> formattedToken
     }

@@ -47,7 +47,7 @@ flowchart TD
     M -->|D/-/normal| P[Normal token flow]
 ```
 
-**Normal token flow (detail):** `parseMqttMessage` → `resolveCounterIdentityFromSerial` (**keypad SN** from frame; not fixed index 18) → `tokenUpdateChannel` → `TokenDisplayScreen` → **`findCounterEntityForMqttRoute`** → `processTokenUpdateForKeys` → announcement path (§3). On-screen label: `formatTokenByPattern` + optional counter code prefix (§3 note).
+**Normal token flow (detail):** `parseMqttMessage` → `resolveCounterIdentityFromSerial` (**keypad SN** from frame; not fixed index 18) → `tokenUpdateChannel` → `TokenDisplayScreen` → **`findCounterEntityForMqttRoute`** → `processTokenUpdateForKeys` → announcement path (§3). On-screen label: `formatTokenByPattern` + optional `{code}-` when `enable_counter_prefix`; index 4 **`D`** → always **`ER-`** (§3.4.1 in [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md)).
 
 ---
 
@@ -55,14 +55,18 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A[Queued token or message] --> B[Acquire announcement turn]
-    B --> C[processTokenUpdateForKeys or replaceTokenForKeys]
+    A[Queued token or message] --> B[Acquire announcementMutex]
+    B --> R[async awaitReady if announcements on]
+    R --> C[processTokenUpdateForKeys publishImmediately=false]
     C --> D{playCueUi?}
-    D -->|No| Z[Skip UI/audio]
-    D -->|Yes| E[Publish UI + blink at cue start]
-    E --> F[Play chime + parallel awaitReady]
-    F --> G{enable_token_announcement AND speakTokenAnnouncement?}
-    G -->|No| Z2[Done]
+    D -->|No| Z[Release mutex]
+    D -->|Yes| W{willAnnounce?}
+    W -->|Yes| AR[Await awaitReady max 12s]
+    W -->|No| CH
+    AR --> CH[playTokenChime awaited]
+    CH --> E[Publish tile + blink at cue start]
+    E --> G{enable_token_announcement AND speakTokenAnnouncement?}
+    G -->|No| Z2[Release mutex]
     G -->|Yes| H[runWithAdvertisementAudioDuckedForSpeech]
     H --> I{Ad sound on?}
     I -->|Yes| J[Duck Exo + YouTube]
@@ -70,10 +74,11 @@ flowchart TD
     J --> L[awaitSynthesisPrimeIfNeeded if cold]
     K --> L
     L --> M{Special or normal?}
-    M -->|Special| N[announceMessage]
-    M -->|Normal| O[announceTokenCall]
+    M -->|Special| N[announceMessage until onDone]
+    M -->|Normal| O[announceTokenCall until onDone]
     N --> P[Restore ad audio]
     O --> P
+    P --> Z2
 ```
 
 ---
@@ -104,10 +109,11 @@ flowchart LR
     B --> C[parseMqttMessage]
     C --> D[tokenUpdateChannel or tokenReplaceChannel]
     D --> E[TokenDisplayScreen collect]
-    E --> F[announcementMutex]
-    F --> G[publishTokensSnapshot]
-    G --> H[tokensPerCounter LiveData]
-    H --> I[CountersArea / getTokensForCounter]
+    E --> F[announcementMutex per token]
+    F --> G[chime then publishTokensSnapshot at cue]
+    G --> H[optional TTS then release mutex]
+    H --> I[tokensPerCounter LiveData]
+    I --> J[CountersArea / getTokensForCounter]
 ```
 
 ---
@@ -151,4 +157,4 @@ flowchart TD
 
 ---
 
-*Derived from CallQTV May 2026 source (app 1.0.1, Room v17, `AdViewportSizing`). See [SOURCE_CODE_DOCUMENTATION.md](./SOURCE_CODE_DOCUMENTATION.md) and [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md) §3.10.*
+*Derived from CallQTV May 2026 source (app `1.0.1`, `versionCode` 2, Room v17). Announcement mutex + VIP ER: [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md) §3.4.1, §3.5–§3.5.2. Code index: [SOURCE_CODE_DOCUMENTATION.md](./SOURCE_CODE_DOCUMENTATION.md).*

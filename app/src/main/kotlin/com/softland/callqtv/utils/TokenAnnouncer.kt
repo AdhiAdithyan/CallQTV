@@ -30,15 +30,17 @@ object TokenAnnouncer {
     /** Longer informational / special messages: still clear, not as slow as legacy 0.85f. */
     private const val INFO_MESSAGE_SPEECH_RATE = 0.96f
     private const val INFO_MESSAGE_SPEECH_PITCH = 1.0f
-    /** Keep the engine warm on idle TVs (was 8s — too long; service slept before next token). */
+    /** Keep the engine bound on idle TVs (was 8s — too long; service slept before next token). */
     private const val HEARTBEAT_INTERVAL_MS = 3_000L
     private const val HEARTBEAT_SILENT_MS = 120L
     private const val HEARTBEAT_FAILURES_BEFORE_REINIT = 6
     /**
-     * Silent heartbeats keep the engine bound but many TV TTS stacks still load voice data on the
-     * first audible [speak]. Re-prime after this idle gap (covers tokens minutes after cold start).
+     * Silent heartbeats keep the engine bound; many TV stacks still unload voice synthesis after
+     * ~30–60s without an audible utterance. Re-prime on this interval while idle.
      */
-    private const val SPEECH_WAKE_IDLE_MS = 20_000L
+    private const val IDLE_SYNTHESIS_KEEP_WARM_INTERVAL_MS = 15_000L
+    /** Token path may still re-prime if idle keep-warm was skipped (e.g. during long speech). */
+    private const val SPEECH_WAKE_IDLE_MS = 60_000L
     private const val PRIME_DEBOUNCE_MS = 4_000L
     private const val PRIME_TIMEOUT_MS = 4_500L
     /** Nearly silent; loads the active voice without a noticeable announcement. */
@@ -67,6 +69,9 @@ object TokenAnnouncer {
     private var lastRealSpeechAtMs = 0L
     @Volatile
     private var lastPrimeAtMs = 0L
+    @Volatile
+    private var synthesisPrimeInFlight = false
+    private val pendingAfterPrime = java.util.concurrent.CopyOnWriteArrayList<() -> Unit>()
 
     fun isAnnouncementsEnabled(): Boolean = announcementsEnabled
 
@@ -118,26 +123,31 @@ object TokenAnnouncer {
         context: Context,
         audioLanguage: String? = null,
         performPoke: Boolean = true,
-    ): Boolean = suspendCancellableCoroutine { cont ->
-        if (!announcementsEnabled) {
-            cont.resume(false)
-            return@suspendCancellableCoroutine
+        primeSynthesis: Boolean = true,
+    ): Boolean {
+        if (!announcementsEnabled) return false
+        val ready = suspendCancellableCoroutine { cont ->
+            warmUp(context, audioLanguage, performPoke = false) { bound ->
+                if (!bound) {
+                    if (cont.isActive) cont.resume(false)
+                    return@warmUp
+                }
+                val finish: () -> Unit = {
+                    if (performPoke) performEnginePokeOnMain()
+                    if (cont.isActive) cont.resume(true)
+                }
+                if (Looper.myLooper() == Looper.getMainLooper()) {
+                    finish()
+                } else {
+                    mainHandler.post { finish() }
+                }
+            }
         }
-        warmUp(context, audioLanguage, performPoke = false) { ready ->
-            if (!ready) {
-                if (cont.isActive) cont.resume(false)
-                return@warmUp
-            }
-            val finish: () -> Unit = {
-                if (performPoke) mainHandler.post { performEnginePokeOnMain() }
-                if (cont.isActive) cont.resume(true)
-            }
-            if (Looper.myLooper() == Looper.getMainLooper()) {
-                finish()
-            } else {
-                mainHandler.post { finish() }
-            }
+        if (!ready) return false
+        if (primeSynthesis) {
+            awaitSynthesisPrimeIfNeeded()
         }
+        return true
     }
 
     /**
@@ -148,18 +158,22 @@ object TokenAnnouncer {
         if (!announcementsEnabled) return
         suspendCancellableCoroutine { cont ->
             val run = {
-                if (needsSpeechWake()) {
-                    primeSpeechSynthesisOnMain {
-                        if (cont.isActive) cont.resume(Unit)
-                    }
-                } else {
-                    cont.resume(Unit)
+                val finish: () -> Unit = {
+                    if (cont.isActive) cont.resume(Unit)
                 }
+                if (!needsSpeechWake()) {
+                    finish()
+                } else if (synthesisPrimeInFlight) {
+                    pendingAfterPrime.add(finish)
+                } else {
+                    primeSpeechSynthesisOnMain(finish)
+                }
+                Unit
             }
             if (Looper.myLooper() == Looper.getMainLooper()) {
                 run()
             } else {
-                mainHandler.post(run)
+                mainHandler.post { run() }
             }
         }
     }
@@ -189,7 +203,11 @@ object TokenAnnouncer {
         }
         when (readyNow) {
             true -> {
-                if (performPoke) performEnginePoke()
+                appContext?.let { ensureHeartbeatScheduled(it) }
+                if (performPoke) {
+                    performEnginePokeOnMain()
+                    primeSpeechSynthesisOnMain {}
+                }
                 onReady(true)
             }
             null -> Unit
@@ -223,8 +241,9 @@ object TokenAnnouncer {
                 tts?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {
                         utteranceId ?: return
-                        if (utteranceId.startsWith("token_") || utteranceId.startsWith("msg_")) {
-                            lastRealSpeechAtMs = System.currentTimeMillis()
+                        when {
+                            utteranceId.startsWith("token_") || utteranceId.startsWith("msg_") ->
+                                lastRealSpeechAtMs = System.currentTimeMillis()
                         }
                     }
                     override fun onDone(utteranceId: String?) {
@@ -242,10 +261,15 @@ object TokenAnnouncer {
                 isInitialized = false
             }
         }
-        val success = status == TextToSpeech.SUCCESS
-        finishInitAttempt(success)
-        if (success) {
-            performEnginePoke()
+        if (status != TextToSpeech.SUCCESS) {
+            finishInitAttempt(false)
+            return
+        }
+        // Release waiters as soon as the engine is bound; prime runs async (blocking here hung first token speech).
+        finishInitAttempt(true)
+        performEnginePokeOnMain()
+        primeSpeechSynthesisOnMain {
+            Log.d(TAG, "TTS init synthesis prime complete")
         }
     }
 
@@ -289,6 +313,21 @@ object TokenAnnouncer {
     }
 
     /**
+     * Periodic quiet prime while the TV is idle so the next token does not pay voice-load latency.
+     * Silent [playSilentUtterance] heartbeats alone are not enough on many devices.
+     */
+    private fun keepSynthesisWarmDuringIdle() {
+        if (!announcementsEnabled) return
+        synchronized(this) {
+            if (!isInitialized || tts == null) return
+        }
+        if (tts?.isSpeaking == true) return
+        val now = System.currentTimeMillis()
+        if (now - lastPrimeAtMs < IDLE_SYNTHESIS_KEEP_WARM_INTERVAL_MS) return
+        primeSpeechSynthesisOnMain {}
+    }
+
+    /**
      * Runs [action] on the main thread after a quiet prime utterance when synthesis is cold.
      * Silent heartbeats do not load voice data on many TV TTS engines.
      */
@@ -315,24 +354,29 @@ object TokenAnnouncer {
                 return
             }
             val now = System.currentTimeMillis()
+            if (synthesisPrimeInFlight) {
+                pendingAfterPrime.add(onComplete)
+                return
+            }
             if (now - lastPrimeAtMs < PRIME_DEBOUNCE_MS) {
                 onComplete()
                 return
             }
+            synthesisPrimeInFlight = true
         }
         val primePhrase = SYNTHESIS_PRIME_PHRASE
         val utteranceId = "prime_${System.nanoTime()}"
         val timeoutRunnable = Runnable {
             if (completionCallbacks.remove(utteranceId) != null) {
                 Log.w(TAG, "Synthesis prime timed out after ${PRIME_TIMEOUT_MS}ms")
-                onComplete()
+                completeSynthesisPrime(onComplete)
             }
         }
         mainHandler.postDelayed(timeoutRunnable, PRIME_TIMEOUT_MS)
         completionCallbacks[utteranceId] = {
             mainHandler.removeCallbacks(timeoutRunnable)
             lastPrimeAtMs = System.currentTimeMillis()
-            onComplete()
+            completeSynthesisPrime(onComplete)
         }
         applyTokenSpeechStyle()
         val params = Bundle().apply {
@@ -344,9 +388,23 @@ object TokenAnnouncer {
             mainHandler.removeCallbacks(timeoutRunnable)
             completionCallbacks.remove(utteranceId)
             Log.w(TAG, "Synthesis prime speak() returned ERROR")
-            onComplete()
+            completeSynthesisPrime(onComplete)
         } else {
             Log.d(TAG, "Synthesis prime started ($primePhrase)")
+        }
+    }
+
+    private fun completeSynthesisPrime(primary: () -> Unit) {
+        synthesisPrimeInFlight = false
+        primary()
+        val pending = pendingAfterPrime.toList()
+        pendingAfterPrime.clear()
+        pending.forEach { run ->
+            try {
+                run()
+            } catch (e: Exception) {
+                Log.w(TAG, "pendingAfterPrime callback failed: ${e.message}")
+            }
         }
     }
 
@@ -793,6 +851,12 @@ object TokenAnnouncer {
     private var heartbeatJob: Job? = null
     private var lastHeartbeatErrorCount = 0
 
+    private fun ensureHeartbeatScheduled(context: Context) {
+        appContext = context.applicationContext
+        if (heartbeatJob?.isActive == true) return
+        scheduleHeartbeat(context)
+    }
+
     private fun scheduleHeartbeat(context: Context) {
         appContext = context.applicationContext
         heartbeatJob?.cancel()
@@ -831,6 +895,8 @@ object TokenAnnouncer {
                     if (lastHeartbeatErrorCount >= HEARTBEAT_FAILURES_BEFORE_REINIT) {
                         Log.e(TAG, "TTS unresponsive; re-binding engine")
                         reinitializeOnMain()
+                    } else {
+                        keepSynthesisWarmDuringIdle()
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Heartbeat error", e)
@@ -1114,5 +1180,7 @@ object TokenAnnouncer {
         lastHeartbeatErrorCount = 0
         lastRealSpeechAtMs = 0L
         lastPrimeAtMs = 0L
+        synthesisPrimeInFlight = false
+        pendingAfterPrime.clear()
     }
 }

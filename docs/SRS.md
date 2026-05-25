@@ -34,7 +34,7 @@ CallQTV is an Android TV application for **real-time queue token display** and *
 | FR-13 | Support fixed `$...*` payloads, **`000-` CLR** frames (variable token digits before `CLR`), and supported short-wrapper shapes. |
 | FR-14 | Fixed protocol index 4: **`A`/`E`** and transferred **`B`** → DB-only, **no** live token UI. |
 | FR-15 | Type **`C`** → special message replacing token area; blink; dedicated TTS path. |
-| FR-16 | Types **`D`**, **`-`**, normal → standard token flow; **`D`** may set VIP/emergency display. |
+| FR-16 | Types **`D`**, **`-`**, normal → standard token flow; **`D`** (index 4) = VIP/emergency with fixed **`ER`** prefix on display and TTS. |
 | FR-17 | Display current and historical tokens per counter per server layout (`display_rows` / `display_columns`). |
 | FR-18 | When counter count **> 4**, use split grid layout (2 rows or columns). |
 | FR-19 | Suppress duplicate handling of **identical raw payload** within **10 seconds**. |
@@ -58,19 +58,22 @@ CallQTV is an Android TV application for **real-time queue token display** and *
 
 | ID | Requirement |
 |----|-------------|
-| FR-40 | Serialize token UI events so chime/TTS do not overlap (`announcementMutex`). |
+| FR-40 | Serialize token UI events under `announcementMutex` so chime/TTS do not overlap; hold mutex through TTS `onDone` when speaking. |
 | FR-41 | **`playCueUi`**: play notification chime, publish token snapshot, and blink when map/VIP changes or primary re-call after >10s. |
 | FR-42 | **`speakTokenAnnouncement`**: speak TTS only when primary-key announce rules pass and `enable_token_announcement` is on. |
-| FR-43 | Align UI update with **chime cue start**. |
-| FR-44 | Normal TTS: `Token`, optional spelled counter prefix, token label, optional counter name (`enable_counter_announcement`). |
+| FR-43 | Publish **current** token tile at **chime cue start** (`onAudioStart` + fallback); **next** token must not publish until previous announcement completes. |
+| FR-44 | Normal TTS: `Token`, optional spelled counter prefix (when `enable_counter_prefix`), token label, optional counter name (`enable_counter_announcement`). |
+| FR-44a | VIP/emergency (`D`): TTS always spells **`ER`** before the token, even when `enable_counter_prefix` is off. |
 | FR-45 | Special TTS: message text then optional counter name (single space). |
 | FR-46 | When `enable_ad_sound` is on, duck ExoPlayer and YouTube WebView video during TTS; restore after speech. |
 | FR-47 | Support configurable notification chime (~51 system tones in `ThemeColorManager.notificationSoundOptions`). |
 | FR-48 | Optional per-counter or global custom chime URL before system tone. |
-| FR-49 | When speech is required, bind/warm TTS **in parallel** with chime (`awaitReady`); do not block speech on full chime duration. |
+| FR-49 | When speech is required, start `async { awaitReady() }` before map update; await bind (12s timeout) before TTS; do not block speech on full custom chime duration; attempt TTS even if warm times out. |
+| FR-49a | TTS engine bind (`finishInitAttempt`) must not wait for synthesis prime to finish (prime runs async). |
 | FR-50 | Warm TTS from cached/fresh `tv_config` during config load when `enable_token_announcement` is on (`warmTokenAnnouncerIfEnabled`). |
-| FR-51 | Before the first real utterance after cold/idle synthesis, play a quiet prime phrase (`SYNTHESIS_PRIME_PHRASE`, currently **wellcome** at 2% volume). |
+| FR-51 | Play quiet synthesis prime (`SYNTHESIS_PRIME_PHRASE` **wellcome**, `PRIME_VOLUME` 0.01) on init, `warmUp(performPoke=true)`, `awaitReady`, when cold, and every **15s** idle via heartbeat while announcements are on. |
 | FR-52 | When `enable_ad_sound` is on, run synthesis prime **only after** ad ducking, not over full-volume ads. |
+| FR-53 | Keep TTS engine bound with silent heartbeat every **3s**; re-bind after repeated heartbeat failures. |
 
 ### 2.5 Token display
 
@@ -78,6 +81,7 @@ CallQTV is an Android TV application for **real-time queue token display** and *
 |----|-------------|
 | FR-55 | Apply `token_format` for on-screen padding; patterns `T1`/`T2` must **not** insert a literal `T` before the number. |
 | FR-56 | When counter prefix is enabled, display `{counter.code}-{formattedToken}` (e.g. `NU-2`). |
+| FR-57 | VIP/emergency (index 4 = **`D`**): display **`ER-{formattedToken}`** on the primary slot even when counter prefix is disabled. |
 
 ### 2.6 Connectivity and status
 
@@ -155,4 +159,4 @@ CallQTV is an Android TV application for **real-time queue token display** and *
 
 ---
 
-*Derived from CallQTV May 2026 source. Update when [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md) changes.*
+*Derived from CallQTV May 2026 source (app `1.0.1`, Room v17). Update when [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md) changes.*

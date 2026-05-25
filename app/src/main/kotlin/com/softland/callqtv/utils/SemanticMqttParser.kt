@@ -18,7 +18,7 @@ object SemanticMqttParser {
         val buttonStringId: String,
         val serial: String,
         val action: PayloadAction,
-        /** Index-4 marker `D` in fixed protocol: VIP / emergency token (display/announce prefix ER). */
+        /** Index-4 marker `D` in fixed protocol: VIP / emergency token (always display/announce prefix ER). */
         val isVipEmergency: Boolean = false,
     )
 

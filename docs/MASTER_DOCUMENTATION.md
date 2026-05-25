@@ -88,7 +88,7 @@ This file is the **canonical** reference for architecture, product behavior, MQT
   - `A` / `E`: DB-only, no token UI update (payload log / records path only)
   - `B`: **transferred token** — same as `A`/`E` (DB-only, **not** shown on the token UI)
   - `C`: special-message mode, full token area replace, centered, blinking
-  - `D`, `-`, and other normal token types: standard token flow (`D` adds VIP/emergency handling in app)
+  - `D`, `-`, and other normal token types: standard token flow; **`D`** (index 4) = VIP/emergency → always **`ER-{token}`** on screen and **`ER`** in TTS (see §3.4.1), independent of `enable_counter_prefix`
 
 ### 3.3 `CLR` Behavior
 - Valid `CLR` payload (keypad serial passes `isValidKeypadMessage`) triggers a clear pass and an **immediate** TV configuration sync: `requestConfigRefresh(..., forceImmediate = true)` → `TvConfigRefreshSignal(forceImmediate = true)` so **`TokenDisplayViewModel`** runs **`loadData(..., forceShowOverlay = true)`** without the usual **30s** MQTT-refresh throttle (same configuration API path as the Settings **Refresh** button). Other MQTT-driven config hints remain **debounced** on the MQTT VM (**15s**, `CONFIG_REFRESH_DEBOUNCE_MS`) and **throttled** in the display VM (**30s**) when `forceImmediate` is false.
@@ -113,20 +113,24 @@ This file is the **canonical** reference for architecture, product behavior, MQT
 ### 3.4.1 On-screen token label (`token_format` + counter prefix)
 - **`tv_config.token_format`**: patterns like **`T1`** / **`T2`** set **digit width only** (zero-padding). They do **not** add a literal **`T`** on screen (token `2` + `T1` → **`2`**, not `T2`).
 - When **`enable_counter_prefix`** is on, display is **`{counter.code}-{formattedToken}`** (e.g. `NU-2`), using `CounterEntity.code` / `default_code`.
+- **VIP/emergency** (fixed-protocol index 4 = **`D`**): top slot always shows **`ER-{formattedToken}`** and TTS spells **`ER`** before the token, **even when** `enable_counter_prefix` is off (`VIP_EMERGENCY_COUNTER_PREFIX` in `TokenDisplayActivity.kt`).
 - Implemented in **`formatTokenByPattern`** / **`CounterTokenSlot`** (`TokenDisplayActivity.kt`); tests in **`TokenFormatTest`**.
 
 ### 3.5 Announcement Behavior
-- Token UI events are processed under **`announcementMutex`** so chime/TTS do not overlap.
-- **`MqttViewModel.processTokenUpdateForKeys`** returns **`TokenUiProcessResult`**:
+- Token UI events are processed under **`announcementMutex`** so chime/TTS do not overlap and **the next token cannot start until the previous announcement finishes** (mutex held through TTS `onDone`; no fixed speech timeout).
+- **`MqttViewModel.processTokenUpdateForKeys`** returns **`TokenUiProcessResult`** (with `publishImmediately = false` in the UI collector; snapshot published from `TokenDisplayScreen`):
   - **`playCueUi`**: `true` when the token map changed, VIP/emergency overlay changed, or the primary token is eligible for a **re-call** (same token at top after **>10s**). Drives **chime**, **`publishTokensSnapshot`**, and **blink** in `TokenDisplayScreen`.
   - **`speakTokenAnnouncement`**: `true` only on primary-key rules (new/moved token, or re-call after **10s**). Drives **TTS** when `enable_token_announcement` is on.
 - **Chime** therefore runs for more UI updates than TTS (e.g. fallback-key sync, VIP overlay-only change, `__MSG__` list cleanup at slot 0) — not only when speech fires.
 - **`replaceTokenForKeys`** (type `C`) always runs chime + publish when replace succeeds.
-- UI publication/highlight happens at the **chime cue start** (`playTokenChime` `onAudioStart` + fallback publish).
-- **Chime → TTS overlap:** When speech is required, `TokenAnnouncer.awaitReady()` runs **in parallel** with chime playback and UI publish (`async` + `ttsWarmDeferred` in `TokenDisplayScreen`). The collector **awaits** engine readiness, then enters the duck/prime/speak path — it does **not** wait for the full chime clip to finish. Custom URL chimes keep playing until `MediaPlayer` completion.
+- **Current token** tile update happens at **chime cue start** (`playTokenChime` `onAudioStart` + one-shot fallback `publishTokenTile()`).
+- **Next token** tile update waits until the previous token’s **`announcementMutex`** turn completes (including full TTS when `speakTokenAnnouncement` is true).
+- **Per-token order (announcements on):** start `async { awaitReady() }` → `processTokenUpdateForKeys` → **`withTimeoutOrNull(12s)`** await warm (if speaking; logs warning and **still attempts TTS** on timeout) → `playTokenChime` → publish tile + blink → duck/prime/speak → release mutex.
+- **Chime → TTS:** `awaitReady()` (bind + silent poke + synthesis prime when needed) overlaps map update and chime start; collector **does not** wait for the full custom chime clip. Custom URL chimes may still play in the background until `MediaPlayer` completion.
 - **Normal tokens (spoken phrase)**: space-separated — `Token`, optional **spelled counter prefix** (letters/digits with spaces when counter prefix is enabled), token label, optional **counter display name** when `enable_counter_announcement` is on (same ordering as on-screen emphasis).
 - **Special messages (`__MSG__` / type `C`)**: spoken as **message** then optional **counter name** (single space, no comma) when counter announcement is enabled.
 - If counter prefix is enabled for normal tokens, the prefix is part of the same utterance as the token (spelled with spaces between characters).
+- **VIP/emergency (`D`)**: TTS always spells **`ER`** before the token when `isVipEmergency` is true, even if `enable_counter_prefix` is off (`TokenDisplayScreen` collector).
 - **Advertisement sound (`ThemePrefs` `enable_ad_sound`)**: `runWithAdvertisementAudioDuckedForSpeech` lowers **ExoPlayer** and **YouTube `WebView`** video volume **before** synthesis prime and the real announcement. Volumes restore on utterance completion / cancellation (`TokenAnnouncementAdAudio`, `MediaEngine`). If ad sound is off, ducking is skipped and synthesis prime runs immediately before speak (see §3.5.1).
 - Special messages: use `TokenAnnouncer.announceMessage` path; blink using existing current-token blink timing.
 - Identical raw payloads received within 10 seconds are announced only once.
@@ -135,29 +139,36 @@ This file is the **canonical** reference for architecture, product behavior, MQT
 
 **Early engine warm (`TokenDisplayViewModel` + UI)**
 
-- `warmTokenAnnouncerIfEnabled()` calls `TokenAnnouncer.setAnnouncementsEnabled(true)` and `warmUp(..., performPoke = true)` when `enable_token_announcement` is on:
+- `warmTokenAnnouncerIfEnabled()` calls `TokenAnnouncer.setAnnouncementsEnabled(true)` and **`warmUp(..., performPoke = true)`** (non-blocking; synthesis prime runs in background) when `enable_token_announcement` is on:
   - Before cache clear on launch (last session’s cached language, while config API runs).
-  - During config API when cache is not cleared first.
-  - Again when fresh `tv_config` is written after API success / pending / error / fallback.
-- `TokenDisplayScreen` `LaunchedEffect(config…)` also warms TTS when config arrives (not gated on the full-screen loading overlay).
+  - On every `applyUiFromSnapshot` when config is applied from cache or API.
+- `TokenDisplayScreen` `LaunchedEffect(config…)` runs **`launch { awaitReady(...) }`** in the background (does not block Compose); shows “Preparing voice engine…” only when audio language changes during load.
 
 **APIs**
 
 | API | Purpose |
 |-----|---------|
-| `warmUp` / `initialize` | Bind `TextToSpeech` on main thread; optional silent poke |
-| `awaitReady` | Suspend until engine is bound (used during chime; **no** synthesis prime) |
-| `awaitSynthesisPrimeIfNeeded` | Suspend until quiet prime finishes when synthesis is cold |
-| `announceTokenCall` / `announceMessage` | Real speech; `skipSynthesisPrime` when prime already ran |
+| `warmUp` / `initialize` | Bind `TextToSpeech` on main thread; `performPoke = true` → poke + **async** prime, then **`onReady(true)` immediately** (does not wait for prime to finish) |
+| `awaitReady` | Suspend until engine is **bound**; optional poke; if **`primeSynthesis = true`**, then `awaitSynthesisPrimeIfNeeded()` (waits for cold prime / in-flight prime) |
+| `awaitSynthesisPrimeIfNeeded` | Suspend until quiet prime finishes when `needsSpeechWake()`, or queue on `pendingAfterPrime` if `synthesisPrimeInFlight` |
+| `announceTokenCall` / `announceMessage` | Real speech; `skipSynthesisPrime` when prime already ran in duck path |
+| `ensureHeartbeatScheduled` | Start 3 s keep-alive loop if not already running |
+
+**Engine bind vs synthesis warm**
+
+- On first **`TextToSpeech` init success**, **`finishInitAttempt(true)` runs immediately** so `warmUp` / `awaitReady` waiters are not stuck; **`primeSpeechSynthesisOnMain`** runs right after (async). Deferring `finishInitAttempt` until prime completed caused the first token to show on screen with **no speech** on some TVs.
+- **`synthesisPrimeInFlight`** + **`pendingAfterPrime`** serialize overlapping prime requests; concurrent `awaitSynthesisPrimeIfNeeded()` calls wait for the active prime.
 
 **Synthesis prime (cold voice load)**
 
-- Constant `SYNTHESIS_PRIME_PHRASE` = **`"wellcome"`** at **`PRIME_VOLUME` (0.02)** — loads the active voice without a loud duplicate announcement.
-- Runs when `needsSpeechWake()` is true: no real speech yet, or idle **> `SPEECH_WAKE_IDLE_MS` (20 s)** since last prime or real utterance (`token_*` / `msg_*` ids).
-- **Debounced:** at most once per **`PRIME_DEBOUNCE_MS` (4 s)**.
-- **With ad sound on:** prime runs only **after** `MediaEngine.duckForAnnouncement()` inside `runWithAdvertisementAudioDuckedForSpeech`, then `announce*` with `skipSynthesisPrime = true`.
-- **With ad sound off:** prime runs inline in `speakRawNowOnMain` before the real phrase (`skipSynthesisPrime = false`).
-- **Not** played on a timer; silent **heartbeat** (`playSilentUtterance` every **3 s**) keeps the engine bound but does not replace synthesis prime.
+- Constant `SYNTHESIS_PRIME_PHRASE` = **`"wellcome"`** at **`PRIME_VOLUME` (0.01)** — loads the active voice without a loud duplicate announcement.
+- **Token path:** `needsSpeechWake()` when no real speech yet, or idle **> `SPEECH_WAKE_IDLE_MS` (60 s)** since last `token_*` / `msg_*` or last prime.
+- **Idle keep-warm:** heartbeat calls `keepSynthesisWarmDuringIdle()` — quiet prime at most every **`IDLE_SYNTHESIS_KEEP_WARM_INTERVAL_MS` (15 s)** while announcements are enabled (skipped when `tts.isSpeaking`).
+- **Also primes:** right after TTS init (async), on `warmUp(..., performPoke = true)` when engine already ready (async), and in `awaitSynthesisPrimeIfNeeded()` before real speech when cold.
+- **Debounced:** at most once per **`PRIME_DEBOUNCE_MS` (4 s)**; **`PRIME_TIMEOUT_MS` (4.5 s)** fallback if prime utterance never completes.
+- **With ad sound on:** extra prime in `runWithAdvertisementAudioDuckedForSpeech` **after** duck; `announce*` with `skipSynthesisPrime = true`.
+- **With ad sound off:** prime in `speakRawNowOnMain` via `runOnMainAfterSpeechWake` when cold (`skipSynthesisPrime = false`).
+- Silent **heartbeat** (`playSilentUtterance` every **3 s**) keeps the engine **bound**; audible prime keeps **synthesis** loaded on many TV stacks.
 
 **Speech text**
 
@@ -165,6 +176,17 @@ This file is the **canonical** reference for architecture, product behavior, MQT
 - Letter-spaced runs optionally collapsed (`collapseLetterSpacedRuns`).
 - Long ALL-CAPS words in special messages may be lowercased for word pronunciation.
 - Optional debug log when input still contains `__MSG__` (tag `TokenAnnouncer`).
+
+#### 3.5.2 Token UI collector (`TokenDisplayScreen`)
+
+Under **`announcementMutex`**, each `tokenUpdateChannel` / `tokenReplaceChannel` event:
+
+1. If `enable_token_announcement`: `async { TokenAnnouncer.awaitReady(performPoke = true) }` (starts **before** `processTokenUpdateForKeys`).
+2. `processTokenUpdateForKeys(..., publishImmediately = false, isVipEmergency = pair.isVipEmergency)`.
+3. If `playCueUi`: **`withTimeoutOrNull(12_000)`** on `awaitReady` when speaking → **`playTokenChime`** (awaited) → **`publishTokenTile`** at `onAudioStart` + fallback → TTS until `onDone` → release mutex (next token blocked until TTS completes).
+4. **`publishTokenTile`**: `publishTokensSnapshot`, `markAsAnnounced`, `markPayloadDisplayed`, blink trigger.
+5. **VIP TTS:** `spokenPrefix` = spelled **`ER`** when `pair.isVipEmergency`, else counter code only if `enable_counter_prefix`; passed to `announceTokenCall` as `spelledCounterPrefix`.
+6. **`TokenDisplayActivity.onDestroy`**: `TokenAnnouncer.shutdown()` only when `isFinishing` (transient teardown keeps TTS warm).
 
 ### 3.6 Special Message Rendering
 - Payload type `C` uses `button_strings` value substitution.
@@ -613,9 +635,12 @@ flowchart TD
 - **May 2026**: Room **v17** — `mqtt_payload_logs` table; **`MqttPayloadLogRepository`** + **`TokenReportRequest`** upload; **`FlexibleIntDeserializer`** on API counter index fields.
 - **May 2026**: **`PublicCallqtvConfigStorage`**, expanded **`DiagnosticsExporter`** / **`FileLogger`**; **`MyApplication`** non-fatal exception filtering.
 - **May 2026**: Unit tests — `MqttCounterRoutingTest`, `TvConfigParsingTest`, `SemanticMqttParserTest`, `KeypadPayloadParserTest`, `TokenAnnouncerSpeechTest`, `TokenFormatTest`.
-- **May 2026**: Source index — [SOURCE_CODE_DOCUMENTATION.md](./SOURCE_CODE_DOCUMENTATION.md) refreshed (82 main Kotlin files, DB v17, test matrix).
+- **May 2026**: Source index — [SOURCE_CODE_DOCUMENTATION.md](./SOURCE_CODE_DOCUMENTATION.md) refreshed (~91 main Kotlin files, Room v17, 8 unit test classes).
 - **May 2026**: **`AdViewportSizing.kt`** — `BoxWithConstraints` in `AdArea`; Coil decode + preload at pane size; ExoPlayer `updateViewport` + per-clip track/bitrate caps; faster ad buffer; §3.10 expanded (types, pane layout, limitations).
 - **May 2026**: **MQTT token routing** — normal/special fixed payloads resolve counter by **`keypad_sn` only**; fixed-frame index **18** is not `keypad_index`; `SemanticMqttParser.FixedPayload` no longer carries `routeIndex` (§3.4).
 - **May 2026**: **`token_format`** — `T1`/`T2` patterns pad digits only (no literal **`T`** on screen); counter prefix → `CODE-token` (§3.4.1, `TokenFormatTest`).
-- **May 2026**: **TTS cold-start** — `TokenAnnouncer.awaitReady` + `awaitSynthesisPrimeIfNeeded`; early `warmTokenAnnouncerIfEnabled` in `TokenDisplayViewModel`; quiet synthesis prime **`wellcome`** at 2% volume after ad duck when `enable_ad_sound` is on; parallel engine bind during chime (§3.5.1).
+- **May 2026**: **TTS cold-start** — `TokenAnnouncer.awaitReady` + `awaitSynthesisPrimeIfNeeded`; early `warmTokenAnnouncerIfEnabled` in `TokenDisplayViewModel`; quiet synthesis prime **`wellcome`** at 1% volume after ad duck when `enable_ad_sound` is on; parallel engine bind during chime (§3.5.1).
+- **May 2026**: **Announcement sequencing** — current token tile at chime cue; **`announcementMutex`** held through TTS `onDone` so the **next** token cannot publish until the previous announcement finishes; idle synthesis keep-warm every **15 s** via heartbeat (§3.5, §3.5.1).
+- **May 2026**: **VIP/emergency (`D`)** — fixed-protocol index 4 always uses **`ER`** counter prefix on tile and in TTS, even when `enable_counter_prefix` is off (`VIP_EMERGENCY_COUNTER_PREFIX`, `vipEmergencyTopTokenByKey`) (§3.4.1, §3.5).
+- **May 2026**: **TTS bind vs prime** — `finishInitAttempt(true)` when engine binds; prime async; token `awaitReady` capped at **12 s** so first announcement is not blocked indefinitely (§3.5.1–§3.5.2).
 

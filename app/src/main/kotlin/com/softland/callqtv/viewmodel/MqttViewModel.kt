@@ -35,7 +35,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         val counter: String,
         val token: String,
         val payload: String,
-        /** Fixed-protocol index-4 `D`: VIP / emergency; UI and speech use ER prefix when enabled. */
+        /** Fixed-protocol index-4 `D`: VIP / emergency; UI and speech always use ER prefix. */
         val isVipEmergency: Boolean = false,
     )
 

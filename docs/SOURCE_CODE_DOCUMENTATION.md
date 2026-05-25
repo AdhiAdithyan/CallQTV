@@ -4,7 +4,7 @@ Developer index of packages, classes, persistence, and tests. For product behavi
 
 **Package root:** `com.softland.callqtv`  
 **App version (Gradle):** `1.0.1` (`versionCode` 2)  
-**Last aligned with source:** May 2026
+**Last aligned with source:** May 2026 (app `1.0.1`, Room v17, announcements + VIP ER prefix)
 
 ---
 
@@ -12,15 +12,16 @@ Developer index of packages, classes, persistence, and tests. For product behavi
 
 | Area | Path | Kotlin files (approx.) |
 |------|------|------------------------|
-| Application | `app/src/main/kotlin/com/softland/callqtv/` | `MyApplication.kt`, `StoragePathProvider.kt` |
-| UI | `…/ui/` | 6 (+ large `TokenDisplayActivity.kt` ~6.4k lines) |
-| ViewModels | `…/viewmodel/` | 11 |
+| Application | `app/src/main/kotlin/com/softland/callqtv/` | `MyApplication.kt`, `AppBackgroundCoordinator.kt`, `StoragePathProvider.kt` |
+| UI | `…/ui/` | 6 (+ `TokenDisplayActivity.kt` ~7.1k lines) |
+| ViewModels | `…/viewmodel/` | 10 (incl. `MqttCounterRouting.kt`, `KeypadPayloadParser.kt`) |
 | Data local | `…/data/local/` | 18 |
 | Data model | `…/data/model/` | 22 |
 | Data network | `…/data/network/` | 2 |
 | Data repository | `…/data/repository/` | 11 |
-| Utils | `…/utils/` | 16 |
-| Unit tests | `app/src/test/kotlin/com/softland/callqtv/` | 7 test classes |
+| Utils | `…/utils/` | 23 (incl. `SemanticMqttParser.kt`, `TokenAnnouncer.kt`) |
+| **Main `app` module total** | `…/kotlin/com/softland/callqtv/` | **~91** `.kt` files |
+| Unit tests | `app/src/test/kotlin/com/softland/callqtv/` | **8** test classes |
 
 **Main module:** `app/` — AGP 8.7.x, Kotlin 2.1.0, Compose BOM `2024.12.01`, `compileSdk` / `targetSdk` **35**, `minSdk` **26**, Java **17**.
 
@@ -47,7 +48,9 @@ Developer index of packages, classes, persistence, and tests. For product behavi
 | `CountersArea` / `CounterBoard` / `TokenCard` | Counter grid and token cells (incl. special-message layout) |
 | `PresetColorDialog` / `PresetColorSwatchTile` | TV-focusable theme/background pickers |
 | `NotificationSoundDialog` | Notification chime picker |
-| `playTokenChime` / `playSystemTone` | Chime playback |
+| `playTokenChime` / `playSystemTone` | Awaited chime; `onAudioStart` triggers `publishTokenTile` at cue start |
+| `publishTokenTile` | `publishTokensSnapshot` + blink at chime; mutex blocks next token until TTS `onDone` |
+| `withTimeoutOrNull(12_000)` | Caps per-token `awaitReady` so announce path is not blocked forever |
 | `runWithAdvertisementAudioDuckedForSpeech` | Duck ads → `awaitSynthesisPrimeIfNeeded` → announce; passes `skipSynthesisPrime` |
 | `MediaEngine` | Dual ExoPlayer pool, `updateViewport`, 500MB cache, ducking, adaptive track selector |
 | `AdArea` | Round-robin loop, preload `candidateAd`, `BoxWithConstraints` → `viewportPx` |
@@ -56,6 +59,8 @@ Developer index of packages, classes, persistence, and tests. For product behavi
 | `TokenAnnouncementAdAudio` | YouTube WebView volume duck during TTS |
 | `getTokensForCounter` | Resolves token list by `button_index`, `keypad_index`, id, name aliases |
 | `findCounterEntityForMqttRoute` | From `MqttCounterRouting.kt` — button_index, then keypad_index |
+| `VIP_EMERGENCY_COUNTER_PREFIX` | `"ER"` — fixed-protocol index 4 `D`; display + TTS always |
+| `CounterTokenSlot` / `CounterTokenSlotsGrid` | Token grid cells; VIP top slot uses ER prefix independent of config |
 
 ### 2.1 Advertisement pipeline
 
@@ -99,7 +104,7 @@ Two layers cooperate; do not confuse **`keypad_index`** (config / CLR route digi
 | Payload → storage key | `MqttViewModel.resolveCounterIdentityFromSerial` | **Normal tokens:** match **`keypad_sn` only** in `keypadsJson` (fixed-frame index 18 is **not** `keypad_index`). Pick counter row (single row, or first matching Room entity). **CLR:** optional route digit before `CLR` → match **`keypad_index`** when non-blank. Builds **`storageKey`** preferring **`button_index`**. |
 | Storage key → UI row | `findCounterEntityForMqttRoute` | Matches `CounterEntity` by **`button_index` first**, then **`keypad_index`** (so storage keys that are only keypad indices still resolve) |
 | Token list lookup | `getTokensForCounter` | Reads map by button_index, keypad_index, counter id/name, or fuzzy route match |
-| On-screen label | `formatTokenByPattern` in `TokenDisplayActivity.kt` | `token_format` **`T1`/`T2`** = pad digits only (no literal `T`); optional **`{code}-`** prefix when `enable_counter_prefix` is on |
+| On-screen label | `formatTokenByPattern`, `CounterTokenSlot` in `TokenDisplayActivity.kt` | `T1`/`T2` pad digits only; **`{code}-`** when `enable_counter_prefix`; VIP **`D`** → always **`ER-`** via `VIP_EMERGENCY_COUNTER_PREFIX` + `vipDisplayTopToken` |
 
 **Key types (`MqttViewModel.kt`):**
 
@@ -181,7 +186,7 @@ private data class ResolvedCounterIdentity(
 | File | Purpose |
 |------|---------|
 | `SemanticMqttParser.kt` | Fixed `$...*` frame: types `A`–`E`, `B` transferred, `C`, `D`, `-`; legacy regex parsers |
-| `TokenAnnouncer.kt` | TTS singleton: `warmUp`, `awaitReady`, `awaitSynthesisPrimeIfNeeded`, quiet prime `"wellcome"`, `announceMessage` / `announceTokenCall`, heartbeat, normalization, multi-language |
+| `TokenAnnouncer.kt` | TTS singleton — bind vs async prime (`finishInitAttempt` before prime completes); `synthesisPrimeInFlight` / `pendingAfterPrime`; timing table below |
 | `ThemeColorManager.kt` | `ThemePrefs`, gradients, `notificationSoundOptions`, blink mode, brush caches |
 | `KeypadPayloadParser` | Lives in **`viewmodel/`** (not utils) — see §3 |
 | `DiagnosticsExporter.kt` | Settings → export ZIP snapshot |
@@ -196,6 +201,19 @@ private data class ResolvedCounterIdentity(
 | `AnimatedLoadingOverlay.kt` | Loading UI helper |
 | `Event.kt`, `DownloadStatus.kt`, `KeyboardUtils.kt` | Small helpers |
 
+**`TokenAnnouncer` timing constants (source of truth):**
+
+| Constant | Value | Role |
+|----------|-------|------|
+| `HEARTBEAT_INTERVAL_MS` | 3000 | Silent bind keep-alive |
+| `IDLE_SYNTHESIS_KEEP_WARM_INTERVAL_MS` | 15000 | Quiet `wellcome` prime while idle |
+| `SPEECH_WAKE_IDLE_MS` | 60000 | Token-path re-prime if keep-warm missed |
+| `PRIME_DEBOUNCE_MS` | 4000 | Min gap between primes |
+| `PRIME_VOLUME` | 0.01 | Nearly silent synthesis prime |
+| `SYNTHESIS_PRIME_PHRASE` | `wellcome` | Voice-load warm-up text |
+
+**Bind vs prime:** `handleTtsInitCallback` calls **`finishInitAttempt(true)`** as soon as the engine binds, then runs **`primeSpeechSynthesisOnMain` async**. `warmUp(performPoke=true)` invokes **`onReady(true)`** without waiting for prime. Token collector uses **`withTimeoutOrNull(12_000)`** around `awaitReady`.
+
 ---
 
 ## 6. Application entry
@@ -203,6 +221,7 @@ private data class ResolvedCounterIdentity(
 | File | Purpose |
 |------|---------|
 | `MyApplication.kt` | Global uncaught handler; suppresses non-fatal MIUI/GMS/integrity noise; `FileLogger.logCrash` |
+| `AppBackgroundCoordinator.kt` | App background → stops MQTT/TTS (`TokenAnnouncer.shutdown`) |
 | `StoragePathProvider.kt` | `FileProvider` for APK install paths |
 
 **Launcher flow:** `SplashScreenActivity` → `CustomerIdActivity` (if needed) → `TokenDisplayActivity`.
@@ -233,6 +252,7 @@ private data class ResolvedCounterIdentity(
 | `TvConfigParsingTest` | Gson counter indices as strings (`FlexibleIntDeserializer`) |
 | `TokenAnnouncerSpeechTest` | TTS string normalization |
 | `TokenFormatTest` | `token_format` padding (`T1`/`T2` without literal `T` prefix) |
+| `LicenseDateUtilsTest` | License date parsing |
 | `ExampleUnitTest` | Placeholder |
 
 Run: `./gradlew test` or `./gradlew testCallQTVDebugUnitTest`.
@@ -244,7 +264,8 @@ Run: `./gradlew test` or `./gradlew testCallQTVDebugUnitTest`.
 | Feature | Primary files |
 |---------|----------------|
 | MQTT fixed/CLR parsing | `SemanticMqttParser.kt` (no `routeIndex` on `FixedPayload`), `KeypadPayloadParser.kt`, `MqttViewModel.kt` |
-| On-screen token label | `formatTokenByPattern`, `CounterTokenSlot` in `TokenDisplayActivity.kt` |
+| On-screen token label / VIP ER prefix | `formatTokenByPattern`, `CounterTokenSlot`, `VIP_EMERGENCY_COUNTER_PREFIX` |
+| VIP/emergency MQTT flag | `SemanticMqttParser.FixedPayload.isVipEmergency`, `TokenUiEvent.isVipEmergency`, `vipEmergencyTopTokenByKey` |
 | Counter route → UI row | `MqttCounterRouting.kt`, `MqttViewModel.resolveCounterIdentityFromSerial` |
 | Token UI update / chime / TTS | `TokenDisplayActivity.kt` (`TokenDisplayScreen` collectors) |
 | Token map / history / CLR keys | `MqttViewModel.kt` (`processTokenUpdateForKeys`, `clearTokensForResolvedCounter`) |
@@ -253,7 +274,7 @@ Run: `./gradlew test` or `./gradlew testCallQTVDebugUnitTest`.
 | Token records (server) | `MqttViewModel.saveTokenRecord`, `TokenRecordRepository.kt` |
 | Chime sounds | `ThemeColorManager.notificationSoundOptions`, `playSystemTone` |
 | TTS phrasing / prime / duck order | `TokenDisplayActivity.kt` (`runWithAdvertisementAudioDuckedForSpeech`), `TokenAnnouncer.kt` |
-| TTS early warm on config load | `TokenDisplayViewModel.kt` (`warmTokenAnnouncerIfEnabled`) |
+| TTS early warm on config load | `TokenDisplayViewModel.kt` (`warmTokenAnnouncerIfEnabled` → `warmUp`); `TokenDisplayScreen` `LaunchedEffect` → `launch { awaitReady }` |
 | Theme / gradients | `ThemeColorManager.kt`, `TokenDisplayActivity` theme state |
 | TV color/sound pickers | `PresetColorDialog`, `PresetColorSwatchTile`, `NotificationSoundDialog` |
 | Ads / viewport sizing | `AdArea`, `AdViewportSizing.kt`, `MediaEngine`, `AdUnifiedPlayer.kt`, `AdDownloader.kt` |

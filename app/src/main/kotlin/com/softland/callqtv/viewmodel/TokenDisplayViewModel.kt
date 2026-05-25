@@ -441,7 +441,7 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
-    /** Start TTS bind/warm as soon as TV config is known so the first MQTT token is not delayed. */
+    /** Bind TTS as soon as TV config is known; prime runs in the background without blocking token UI. */
     private fun warmTokenAnnouncerIfEnabled(cfg: TvConfigEntity?) {
         if (cfg?.enableTokenAnnouncement != true) return
         val app = getApplication<Application>()

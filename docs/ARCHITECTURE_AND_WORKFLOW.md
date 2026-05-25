@@ -56,7 +56,7 @@ Technical architecture, component responsibilities, MQTT semantics, and data flo
 |---------|------|
 | `SemanticMqttParser` | Fixed `$...*` types A–E, actions |
 | `KeypadPayloadParser` | Serial extraction (fixed, CLR, short wrapper) |
-| `TokenAnnouncer` | TTS bind/warm, synthesis prime, announce APIs, heartbeat, normalization |
+| `TokenAnnouncer` | TTS bind/warm, idle synthesis keep-warm (15s), announce APIs, 3s silent heartbeat, normalization |
 | `ThemeColorManager` | ThemePrefs, brushes, chimes, blink mode |
 | `DiagnosticsExporter` | Support ZIP export |
 
@@ -102,9 +102,9 @@ MqttClientManager.onMessageReceived
   → TokenDisplayScreen LaunchedEffect (announcementMutex)
   → resolveCounterIdentityFromSerial(keypad SN; CLR may use route-before-CLR)
   → findCounterEntityForMqttRoute (button_index, then keypad_index)
-  → processTokenUpdateForKeys | replaceTokenForKeys
-  → playTokenChime + publishTokensSnapshot + blink (parallel TokenAnnouncer.awaitReady)
-  → runWithAdvertisementAudioDuckedForSpeech → optional synthesis prime → TTS
+  → announcementMutex: async awaitReady (if announcements on) → processTokenUpdateForKeys (publishImmediately=false)
+  → playTokenChime → publishTokensSnapshot + blink at cue start (current token)
+  → runWithAdvertisementAudioDuckedForSpeech → TTS until onDone (next token blocked on mutex)
   → tokensPerCounter → CountersArea (getTokensForCounter)
 ```
 
@@ -117,7 +117,7 @@ MqttClientManager.onMessageReceived
 | `A`, `E` | DB-only |
 | `B` | Transferred token, DB-only |
 | `C` | Replace token area, special message |
-| `D`, `-`, normal | Standard flow; `D` VIP/emergency |
+| `D`, `-`, normal | Standard flow; **`D`** → VIP/emergency, always **`ER-`** on tile + TTS |
 
 ---
 
@@ -138,14 +138,20 @@ If route does not match any `counters[]` row, clear **all** counters under that 
 
 - **`playCueUi`**: map changed, VIP overlay changed, or primary re-call after >10s → chime + UI + blink.
 - **`speakTokenAnnouncement`**: primary-key move/re-call rules → TTS if `enable_token_announcement`.
-- Chime: counter URL → global URL → `notification_sound_key` system tone.
-- **Chime → TTS:** `awaitReady()` overlaps chime; then duck (if ad sound) → `awaitSynthesisPrimeIfNeeded()` (quiet **wellcome** when cold) → `announceMessage` / `announceTokenCall`.
-- **Early warm:** `TokenDisplayViewModel.warmTokenAnnouncerIfEnabled` on cached/fresh config; UI `LaunchedEffect` also calls `warmUp`.
+- **`announcementMutex`**: one token at a time; mutex released only after TTS `onDone` (when speaking) so the **next** tile cannot update mid-announcement.
+- **Current token** UI: `publishTokensSnapshot` at chime cue (`onAudioStart` + fallback), not after speech.
+- Chime: counter URL → global URL → `notification_sound_key` system tone; `playTokenChime` is **awaited** (not fire-and-forget).
+- **Chime → TTS:** `async { awaitReady() }` before map update; **`withTimeoutOrNull(12s)`** before chime when speaking; then duck (if ad sound) → `awaitSynthesisPrimeIfNeeded()` (if needed) → `announceMessage` / `announceTokenCall`.
+- **Engine bind vs prime:** `finishInitAttempt(true)` on bind; synthesis prime async so token path is not blocked.
+- **Idle keep-warm:** heartbeat **3 s** (silent bind) + quiet prime **15 s** (`keepSynthesisWarmDuringIdle`).
+- **Early warm:** `warmTokenAnnouncerIfEnabled` → `warmUp(performPoke=true)`; UI `LaunchedEffect` → `launch { awaitReady }` (background).
+- **VIP/emergency TTS:** index 4 **`D`** → always spell **`ER`** (`pair.isVipEmergency`), independent of `enable_counter_prefix`.
 
 ## 7.1 Token display (`token_format`)
 
 - **`formatTokenByPattern`:** `T1` / `T2` → zero-pad only (no literal `T`).
 - **`enable_counter_prefix`:** `{code}-{token}` on counter tiles (e.g. `NU-2`).
+- **VIP/emergency (`D`):** `MqttViewModel` sets `vipEmergencyTopTokenByKey`; `CounterTokenSlot` shows **`ER-{token}`** when slot 0 matches that raw token (prefix not gated on `enable_counter_prefix`).
 
 ---
 
@@ -208,4 +214,6 @@ Run: `./gradlew test`.
 
 ---
 
-*Derived from CallQTV May 2026 source (app `1.0.1`, Room v17, `AdViewportSizing`). Update when [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md) changes.*
+**`TokenAnnouncer` (idle / prime):** `HEARTBEAT_INTERVAL_MS` 3s · `IDLE_SYNTHESIS_KEEP_WARM_INTERVAL_MS` 15s · `SPEECH_WAKE_IDLE_MS` 60s · `PRIME_VOLUME` 0.01 · phrase `wellcome`.
+
+*Derived from CallQTV May 2026 source (app `1.0.1` / `versionCode` 2, Room v17, `AdViewportSizing`). Update when [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md) changes.*

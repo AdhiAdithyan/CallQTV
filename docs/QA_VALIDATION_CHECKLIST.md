@@ -1,6 +1,6 @@
 # CallQTV — QA Validation Checklist
 
-Acceptance tests aligned with current source (May 2026). Full context: [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md), requirements: [SRS.md](./SRS.md).
+Acceptance tests aligned with current source (app `1.0.1`, Room v17, May 2026). Full context: [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md) §3.4.1 (VIP **ER-**), §3.5–§3.5.2 (announcements); requirements: [SRS.md](./SRS.md).
 
 ---
 
@@ -17,7 +17,8 @@ Acceptance tests aligned with current source (May 2026). Full context: [MASTER_D
 - [ ] Cached-first: with existing DB, main UI appears without long blocking overlay
 - [ ] Cold install: loading overlay until first config available
 - [ ] TTS “preparing voice engine” overlay only when audio **language** changes during config load (not for entire config overlay)
-- [ ] First announcement after cold start or long idle (~20s+): no multi-second gap before real speech
+- [ ] First announcement after cold start: tile at chime **and speech plays** (not tile-only silence from stuck `awaitReady`)
+- [ ] First announcement after long idle (2+ min): no multi-second gap before real speech (idle keep-warm ~15s)
 - [ ] Settings **Refresh** fetches latest config (counters, ads, devices)
 
 ---
@@ -31,7 +32,7 @@ Acceptance tests aligned with current source (May 2026). Full context: [MASTER_D
 - [ ] `"$0KJ-AbCAL0K000111-0015*"` → token **15** after prior CLR
 - [ ] Type **B** transferred payload → **no** token tile change (DB-only)
 - [ ] Type **C** → special message replaces area; multiline readable (padding, line height)
-- [ ] VIP/emergency (`D`) shows ER prefix when configured
+- [ ] VIP/emergency (index 4 = `D`) shows **ER-** prefix on tile and in TTS even when `enable_counter_prefix` is off
 
 ### 3.1 CLR
 
@@ -47,14 +48,20 @@ Acceptance tests aligned with current source (May 2026). Full context: [MASTER_D
 ## 4. Announcements
 
 - [ ] Chime plays on new token (`playCueUi`)
-- [ ] TTS engine bind overlaps chime (`awaitReady`); real speech after duck/prime path, not after full chime clip ends
+- [ ] **Current** token tile appears at chime cue (not after TTS ends)
+- [ ] **Back-to-back tokens:** second counter tile does **not** update until first token TTS fully finishes
+- [ ] TTS engine bind/prime overlaps map update and chime (`async awaitReady` started before `processTokenUpdateForKeys`)
+- [ ] If TTS warm exceeds 12s, log `TTS not ready before announce` but **announcement still plays**
+- [ ] Real speech after duck/prime path; not blocked on full custom chime clip end
+- [ ] Logcat: `TTS initialized successfully` before first token; optional `TTS init synthesis prime complete` shortly after
 - [ ] Chime on UI-only updates (e.g. VIP overlay change) even when TTS does not speak
 - [ ] TTS only when `enable_token_announcement` and primary announce rules (`speakTokenAnnouncement`)
 - [ ] Re-call same top token after **10s** → chime + blink + TTS again
 - [ ] Identical raw payload within **10s** → single handling
 - [ ] With **ad sound** on: ads duck before speech; quiet **wellcome** prime (if needed) plays **after** duck, then real announcement; volume restores after speech
 - [ ] With **ad sound** off: no duck; prime (if needed) immediately before real announcement
-- [ ] **wellcome** prime is **not** on a fixed interval (only when synthesis is cold / after ~20s idle)
+- [ ] Idle with announcements on: logcat shows `Synthesis prime started` about every **15s** (keep-warm); skipped while speaking
+- [ ] Long special message: announcement completes before next token (no 6s cut-off)
 
 ---
 
