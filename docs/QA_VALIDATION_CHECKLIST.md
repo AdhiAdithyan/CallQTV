@@ -1,18 +1,30 @@
 # CallQTV — QA Validation Checklist
 
-Acceptance tests aligned with current source (app `1.0.1`, Room v17, May 2026). Full context: [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md) §3.4.1 (VIP **ER-**), §3.5–§3.5.2 (announcements); requirements: [SRS.md](./SRS.md).
+Acceptance tests aligned with current source (app `1.0.1`, Room v17, `minSdk` 21, May 2026). Full context: [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md) §3.1 (permissions), §3.4.1 (VIP **ER-**), §3.5–§3.5.2 (announcements); requirements: [SRS.md](./SRS.md).
 
 ---
 
 ## 1. Build and environment
 
 - [ ] `./gradlew assembleCallQTVDebug` (or project debug variant) succeeds
-- [ ] Install on Android TV or emulator **API 26+**
-- [ ] `compileSdk` 35 / `targetSdk` 35 / Java 17
+- [ ] Install on Android TV or emulator **API 21+** (test API 21–25 compat paths if possible)
+- [ ] `minSdk` 21 / `compileSdk` 35 / `targetSdk` 35 / Java 17
+- [ ] `./gradlew testCallQTVDebugUnitTest` — **44** tests pass
 
 ---
 
 ## 2. Startup and configuration
+
+### 2.1 Storage permissions
+
+- [ ] Fresh install: splash shows storage / **All files access** prompts before leaving splash
+- [ ] Deny permissions → app stays on splash (or main overlay) and re-prompts on resume
+- [ ] Grant permissions → splash continues to registration or main display
+- [ ] Main display: `loadData` / config fetch does **not** start until storage granted
+- [ ] Registration success → navigate to main only after storage granted
+- [ ] APK update: **Install unknown apps** prompt when needed (`ApkUpdateHelper`)
+
+### 2.2 Config load
 
 - [ ] Cached-first: with existing DB, main UI appears without long blocking overlay
 - [ ] Cold install: loading overlay until first config available
@@ -46,6 +58,7 @@ Acceptance tests aligned with current source (app `1.0.1`, Room v17, May 2026). 
 - [ ] Pre-clear tokens do **not** reappear after app restart
 - [ ] Next valid token after CLR appears normally
 - [ ] **Immediate** config API after CLR (not only after 30s throttle)
+- [ ] Extreme MQTT flood: app remains responsive; oldest pending token UI events may drop (channel cap 128) without unbounded memory growth
 
 ---
 

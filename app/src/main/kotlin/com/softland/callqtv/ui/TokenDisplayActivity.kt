@@ -212,6 +212,9 @@ class TokenDisplayActivity : ComponentActivity() {
         StoragePermissionHelper.onRuntimePermissionResult(this)
     }
 
+    @Volatile
+    private var hasStartedInitialLoad = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Belt-and-suspenders guard: if a second instance is created in the same task,
@@ -236,36 +239,30 @@ class TokenDisplayActivity : ComponentActivity() {
         mqttViewModel = ViewModelProvider(this)[MqttViewModel::class.java]
         AppBackgroundCoordinator.registerTokenDisplaySession(mqttViewModel, viewModel)
 
-        StoragePermissionHelper.ensureStorageAccess(this, storagePermissionLauncher)
-
-        val refreshAfterApkUpgrade =
-            com.softland.callqtv.utils.AppUpgradeCoordinator.consumePendingConfigRefresh(this)
-        // Use cached config on startup; after an APK upgrade, refresh config once from the server.
-        viewModel.loadData(
-            mqttViewModel,
-            forceShowOverlay = true,
-            clearCacheBeforeFetch = refreshAfterApkUpgrade,
-        )
-
-        lifecycleScope.launch {
-            val pendingUpdate = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                com.softland.callqtv.utils.AppUpdateChecker.checkForUpdate(this@TokenDisplayActivity)
-            }
-            if (pendingUpdate != null && !isFinishing && !isDestroyed) {
-                startActivity(
-                    Intent(this@TokenDisplayActivity, CustomerIdActivity::class.java).apply {
-                        putExtra(CustomerIdActivity.EXTRA_PENDING_UPDATE_VERSION, pendingUpdate.apkVersion)
-                        putExtra(CustomerIdActivity.EXTRA_PENDING_UPDATE_URL, pendingUpdate.downloadUrl)
-                        putExtra(CustomerIdActivity.EXTRA_PENDING_UPDATE_MANDATORY, pendingUpdate.isMandatoryUpdate)
-                        putExtra(CustomerIdActivity.EXTRA_PENDING_UPDATE_PROJECT, pendingUpdate.projectCode)
-                    },
-                )
-            }
+        StoragePermissionHelper.runWhenStorageAccessReady(
+            this,
+            storagePermissionLauncher,
+        ) {
+            startInitialLoadIfNeeded()
         }
 
         setContent {
             // Theme State - load async to avoid blocking main thread during composition
             val context = LocalContext.current
+            var storageAccessReady by remember {
+                mutableStateOf(StoragePermissionHelper.hasFullStorageAccess(this@TokenDisplayActivity))
+            }
+            val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+            androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+                val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                    if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                        storageAccessReady =
+                            StoragePermissionHelper.hasFullStorageAccess(this@TokenDisplayActivity)
+                    }
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+            }
 
             var currentThemeHex by remember { mutableStateOf("#2196F3") }
             var counterBgHex by remember { mutableStateOf("#FFFFFF") }
@@ -289,30 +286,72 @@ class TokenDisplayActivity : ComponentActivity() {
             val colorScheme = remember(themeColor) { ThemeColorManager.createDarkColorScheme(themeColor) }
             
             MaterialTheme(colorScheme = colorScheme) {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    TokenDisplayScreen(
-                        viewModel, 
-                        mqttViewModel,
-                        counterBgHex = counterBgHex,
-                        tokenBgHex = tokenBgHex,
-                        appThemeHex = currentThemeHex,
-                        onThemeChange = { newHex ->
-                            ThemeColorManager.setThemeColor(this, newHex)
-                            currentThemeHex = newHex
-                        },
-                        onCounterBgChange = { newHex ->
-                            ThemeColorManager.setCounterBackgroundColor(this, newHex)
-                            counterBgHex = newHex
-                        },
-                        onTokenBgChange = { newHex ->
-                            ThemeColorManager.setTokenBackgroundColor(this, newHex)
-                            tokenBgHex = newHex
-                        }
-                    )
+                Box(modifier = Modifier.fillMaxSize()) {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background
+                    ) {
+                        TokenDisplayScreen(
+                            viewModel,
+                            mqttViewModel,
+                            counterBgHex = counterBgHex,
+                            tokenBgHex = tokenBgHex,
+                            appThemeHex = currentThemeHex,
+                            onThemeChange = { newHex ->
+                                ThemeColorManager.setThemeColor(this@TokenDisplayActivity, newHex)
+                                currentThemeHex = newHex
+                            },
+                            onCounterBgChange = { newHex ->
+                                ThemeColorManager.setCounterBackgroundColor(this@TokenDisplayActivity, newHex)
+                                counterBgHex = newHex
+                            },
+                            onTokenBgChange = { newHex ->
+                                ThemeColorManager.setTokenBackgroundColor(this@TokenDisplayActivity, newHex)
+                                tokenBgHex = newHex
+                            }
+                        )
+                    }
+                    if (!storageAccessReady) {
+                        com.softland.callqtv.utils.AnimatedLoadingOverlay(
+                            message = "Storage permission is required. Please grant access to continue.",
+                            isVisible = true,
+                        )
+                    }
                 }
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        StoragePermissionHelper.onActivityResumed(this, storagePermissionLauncher)
+        startInitialLoadIfNeeded()
+    }
+
+    private fun startInitialLoadIfNeeded() {
+        if (hasStartedInitialLoad || isFinishing || isDestroyed) return
+        if (!StoragePermissionHelper.hasFullStorageAccess(this)) return
+        hasStartedInitialLoad = true
+        val refreshAfterApkUpgrade =
+            com.softland.callqtv.utils.AppUpgradeCoordinator.consumePendingConfigRefresh(this)
+        viewModel.loadData(
+            mqttViewModel,
+            forceShowOverlay = true,
+            clearCacheBeforeFetch = refreshAfterApkUpgrade,
+        )
+        lifecycleScope.launch {
+            val pendingUpdate = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                com.softland.callqtv.utils.AppUpdateChecker.checkForUpdate(this@TokenDisplayActivity)
+            }
+            if (pendingUpdate != null && !isFinishing && !isDestroyed) {
+                startActivity(
+                    Intent(this@TokenDisplayActivity, CustomerIdActivity::class.java).apply {
+                        putExtra(CustomerIdActivity.EXTRA_PENDING_UPDATE_VERSION, pendingUpdate.apkVersion)
+                        putExtra(CustomerIdActivity.EXTRA_PENDING_UPDATE_URL, pendingUpdate.downloadUrl)
+                        putExtra(CustomerIdActivity.EXTRA_PENDING_UPDATE_MANDATORY, pendingUpdate.isMandatoryUpdate)
+                        putExtra(CustomerIdActivity.EXTRA_PENDING_UPDATE_PROJECT, pendingUpdate.projectCode)
+                    },
+                )
             }
         }
     }
@@ -344,9 +383,13 @@ class TokenDisplayActivity : ComponentActivity() {
         } catch (_: Exception) {
             ""
         }
-        val referrerValue = try {
-            referrer?.toString().orEmpty()
-        } catch (_: Exception) {
+        val referrerValue = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+            try {
+                referrer?.toString().orEmpty()
+            } catch (_: Exception) {
+                ""
+            }
+        } else {
             ""
         }
         val callerValue = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
@@ -945,10 +988,10 @@ fun TokenDisplayScreen(
                                         )
                                     } else {
                                         val tokenText = TokenAnnouncer.sanitizeTokenLabelForSpeech(tokenLabel)
-                                            TokenAnnouncer.announceTokenCall(
-                                                context = context,
-                                                audioLanguage = currentConfig.audioLanguage,
-                                                spelledCounterPrefix = spokenPrefix,
+                                        TokenAnnouncer.announceTokenCall(
+                                            context = context,
+                                            audioLanguage = currentConfig.audioLanguage,
+                                            spelledCounterPrefix = spokenPrefix,
                                             tokenText = tokenText,
                                             counterDisplayName = announcementCounterName,
                                             skipSynthesisPrime = skipPrime,
@@ -2872,8 +2915,8 @@ fun YouTubeAdPlayer(
                 }
 
                 override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
-                    val description = error?.description?.toString() ?: "Unknown error"
-                    val errorCode = error?.errorCode ?: 0
+                    val description = com.softland.callqtv.utils.WebViewErrorCompat.description(error)
+                    val errorCode = com.softland.callqtv.utils.WebViewErrorCompat.errorCode(error)
                     val requestUrl = request?.url?.toString().orEmpty()
                     // Only treat main-frame failures as terminal for ad switching.
                     // Subresource failures are common and should not interrupt active playback.
@@ -3460,20 +3503,8 @@ private fun loadYouTubeIframeFallback(webView: WebView, sourceUrl: String): Bool
     }
 }
 
-internal fun isAdLowBandwidthNetwork(context: Context): Boolean {
-    return try {
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            ?: return false
-        val network = cm.activeNetwork ?: return false
-        val caps = cm.getNetworkCapabilities(network) ?: return false
-        val downKbps = caps.linkDownstreamBandwidthKbps
-        val onCellular = caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
-        val downIsLow = downKbps in 1..4_000
-        onCellular || downIsLow
-    } catch (_: Exception) {
-        false
-    }
-}
+internal fun isAdLowBandwidthNetwork(context: Context): Boolean =
+    com.softland.callqtv.utils.NetworkCompat.isLowBandwidthNetwork(context)
 
 
 /** Stops playback and clears the queue so the next ad can bind a fresh decoder (avoids MTK NO_MEMORY). */
@@ -6959,7 +6990,6 @@ private class SeamlessTickerView(context: Context) : FrameLayout(context) {
     private var cachedTextSizeSp: Float = -1f
     private var cachedIsBold: Boolean = false
     private var currentOffset: Float = 0f
-    private var lastDistance: Float = 1f
     private var marqueeDistance: Float = 0f
     private var marqueeDurationMs: Long = 1L
 
@@ -7023,6 +7053,7 @@ private class SeamlessTickerView(context: Context) : FrameLayout(context) {
     }
 
     private fun runMarqueeScroll(fromOffset: Float) {
+        if (!isAttachedToWindow) return
         val distance = marqueeDistance
         val clampedFrom = fromOffset.coerceIn(0f, distance)
         applyMarqueeOffset(clampedFrom)
@@ -7037,6 +7068,7 @@ private class SeamlessTickerView(context: Context) : FrameLayout(context) {
             }
             addListener(object : AnimatorListenerAdapter() {
                 override fun onAnimationEnd(animation: Animator) {
+                    if (!isAttachedToWindow) return
                     applyMarqueeOffset(0f)
                     runMarqueeScroll(0f)
                 }
@@ -7047,6 +7079,7 @@ private class SeamlessTickerView(context: Context) : FrameLayout(context) {
 
     private fun restartAnimation(preservePhase: Boolean) {
         post {
+            if (!isAttachedToWindow) return@post
             val previousOffset = currentOffset
             cancelMarqueeAnimation()
             val w = width.toFloat()
@@ -7055,7 +7088,6 @@ private class SeamlessTickerView(context: Context) : FrameLayout(context) {
             val textWidth = text1.paint.measureText(text1.text?.toString().orEmpty()).coerceAtLeast(1f)
             val gap = 16f * resources.displayMetrics.density
             val distance = textWidth + gap
-            lastDistance = distance
             marqueeDistance = distance
             val speedPxPerSec = (cachedSpeedDpPerSec.coerceAtLeast(8f)) * resources.displayMetrics.density
             marqueeDurationMs = ((distance / speedPxPerSec) * 1000f).toLong().coerceAtLeast(1L)

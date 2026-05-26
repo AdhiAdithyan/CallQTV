@@ -10,17 +10,29 @@ Process flows for startup, MQTT, announcements, and payload upload. Pair with [W
 
 ```mermaid
 flowchart TD
-    A[App launch] --> B[Load cached config counters ads devices]
-    B --> C{Cache available?}
-    C -->|Yes| D[Render cached UI]
-    C -->|No| E[Show loading overlay]
+    A[App launch] --> P{Storage permissions granted?}
+    P -->|No| P2[Prompt runtime + All files access]
+    P2 --> P
+    P -->|Yes| B[Splash: license check + navigation]
+    B --> C{Registered + valid license?}
+    C -->|No| R[CustomerIdActivity]
+    C -->|Yes| M[TokenDisplayActivity]
+    R --> P3{Storage for navigate to main?}
+    P3 -->|No| P2
+    P3 -->|Yes| M
+    M --> P4{Storage before loadData?}
+    P4 -->|No| P2
+    P4 -->|Yes| L[Load cached config counters ads devices]
+    L --> N{Cache available?}
+    N -->|Yes| D[Render cached UI]
+    N -->|No| E[Show loading overlay]
     D --> F[Background config sync]
     E --> F
     F --> G{Network available?}
     G -->|No| H[Keep cache]
     G -->|Yes| I[Fetch and store config]
     I --> J[Refresh UI from DB]
-    J --> K[Initialize TTS]
+    J --> K[Initialize TTS / MQTT]
 ```
 
 ---
@@ -47,7 +59,7 @@ flowchart TD
     M -->|D/-/normal| P[Normal token flow]
 ```
 
-**Normal token flow (detail):** `parseMqttMessage` → `resolveCounterIdentityFromSerial` (**keypad SN** from frame; not fixed index 18) → `tokenUpdateChannel` → `TokenDisplayScreen` → **`findCounterEntityForMqttRoute`** → `processTokenUpdateForKeys` → announcement path (§3). On-screen label: `formatTokenByPattern` + optional `{code}-` when `enable_counter_prefix`; index 4 **`D`** → **`ER-`** on any slot via `vipEmergencyTokensByKey` (§3.4.1 in [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md)).
+**Normal token flow (detail):** `parseMqttMessage` → `resolveCounterIdentityFromSerial` (**CounterRouteLookupCache** or Room on IO; **keypad SN** from frame; not fixed index 18) → `tokenUpdateChannel` (cap **128**, drop-oldest) → `TokenDisplayScreen` → **`findCounterEntityForMqttRoute`** → `processTokenUpdateForKeys` → announcement path (§3). On-screen label: `formatTokenByPattern` + optional `{code}-` when `enable_counter_prefix`; index 4 **`D`** → **`ER-`** on any slot via `vipEmergencyTokensByKey` (§3.4.1 in [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md)).
 
 ---
 
@@ -157,4 +169,17 @@ flowchart TD
 
 ---
 
-*Derived from CallQTV May 2026 source (app `1.0.1`, `versionCode` 2, Room v17). Announcement mutex + VIP ER: [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md) §3.4.1, §3.5–§3.5.2. Code index: [SOURCE_CODE_DOCUMENTATION.md](./SOURCE_CODE_DOCUMENTATION.md).*
+## 8. Unit tests (JVM)
+
+| Test | Covers |
+|------|--------|
+| `CounterRouteLookupCacheTest` | Route cache keys, TTL, scope invalidation |
+| `MqttCounterRoutingTest` | Counter entity resolution |
+| `VipEmergencyTokenPrefixTest` | VIP **ER-** on history slots |
+| `KeypadPayloadParserTest`, `SemanticMqttParserTest`, … | MQTT parsing |
+
+Run: `./gradlew testCallQTVDebugUnitTest` (**44** tests).
+
+---
+
+*Derived from CallQTV May 2026 source (app `1.0.1`, `versionCode` 2, Room v17, `minSdk` 21). Permission gate, bounded channels, route cache: [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md) §3.1. Announcement mutex + VIP ER: §3.4.1, §3.5–§3.5.2. Code index: [SOURCE_CODE_DOCUMENTATION.md](./SOURCE_CODE_DOCUMENTATION.md).*

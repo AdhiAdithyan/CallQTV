@@ -23,7 +23,7 @@ Copy this document into another AI session or hand it to a team to implement an 
 
 | Item | Value |
 |------|--------|
-| minSdk | 26 |
+| minSdk | 21 |
 | compileSdk / targetSdk | 35 |
 | Java / Kotlin | 17 |
 | UI | Jetpack Compose (Material 3), MVVM |
@@ -174,13 +174,14 @@ Device-local (not in server `tv_config` JSON): theme/counter/token colors, notif
 
 ## 11) Android manifest (parity)
 
-As required by features: `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, notifications, `WAKE_LOCK`, `VIBRATE`, `RECEIVE_BOOT_COMPLETED`, foreground service where used, camera/mic if flows need them, storage / `FileProvider` for logs and export, `largeHeap`, cleartext only if deployment demands — document each permission.
+Manifest permissions: `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, `POST_NOTIFICATIONS` (runtime API 33+), `WAKE_LOCK` (APK download), storage (`READ_MEDIA_VIDEO` / `READ_EXTERNAL_STORAGE` / `WRITE_EXTERNAL_STORAGE` by API level), `MANAGE_EXTERNAL_STORAGE` (All files access, API 30+), `REQUEST_INSTALL_PACKAGES` (APK update). Runtime gating via `StoragePermissionHelper`; install-unknown-apps via `ApkUpdateHelper`. WebView ads deny camera/mic — not declared. `FileProvider` for APK install and export; `largeHeap`, cleartext per deployment.
 
 ---
 
 ## 12) MQTT → UI (reference)
 
-- Incoming message → `rawMessageQueue` → coroutine → `parseMqttMessage` → **`tokenUpdateChannel`** / **`tokenReplaceChannel`** → Compose **`collect`** + **`announcementMutex`** → chime → **`publishTokensSnapshot()`** (cue start) → TTS → next event → **`tokensPerCounter`** → **`getTokensForCounter`** in grid.
+- Incoming message → `rawMessageQueue` (max **2000**) → coroutine → `parseMqttMessage` → **`resolveCounterIdentityFromSerial`** (`CounterRouteLookupCache`, 5 min TTL) → **`tokenUpdateChannel`** / **`tokenReplaceChannel`** (capacity **128**, drop-oldest) → Compose **`collect`** + **`announcementMutex`** → chime → **`publishTokensSnapshot()`** (cue start) → TTS → next event → **`tokensPerCounter`** → **`getTokensForCounter`** in grid.
+- **`configRefreshRequests`**: capacity **16**, drop-oldest; CLR uses `forceImmediate`.
 
 ---
 
@@ -202,6 +203,8 @@ As required by features: `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`
 - VIP payload (index 4 = `D`) with counter prefix **off**: tile shows **ER-{token}** and TTS spells **ER**; after a normal token, previous slot still **ER-{vip}**.
 - Config unavailable Retry: loading overlay visible for full fetch.
 - Footer ticker: continuous scroll (no 3s loop pause on footer strip).
+- Storage denied on splash/main: no navigation / `loadData` until granted; re-prompt on resume.
+- `./gradlew testCallQTVDebugUnitTest`: 44 tests including `CounterRouteLookupCacheTest`.
 - Color/sound pickers: no ANR; TV focus on current selection; visible focus ring while navigating.
 - Support export / diagnostics; error log file behavior; **CLR** forces **immediate** config `loadData` (verify via network or server state); export ZIP appears on **removable** path when SD/USB mounted, else Downloads / app-scoped per Toast.
 

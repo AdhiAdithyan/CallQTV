@@ -156,4 +156,4 @@ Tap a row to select and **preview** chime. Same focus highlighting pattern as co
 
 ---
 
-*Derived from CallQTV May 2026 source (app `1.0.1`). Token/VIP/announcement: [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md) §3.4.1, §3.5. Footer ticker: continuous `SeamlessTickerView` (§3.9.5). Config Retry overlay: §3.1.*
+*Derived from CallQTV May 2026 source (app `1.0.1`, `minSdk` 21). Storage permission overlay on main when denied (`StoragePermissionHelper`). Token/VIP/announcement: [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md) §3.4.1, §3.5. Footer ticker: continuous `SeamlessTickerView` (§3.9.5). Config Retry overlay: §3.1.*

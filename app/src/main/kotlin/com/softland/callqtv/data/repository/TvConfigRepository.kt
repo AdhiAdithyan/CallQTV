@@ -17,11 +17,15 @@ import com.softland.callqtv.data.local.AdFileEntity
 import com.softland.callqtv.data.local.ConnectedDeviceEntity
 import com.softland.callqtv.data.network.ApiService
 import com.softland.callqtv.data.local.AppSharedPreferences
+import com.softland.callqtv.utils.FileLogger
+import com.softland.callqtv.utils.NetworkCompat
 import com.softland.callqtv.utils.NetworkUtil
 import com.softland.callqtv.utils.PreferenceHelper
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import retrofit2.HttpException
+import java.io.IOException
 import kotlin.system.measureTimeMillis
 
 /**
@@ -47,6 +51,25 @@ class TvConfigRepository(private val context: Context) {
     private val adFileDao = AppDatabase.getInstance(context).adFileDao()
     private val connectedDeviceDao = AppDatabase.getInstance(context).connectedDeviceDao()
     private val gson = Gson()
+
+    private fun shouldRetryConfigFetch(error: Exception): Boolean {
+        return when (error) {
+            is HttpException -> {
+                val code = error.code()
+                code == 408 || code == 429 || code in 500..599
+            }
+            is IOException -> true
+            else -> {
+                val msg = error.message.orEmpty()
+                msg.contains("timeout", ignoreCase = true) ||
+                    msg.contains("timed out", ignoreCase = true) ||
+                    msg.contains("connection reset", ignoreCase = true) ||
+                    msg.contains("connection abort", ignoreCase = true) ||
+                    msg.contains("unable to resolve host", ignoreCase = true) ||
+                    msg.contains("failed to connect", ignoreCase = true)
+            }
+        }
+    }
 
     /**
      * Fetch TV configuration from backend and cache it in Room.
@@ -76,10 +99,45 @@ class TvConfigRepository(private val context: Context) {
 
         val body: TvConfigResponse? = try {
             var response: TvConfigResponse? = null
+            val lowNetwork = NetworkCompat.isLowBandwidthNetwork(context)
+            val maxAttempts = if (lowNetwork) 4 else 3
+            var retriesUsed = 0
+            var lastErrorType = "none"
             val apiTimeMs = measureTimeMillis {
-                response = api.fetchTvConfig(url, request)
+                var lastError: Exception? = null
+                for (attempt in 1..maxAttempts) {
+                    try {
+                        response = api.fetchTvConfig(url, request)
+                        lastError = null
+                        break
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        lastError = e
+                        lastErrorType = e::class.java.simpleName
+                        val canRetry = attempt < maxAttempts && shouldRetryConfigFetch(e)
+                        if (!canRetry) throw e
+                        retriesUsed++
+                        val backoffMs = if (lowNetwork) 4_000L * attempt else 2_500L * attempt
+                        Log.w(
+                            "TvConfigRepo",
+                            "Config fetch attempt $attempt/$maxAttempts failed; retrying in ${backoffMs}ms: ${e.message}"
+                        )
+                        delay(backoffMs)
+                    }
+                }
+                if (response == null && lastError != null) throw lastError
             }
             Log.i("TvConfigRepoPerf", "API fetch took ${apiTimeMs} ms for customer=$customerId")
+            Log.i(
+                "TvConfigRepoNet",
+                "fetchTvConfig telemetry customer=$customerId lowNetwork=$lowNetwork retriesUsed=$retriesUsed maxAttempts=$maxAttempts lastErrorType=$lastErrorType",
+            )
+            FileLogger.logResponse(
+                context,
+                "TvConfigRepoNet",
+                "fetchTvConfig telemetry customer=$customerId lowNetwork=$lowNetwork retriesUsed=$retriesUsed maxAttempts=$maxAttempts lastErrorType=$lastErrorType",
+            )
             response
         } catch (e: HttpException) {
             val errorBody = e.response()?.errorBody()?.string() ?: ""

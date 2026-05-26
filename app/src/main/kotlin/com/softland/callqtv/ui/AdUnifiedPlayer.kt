@@ -370,8 +370,8 @@ private fun WebLinkAdPlayer(
                     error: WebResourceError?
                 ) {
                     if (request != null && !request.isForMainFrame) return
-                    val errorCode = error?.errorCode ?: 0
-                    val description = error?.description?.toString().orEmpty()
+                    val errorCode = com.softland.callqtv.utils.WebViewErrorCompat.errorCode(error)
+                    val description = com.softland.callqtv.utils.WebViewErrorCompat.description(error)
                     Log.w(
                         "AdPlayer",
                         "WebView error ($errorCode) for ${url.take(100)}: $description"

@@ -26,6 +26,9 @@ object StoragePermissionHelper {
     @Volatile
     private var manageAllFilesDialogShownThisProcess = false
 
+    @Volatile
+    private var pendingOnGranted: (() -> Unit)? = null
+
     fun missingRuntimePermissions(context: Context): Array<String> {
         val candidates = mutableListOf<String>()
         when {
@@ -81,10 +84,55 @@ object StoragePermissionHelper {
         promptManageAllFilesAccessIfNeeded(activity)
     }
 
+    /**
+     * Runs [onGranted] only after runtime permissions (and all-files access on API 30+) are granted.
+     * If not granted, requests are shown and [onGranted] runs when access becomes available.
+     */
+    fun runWhenStorageAccessReady(
+        activity: ComponentActivity,
+        permissionLauncher: ActivityResultLauncher<Array<String>>,
+        onGranted: () -> Unit,
+    ) {
+        if (hasFullStorageAccess(activity)) {
+            onGranted()
+            return
+        }
+        pendingOnGranted = onGranted
+        ensureStorageAccess(activity, permissionLauncher)
+        tryRunPendingBlock(activity)
+    }
+
     fun onRuntimePermissionResult(activity: ComponentActivity) {
         runtimeRequestInFlight = false
-        if (hasFullStorageAccess(activity)) return
-        promptManageAllFilesAccessIfNeeded(activity)
+        if (hasFullStorageAccess(activity)) {
+            tryRunPendingBlock(activity)
+        } else {
+            promptManageAllFilesAccessIfNeeded(activity)
+        }
+    }
+
+    /**
+     * Re-check after returning from system permission screens (e.g. All files access settings).
+     */
+    fun onActivityResumed(
+        activity: ComponentActivity,
+        permissionLauncher: ActivityResultLauncher<Array<String>>,
+    ) {
+        if (hasFullStorageAccess(activity)) {
+            tryRunPendingBlock(activity)
+        } else {
+            if (needsManageAllFilesAccess()) {
+                manageAllFilesDialogShownThisProcess = false
+            }
+            ensureStorageAccess(activity, permissionLauncher)
+        }
+    }
+
+    private fun tryRunPendingBlock(activity: ComponentActivity) {
+        if (!hasFullStorageAccess(activity)) return
+        val block = pendingOnGranted ?: return
+        pendingOnGranted = null
+        block()
     }
 
     private fun requestRuntimePermissions(

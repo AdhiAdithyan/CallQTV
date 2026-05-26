@@ -4,7 +4,7 @@ Developer index of packages, classes, persistence, and tests. For product behavi
 
 **Package root:** `com.softland.callqtv`  
 **App version (Gradle):** `1.0.1` (`versionCode` 2)  
-**Last aligned with source:** May 2026 (app `1.0.1`, Room v17, VIP ER on all history slots, config retry overlay, continuous footer ticker)
+**Last aligned with source:** May 2026 (app `1.0.1`, Room v17, `minSdk` 21, storage permission gate, bounded MQTT channels, counter route cache, VIP ER on all history slots, config retry overlay, network retries/telemetry)
 
 ---
 
@@ -14,16 +14,16 @@ Developer index of packages, classes, persistence, and tests. For product behavi
 |------|------|------------------------|
 | Application | `app/src/main/kotlin/com/softland/callqtv/` | `MyApplication.kt`, `AppBackgroundCoordinator.kt`, `StoragePathProvider.kt` |
 | UI | `…/ui/` | 6 (+ `TokenDisplayActivity.kt` ~7.1k lines) |
-| ViewModels | `…/viewmodel/` | 10 (incl. `MqttCounterRouting.kt`, `KeypadPayloadParser.kt`) |
+| ViewModels | `…/viewmodel/` | 11 (incl. `MqttCounterRouting.kt`, `MqttCounterRouteCache.kt`, `KeypadPayloadParser.kt`) |
 | Data local | `…/data/local/` | 18 |
 | Data model | `…/data/model/` | 22 |
 | Data network | `…/data/network/` | 2 |
 | Data repository | `…/data/repository/` | 11 |
-| Utils | `…/utils/` | 23 (incl. `SemanticMqttParser.kt`, `TokenAnnouncer.kt`) |
-| **Main `app` module total** | `…/kotlin/com/softland/callqtv/` | **~91** `.kt` files |
-| Unit tests | `app/src/test/kotlin/com/softland/callqtv/` | **9** test classes |
+| Utils | `…/utils/` | 24 (incl. `StoragePermissionHelper.kt`, `SemanticMqttParser.kt`, `TokenAnnouncer.kt`) |
+| **Main `app` module total** | `…/kotlin/com/softland/callqtv/` | **~92** `.kt` files |
+| Unit tests | `app/src/test/kotlin/com/softland/callqtv/` | **10** test classes |
 
-**Main module:** `app/` — AGP 8.7.x, Kotlin 2.1.0, Compose BOM `2024.12.01`, `compileSdk` / `targetSdk` **35**, `minSdk` **26**, Java **17**.
+**Main module:** `app/` — AGP 8.7.x, Kotlin 2.1.0, Compose BOM `2024.12.01`, `compileSdk` / `targetSdk` **35**, `minSdk` **21** (API 23+ calls via `*Compat` helpers), Java **17**.
 
 ---
 
@@ -31,11 +31,11 @@ Developer index of packages, classes, persistence, and tests. For product behavi
 
 | File | Purpose |
 |------|---------|
-| `TokenDisplayActivity.kt` | Main TV display: Compose host, settings, **`AdArea`** / **`MediaEngine`**, MQTT collectors, theme, chime/TTS, diagnostics |
+| `TokenDisplayActivity.kt` | Main TV display: Compose host, settings, **`AdArea`** / **`MediaEngine`**, MQTT collectors, theme, chime/TTS, diagnostics; **`startInitialLoadIfNeeded`** after storage granted; permission overlay when denied |
 | `AdUnifiedPlayer.kt` | Routes `AdMediaType` → image (Coil), video (ExoPlayer), YouTube/WebView |
 | `AdViewportSizing.kt` | Pane pixel sizing, Coil decode targets, ExoPlayer track/bitrate caps |
-| `SplashScreenActivity.kt` | Splash; applies `ThemeColorManager` / `theme_color` from prefs |
-| `CustomerIdActivity.kt` | Customer ID entry, registration flow, APK update install |
+| `SplashScreenActivity.kt` | Splash; **`StoragePermissionHelper.runWhenStorageAccessReady`** before license/navigation; `onResume` re-prompts |
+| `CustomerIdActivity.kt` | Customer ID entry, registration flow, APK update install; **`navigateToMainIfNeeded`** gated on storage |
 | `OnOrderClickListener.kt` | Legacy callback interface (`com.softland.callqtv.interfaces`) |
 
 **Key composables / symbols inside `TokenDisplayActivity.kt`:**
@@ -88,7 +88,8 @@ tv_config.ad_files[] → AdFileEntity (Room)
 
 | Class / file | Purpose |
 |--------------|---------|
-| `MqttViewModel.kt` | Multi-broker MQTT, keypad validation, `parseMqttMessage`, CLR, token map, channels, `TokenUiProcessResult`, payload log save, config refresh signals |
+| `MqttViewModel.kt` | Multi-broker MQTT, keypad validation, `parseMqttMessage`, CLR, token map, bounded channels, `TokenUiProcessResult`, payload log save, config refresh signals |
+| `MqttCounterRouteCache.kt` | **`CounterRouteLookupCache`**, **`MqttCounterRouteKeys`**, **`ResolvedCounterIdentity`** — TTL route cache (5 min), channel capacity constants |
 | `MqttCounterRouting.kt` | **`findCounterEntityForMqttRoute`**, `mqttRouteMatchesButtonIndex`, `mqttRouteMatchesKeypadIndex` |
 | `KeypadPayloadParser.kt` | Keypad serial extraction (fixed, `000-` CLR, short wrapper) |
 | `TokenDisplayViewModel.kt` | Cache-first `loadData` (`activeConfigLoadId`, sync `_isLoading` before job cancel on retry), ads, `warmTokenAnnouncerIfEnabled`, consumer of `configRefreshRequests` |
@@ -104,7 +105,7 @@ Two layers cooperate; do not confuse **`keypad_index`** (config / CLR route digi
 
 | Stage | Location | Behavior |
 |-------|----------|----------|
-| Payload → storage key | `MqttViewModel.resolveCounterIdentityFromSerial` | **Normal tokens:** match **`keypad_sn` only** in `keypadsJson` (fixed-frame index 18 is **not** `keypad_index`). Pick counter row (single row, or first matching Room entity). **CLR:** optional route digit before `CLR` → match **`keypad_index`** when non-blank. Builds **`storageKey`** preferring **`button_index`**. |
+| Payload → storage key | `MqttViewModel.resolveCounterIdentityFromSerial` → **`CounterRouteLookupCache`** (5 min TTL; invalidated with keypad cache / history clear) | **Normal tokens:** match **`keypad_sn` only** in `keypadsJson` (fixed-frame index 18 is **not** `keypad_index`). Pick counter row (single row, or first matching Room entity). **CLR:** optional route digit before `CLR` → match **`keypad_index`** when non-blank. Builds **`storageKey`** preferring **`button_index`**. Uncached path: Room read on IO. |
 | Storage key → UI row | `findCounterEntityForMqttRoute` | Matches `CounterEntity` by **`button_index` first**, then **`keypad_index`** (so storage keys that are only keypad indices still resolve) |
 | Token list lookup | `getTokensForCounter` | Reads map by button_index, keypad_index, counter id/name, or fuzzy route match |
 | On-screen label | `formatTokenByPattern`, `CounterTokenSlot` in `TokenDisplayActivity.kt` | `T1`/`T2` pad digits only; **`{code}-`** when `enable_counter_prefix`; VIP **`D`** → **`ER-`** on any slot via `tokenUsesVipEmergencyPrefix` + `getVipEmergencyTokensByKey()` |
@@ -124,13 +125,10 @@ data class TokenUiProcessResult(
     val speakTokenAnnouncement: Boolean,
 )
 
-private data class ResolvedCounterIdentity(
-    val storageKey: String,   // internalTokenMap key
-    val counterLabel: String, // logs / token_records
-)
+// ResolvedCounterIdentity lives in MqttCounterRouteCache.kt
 ```
 
-**Channels:** `tokenUpdateChannel`, `tokenReplaceChannel`, `configRefreshRequests` (`TvConfigRefreshSignal` with `forceImmediate`).
+**Channels (bounded, `DROP_OLDEST`):** `tokenUpdateChannel` / `tokenReplaceChannel` — capacity **128** (`MqttCounterRouteKeys.TOKEN_UI_CHANNEL_CAPACITY`); dropped oldest decrements `announcementQueueSize`. `configRefreshRequests` — capacity **16**; `TvConfigRefreshSignal` with `forceImmediate`. **`enqueueTokenUiEvent`** uses `trySend` (non-blocking).
 
 ---
 
@@ -175,9 +173,11 @@ private data class ResolvedCounterIdentity(
 
 | Repository | Purpose |
 |------------|---------|
-| `TvConfigRepository` | Fetch/map/persist TV config transactionally; persists `keypadsJson` |
+| `TvConfigRepository` | Fetch/map/persist TV config; adaptive retries + backoff; `FileLogger` network telemetry (`TvConfigRepoNet`) |
 | `MqttClientManager.kt` | Eclipse Paho wrapper; listeners → `MqttViewModel` |
-| `MqttPayloadLogRepository` | Save incoming, `markDisplayed`, debounced sync, 2-day cleanup on **uploaded** rows only |
+| `MqttPayloadLogRepository` | Save incoming, `markDisplayed`, debounced sync, per-row upload retries, 2-day cleanup on **uploaded** rows only; telemetry tag `MqttPayloadLogRepoNet` |
+| `ProjectRepository` | License/registration APIs with per-endpoint retries + http/https failover |
+| `ServiceUrlRepository` | Service URL fetch with retries |
 | `TokenHistoryRepository` | Persist/load/clear per-counter token history |
 | `TokenRecordRepository` | Detailed token records for reporting |
 | `AuthRepository`, `ProjectRepository`, `ServiceUrlRepository`, … | Registration and discovery |
@@ -199,7 +199,12 @@ private data class ResolvedCounterIdentity(
 | `AdDownloader.kt` | Ad file download/cache |
 | `PreferenceHelper.kt` | Auth/customer shared prefs keys |
 | `Variables.kt` | MAC id, API path constants |
-| `NetworkUtil.kt` | Connectivity check |
+| `StoragePermissionHelper.kt` | Runtime storage + notifications (API 33+); **All files access** (API 30+); `runWhenStorageAccessReady`, `onActivityResumed` |
+| `ApkUpdateHelper.kt` | APK install via `FileProvider`; **install unknown apps** settings when needed |
+| `NetworkUtil.kt` | Connectivity check (delegates to `NetworkCompat`) |
+| `NetworkCompat.kt` | API 21+ network availability / low-bandwidth heuristics |
+| `WebViewErrorCompat.kt` | API 23+ `WebResourceError` fields with safe fallbacks |
+| `ProcessCompat.kt` | `Process.waitFor` with timeout on API 26+ |
 | `UnsafeOkHttpClient.kt` | TLS client for legacy brokers |
 | `AnimatedLoadingOverlay.kt` | Loading UI helper |
 | `Event.kt`, `DownloadStatus.kt`, `KeyboardUtils.kt` | Small helpers |
@@ -227,7 +232,9 @@ private data class ResolvedCounterIdentity(
 | `AppBackgroundCoordinator.kt` | App background → stops MQTT/TTS (`TokenAnnouncer.shutdown`) |
 | `StoragePathProvider.kt` | `FileProvider` for APK install paths |
 
-**Launcher flow:** `SplashScreenActivity` → `CustomerIdActivity` (if needed) → `TokenDisplayActivity`.
+**Launcher flow:** `SplashScreenActivity` → (storage permissions) → `CustomerIdActivity` (if needed) → `TokenDisplayActivity` → (storage permissions) → `loadData` / MQTT.
+
+**Android manifest (declared):** `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, `POST_NOTIFICATIONS`, `WAKE_LOCK`, storage (`READ_MEDIA_VIDEO` / `READ_EXTERNAL_STORAGE` / `WRITE_EXTERNAL_STORAGE` by API), `MANAGE_EXTERNAL_STORAGE`, `REQUEST_INSTALL_PACKAGES`. **Not declared:** camera, microphone, location, boot receiver, foreground service (WebView denies capture requests).
 
 ---
 
@@ -252,6 +259,7 @@ private data class ResolvedCounterIdentity(
 | `SemanticMqttParserTest` | Fixed types `-`, `D`, `B` (DB-only) |
 | `KeypadPayloadParserTest` | Serial extraction, CLR `000-` frames |
 | `MqttCounterRoutingTest` | `findCounterEntityForMqttRoute` button + keypad fallback |
+| `CounterRouteLookupCacheTest` | Route cache keys, TTL, scope invalidation, negative cache |
 | `TvConfigParsingTest` | Gson counter indices as strings (`FlexibleIntDeserializer`) |
 | `TokenAnnouncerSpeechTest` | TTS string normalization |
 | `TokenFormatTest` | `token_format` padding (`T1`/`T2` without literal `T` prefix) |
@@ -272,7 +280,9 @@ Run: `./gradlew test` or `./gradlew testCallQTVDebugUnitTest`.
 | VIP/emergency MQTT flag | `SemanticMqttParser.FixedPayload.isVipEmergency`, `TokenUiEvent.isVipEmergency`, `vipEmergencyTokensByKey` / `getVipEmergencyTokensByKey()` |
 | Config error Retry / loading overlay | `TokenDisplayViewModel.loadData` (`activeConfigLoadId`, `forceShowOverlay`), `TvConfigurationUnavailableScreen`, `AnimatedLoadingOverlay` |
 | Footer ticker scroll | `SeamlessTickerView` (continuous); `CounterNameTickerView` (3s pause at loop start) |
-| Counter route → UI row | `MqttCounterRouting.kt`, `MqttViewModel.resolveCounterIdentityFromSerial` |
+| Counter route → UI row | `MqttCounterRouting.kt`, `MqttViewModel.resolveCounterIdentityFromSerial`, `MqttCounterRouteCache.kt` |
+| Storage / permissions | `StoragePermissionHelper.kt`, `SplashScreenActivity`, `TokenDisplayActivity`, `CustomerIdActivity` |
+| Bounded MQTT UI queue | `MqttViewModel` (`createTokenUiChannel`, `enqueueTokenUiEvent`) |
 | Token UI update / chime / TTS | `TokenDisplayActivity.kt` (`TokenDisplayScreen` collectors) |
 | Token map / history / CLR keys | `MqttViewModel.kt` (`processTokenUpdateForKeys`, `clearTokensForResolvedCounter`) |
 | Config refresh on CLR | `MqttViewModel.requestConfigRefresh`, `TokenDisplayViewModel.loadData` |

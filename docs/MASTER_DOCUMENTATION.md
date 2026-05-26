@@ -49,7 +49,9 @@ This file is the **canonical** reference for architecture, product behavior, MQT
   - Keypad serial validation from DB-mapped records (`connected_devices` cache)
   - Fixed/legacy payload parsing and routing
   - Token update queueing and announcement sequencing
-  - `configRefreshRequests`: `Channel<TvConfigRefreshSignal>`; `requestConfigRefresh(reason, forceImmediate = false)`. **CLR** calls with `forceImmediate = true` (always enqueued, no **15s** `CONFIG_REFRESH_DEBOUNCE_MS` gate). Other triggers (e.g. route-marker / 17th-char refresh) stay debounced on the MQTT VM side.
+  - `configRefreshRequests`: bounded **`Channel`** (capacity **16**, `DROP_OLDEST`); `requestConfigRefresh(reason, forceImmediate = false)`. **CLR** calls with `forceImmediate = true` (always enqueued, no **15s** `CONFIG_REFRESH_DEBOUNCE_MS` gate). Other triggers (e.g. route-marker / 17th-char refresh) stay debounced on the MQTT VM side.
+  - **`tokenUpdateChannel` / `tokenReplaceChannel`**: capacity **128**, `DROP_OLDEST`; `enqueueTokenUiEvent` + `onUndeliveredElement` keep `announcementQueueSize` aligned when oldest events are dropped under flood.
+  - **`CounterRouteLookupCache`**: 5-minute TTL cache for `resolveCounterIdentityFromSerial` (key = normalized SN + route); invalidated via `invalidateCounterRoutingCache()` (also from `invalidateKeypadSerialCache()` and full history clear).
   - **`CLR` handling**: clears in-memory token map keys and `token_history` for resolved counters; merges keys from `tv_config.keypadsJson` (keypad SN → `counters[]`) so UI keys (`counter_id`, `name`, `default_name`, `button_index`) align with `TokenDisplayActivity` storage; matches route using `keypad_index` **or** `button_index` on keypad counter rows; if route-specific match finds no row, **all counters listed under that keypad SN** are cleared; always posts `tokensPerCounter` after a CLR attempt; runs clear whenever CLR validates and a serial is known (even if `extractClearPayloadInfo` is null); then requests **immediate** TV configuration refresh (see above)
 - `TvConfigRepository`
   - Fetches config, maps response, updates Room transactionally
@@ -68,13 +70,14 @@ This file is the **canonical** reference for architecture, product behavior, MQT
 
 ### 2.3 MQTT payload path to UI (summary)
 - `MqttClientManager.onMessageReceived` → trim → `rawMessageQueue` (bounded) → `viewModelScope` on **Default** dispatcher for validation / CLR / `parseMqttMessage`.
-- Verified payloads: `_receivedMessage` / `_lastPayload` **LiveData**; `parseMqttMessage` → `SemanticMqttParser` → **`tokenUpdateChannel`** or **`tokenReplaceChannel`** (`TokenUiEvent`: counter route, token text, raw payload, VIP flag).
+- Verified payloads: `_receivedMessage` / `_lastPayload` **LiveData**; `parseMqttMessage` → `SemanticMqttParser` → **`resolveCounterIdentityFromSerial`** (`CounterRouteLookupCache`) → **`tokenUpdateChannel`** or **`tokenReplaceChannel`** (capacity **128**, drop-oldest; `TokenUiEvent`: counter route, token text, raw payload, VIP flag).
 - `TokenDisplayScreen` **`LaunchedEffect` + `receiveAsFlow().collect`** on each channel (serialized with **`announcementMutex`**): resolve `CounterEntity` via **`findCounterEntityForMqttRoute`** (`MqttCounterRouting.kt` — matches **`button_index`**, then **`keypad_index`**), compute **storage keys** (`button_index` primary, `keypad_index` fallback), `processTokenUpdateForKeys` / `replaceTokenForKeys`, chime/TTS, `publishTokensSnapshot()` → **`tokensPerCounter` LiveData**; Compose **`CountersArea`** reads lists via **`getTokensForCounter`** (same alias order).
 - **`MqttViewModel.resolveCounterIdentityFromSerial`**: for **normal token / special-message** payloads, resolves the counter from **`keypad_sn` only** (via `KeypadPayloadParser` / `SemanticMqttParser.parseFixedPayload` serial); **fixed-frame index 18 (1-based) is part of the 11-char serial, not `keypad_index`**. When a keypad has one `counters[]` row, that row is used; when several, the first row that matches a Room `CounterEntity` is used. **`CLR`** still uses the route digit **immediately before `CLR`** (and optional `keypad_index` match) when present. Emits **`storageKey`** preferring **`button_index`**. **`saveTokenRecord`** matches counters by id, name, default name, and codes (not code-only).
 
 ## 3. Product and Runtime Behavior
 
 ### 3.1 Startup and Configuration
+- **Storage permissions (gate):** `StoragePermissionHelper.runWhenStorageAccessReady` blocks progression until runtime storage (and **All files access** on API 30+ when required) is granted. **`SplashScreenActivity`** does not start license check / navigation until granted; **`TokenDisplayActivity`** does not call `loadData` until granted (overlay: “Storage permission is required…”); **`CustomerIdActivity.navigateToMainIfNeeded`** waits for storage before opening main display. **`onActivityResumed`** re-prompts if still denied.
 - Cached config, counters, ads, and devices are loaded first to reduce startup wait.
 - If cache exists, the UI renders immediately while config sync continues in background.
 - If cache is absent, a loading overlay is shown until data is available.
@@ -106,7 +109,7 @@ This file is the **canonical** reference for architecture, product behavior, MQT
 
 ### 3.4 Fixed Payload Routing
 - **Frame layout** (`SemanticMqttParser.parseFixedPayload`, 1-based indices): `$` … type at **4** (`A`/`B`/`C`/`D`/`-`) … **11-char keypad serial** at **6–16** (Kotlin `substring(5, 16)`) … four-digit token at **20–23** (`substring(19, 23)`). **Index 18 is inside the serial**, not a `keypad_index` route digit (e.g. `$0NV-AbCAL0K000625-0002*`).
-- **Token UI routing:** `parseMqttMessage` → `resolveCounterIdentityFromSerial(serial)` — lookup `tv_config.keypadsJson` by **`keypad_sn`** only (no payload digit → `keypad_index` match for normal flow).
+- **Token UI routing:** `parseMqttMessage` → `resolveCounterIdentityFromSerial(serial)` — **`CounterRouteLookupCache`** on hit; else lookup `tv_config.keypadsJson` by **`keypad_sn`** only on IO (no payload digit → `keypad_index` match for normal flow).
 - **`TokenUiEvent.counter`** is the canonical **`button_index`** storage key when configured.
 - **`TokenDisplayActivity`** resolves the visible row with **`findCounterEntityForMqttRoute`** (`button_index` first, then **`keypad_index`** fallback on the storage key).
 - Persistence still uses canonical per-counter keys (`internalTokenMap` / `token_history`) so history remains stable across aliases.
@@ -584,11 +587,12 @@ flowchart TD
 ### 8.1 Build and Environment
 - `compileSdk = 35`
 - `targetSdk = 35`
-- `minSdk = 26`
+- `minSdk = 21`
 - Java/Kotlin target: 17
 
 ### 8.2 Validation Checklist
-- Build debug app successfully.
+- Build debug app successfully; `./gradlew testCallQTVDebugUnitTest` (**44** tests).
+- Validate storage permission gate on splash, main (`loadData`), and registration→main.
 - Validate cached-first startup.
 - Validate TTS warm-up (cached config during load; first announcement without multi-second delay after idle).
 - Validate with **ad sound** on: quiet **wellcome** prime plays **after** ads duck, before the real call (not over full-volume ads).
@@ -654,4 +658,10 @@ flowchart TD
 - **May 2026**: **Footer ticker** — `SeamlessTickerView` continuous scroll (no loop pause); counter-name marquee keeps 3s pause (§3.9.5).
 - **May 2026**: **`VipEmergencyTokenPrefixTest`** — unit coverage for `tokenUsesVipEmergencyPrefix`.
 - **May 2026**: **TTS bind vs prime** — `finishInitAttempt(true)` when engine binds; prime async; token `awaitReady` capped at **12 s** so first announcement is not blocked indefinitely (§3.5.1–§3.5.2).
+- **May 2026**: **Storage permission gate** — `StoragePermissionHelper`; splash / registration→main / `loadData` blocked until granted (§3.1).
+- **May 2026**: **Manifest trim** — camera, location, boot, foreground service removed; WebView denies mic/camera at runtime.
+- **May 2026**: **Bounded MQTT channels** (128 token UI, 16 config refresh) + **`CounterRouteLookupCache`** + **`CounterRouteLookupCacheTest`** (9 tests).
+- **May 2026**: **Network resilience** — adaptive retries in `TvConfigRepository`, `ProjectRepository`, `ServiceUrlRepository`, `MqttPayloadLogRepository`; telemetry via `FileLogger` (`*RepoNet` tags).
+- **May 2026**: **`minSdk` 21** with `NetworkCompat`, `WebViewErrorCompat`, `ProcessCompat`.
+- **May 2026**: Source index — [SOURCE_CODE_DOCUMENTATION.md](./SOURCE_CODE_DOCUMENTATION.md) refreshed (~92 main Kotlin files, **10** unit test classes, **44** JVM tests).
 

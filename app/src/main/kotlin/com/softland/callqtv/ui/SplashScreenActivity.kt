@@ -74,8 +74,6 @@ class SplashScreenActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        StoragePermissionHelper.ensureStorageAccess(this, storagePermissionLauncher)
-
         // Set up Jetpack Compose UI - load theme async to avoid blocking main thread
         setContent {
             var themeColor by remember { mutableStateOf(Color(0xFF2196F3)) }
@@ -91,6 +89,25 @@ class SplashScreenActivity : AppCompatActivity() {
             }
         }
 
+        StoragePermissionHelper.runWhenStorageAccessReady(
+            this,
+            storagePermissionLauncher,
+        ) {
+            startSplashLicenseAndNavigationFlow()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        StoragePermissionHelper.onActivityResumed(this, storagePermissionLauncher)
+        try {
+            Variables.isNetworkEnabled(this@SplashScreenActivity)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun startSplashLicenseAndNavigationFlow() {
         authSharedPrefs =
             getSharedPreferences(AppSharedPreferences.AUTHENTICATION, Context.MODE_PRIVATE)
         loginSharedPrefs = getSharedPreferences(AppSharedPreferences.Login, Context.MODE_PRIVATE)
@@ -149,15 +166,6 @@ class SplashScreenActivity : AppCompatActivity() {
                     }
                 }
             }
-        }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        try {
-            Variables.isNetworkEnabled(this@SplashScreenActivity)
-        } catch (e: Exception) {
-            e.printStackTrace()
         }
     }
 

@@ -128,7 +128,9 @@ CallQTV is an Android TV application for **real-time queue token display** and *
 
 | ID | Requirement |
 |----|-------------|
-| NFR-01 | **minSdk** 26, **targetSdk** 35, Kotlin/Java **17**. |
+| NFR-01 | **minSdk** 21, **targetSdk** 35, Kotlin/Java **17**; API 21–25 uses `NetworkCompat`, `WebViewErrorCompat`, `ProcessCompat`. |
+| NFR-01a | **Storage permissions** required before splash navigation, `loadData`, and registration→main (`StoragePermissionHelper`). |
+| NFR-01b | MQTT token UI channels bounded (**128**); config refresh channel bounded (**16**); drop-oldest under backlog. |
 | NFR-02 | Main display optimized for **landscape** Android TV. |
 | NFR-03 | Cached-first startup; usable on intermittent network. |
 | NFR-04 | MQTT processing off main thread; UI must remain responsive during color picker open (throttled brush warm). |
@@ -144,7 +146,7 @@ CallQTV is an Android TV application for **real-time queue token display** and *
 - **UI resolution**: `MqttViewModel` maps **keypad SN** → storage key (prefer `button_index`); **CLR** may use route digit before `CLR`. `findCounterEntityForMqttRoute` binds UI rows by `button_index` then `keypad_index`.
 - **`token_format`**: `T1`/`T2` pad digits only (no literal `T` on screen); combine with counter code prefix when enabled.
 - **Room v17**: `mqtt_payload_logs` for received/displayed/upload audit; see `MqttPayloadLogRepository`.
-- **Tests**: JVM suite includes `MqttCounterRoutingTest`, `KeypadPayloadParserTest`, `SemanticMqttParserTest` — run `./gradlew test`.
+- **Tests**: JVM suite (**44** tests, **10** classes) includes `CounterRouteLookupCacheTest`, `MqttCounterRoutingTest`, `KeypadPayloadParserTest`, `SemanticMqttParserTest`, `VipEmergencyTokenPrefixTest` — run `./gradlew testCallQTVDebugUnitTest`.
 - Misconfigured keypad SN or empty `counters[]` may cause CLR to log “no map keys”; fix on server.
 
 ---
@@ -159,4 +161,4 @@ CallQTV is an Android TV application for **real-time queue token display** and *
 
 ---
 
-*Derived from CallQTV May 2026 source (app `1.0.1`, Room v17). Update when [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md) changes.*
+*Derived from CallQTV May 2026 source (app `1.0.1`, Room v17, `minSdk` 21). Update when [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md) changes.*

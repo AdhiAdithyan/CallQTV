@@ -5,16 +5,24 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.os.Build
 import androidx.lifecycle.LiveData
+import com.softland.callqtv.utils.NetworkCompat
 
 class NetworkLiveData(context: Context) : LiveData<Boolean>() {
 
-    private val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-    
+    private val appContext = context.applicationContext
+    private val connectivityManager =
+        appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
     private fun checkNetwork(network: Network) {
-        val capabilities = connectivityManager.getNetworkCapabilities(network)
+        val capabilities = NetworkCompat.networkCapabilities(connectivityManager, network)
         val hasInternet = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
-        val isValidated = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
+        val isValidated = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
+        } else {
+            hasInternet
+        }
         postValue(hasInternet && isValidated)
     }
 
@@ -34,24 +42,28 @@ class NetworkLiveData(context: Context) : LiveData<Boolean>() {
 
     override fun onActive() {
         super.onActive()
-        val activeNetwork = connectivityManager.activeNetwork
-        if (activeNetwork != null) {
-            checkNetwork(activeNetwork)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val activeNetwork = connectivityManager.activeNetwork
+            if (activeNetwork != null) {
+                checkNetwork(activeNetwork)
+            } else {
+                postValue(false)
+            }
+            val request = NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            connectivityManager.registerNetworkCallback(request, networkCallback)
         } else {
-            postValue(false)
+            postValue(NetworkCompat.isNetworkAvailable(appContext))
         }
-        
-        val request = NetworkRequest.Builder()
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .build()
-        connectivityManager.registerNetworkCallback(request, networkCallback)
     }
 
     override fun onInactive() {
         super.onInactive()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
         try {
             connectivityManager.unregisterNetworkCallback(networkCallback)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // ignore
         }
     }

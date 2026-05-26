@@ -259,7 +259,8 @@ object AdDownloader {
             } catch (_: Exception) {
             }
 
-            val ok = proc.waitFor(CONVERT_TIMEOUT_MS, TimeUnit.MILLISECONDS) && proc.exitValue() == 0
+            val ok = ProcessCompat.waitFor(proc, CONVERT_TIMEOUT_MS) &&
+                ProcessCompat.exitValue(proc) == 0
             if (ok && output.exists() && output.length() > 0L) output else null
         } catch (e: Exception) {
             Log.e(TAG, "WMV->MP4 conversion failed for ${input.absolutePath}", e)
@@ -322,7 +323,8 @@ object AdDownloader {
             } catch (_: Exception) {
             }
 
-            val ok = proc.waitFor(CONVERT_TIMEOUT_MS, TimeUnit.MILLISECONDS) && proc.exitValue() == 0
+            val ok = ProcessCompat.waitFor(proc, CONVERT_TIMEOUT_MS) &&
+                ProcessCompat.exitValue(proc) == 0
             if (ok && output.exists() && output.length() > 0L) output else null
         } catch (e: Exception) {
             Log.e(TAG, "UHD MP4 downscale failed for ${input.absolutePath}", e)
@@ -343,8 +345,8 @@ object AdDownloader {
                 val pb = ProcessBuilder(listOf(c, "-version"))
                 pb.redirectErrorStream(true)
                 val proc = pb.start()
-                val finished = proc.waitFor(5, TimeUnit.SECONDS)
-                if (finished && proc.exitValue() == 0) return c
+                val finished = ProcessCompat.waitFor(proc, 5_000L)
+                if (finished && ProcessCompat.exitValue(proc) == 0) return c
             } catch (_: Exception) {
             }
         }

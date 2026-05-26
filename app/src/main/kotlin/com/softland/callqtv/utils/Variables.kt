@@ -1,8 +1,6 @@
 package com.softland.callqtv.utils
 
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.provider.Settings
@@ -99,12 +97,7 @@ object Variables {
         return sdf.format(Date())
     }
 
-    fun isNetworkEnabled(context: Context): Boolean {
-        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val network = connectivityManager.activeNetwork ?: return false
-        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
-        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-    }
+    fun isNetworkEnabled(context: Context): Boolean = NetworkCompat.isNetworkEnabled(context)
 
     @JvmStatic
     var LISENSE_DEMO_URL: String = "http://202.88.237.210:8093/LicenceMgmt/public/api/"

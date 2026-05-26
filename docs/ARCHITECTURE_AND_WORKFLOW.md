@@ -19,7 +19,7 @@ Technical architecture, component responsibilities, MQTT semantics, and data flo
 | API | Retrofit, OkHttp |
 | Messaging | Eclipse Paho MQTT |
 | Media | Media3 ExoPlayer, Coil, YouTube WebView |
-| minSdk / targetSdk | 26 / 35 |
+| minSdk / targetSdk | **21** / 35 (API 21–25 via `*Compat` helpers) |
 
 ---
 
@@ -27,7 +27,7 @@ Technical architecture, component responsibilities, MQTT semantics, and data flo
 
 ### 2.1 `ui`
 
-- `SplashScreenActivity`, `CustomerIdActivity`, `TokenDisplayActivity`
+- `SplashScreenActivity`, `CustomerIdActivity`, `TokenDisplayActivity` (all gate on `StoragePermissionHelper` before next step / `loadData`)
 - Compose: `TokenDisplayScreen`, `CountersArea`, **`AdArea`** (`BoxWithConstraints`), `ScrollingFooter`, settings dialogs
 - `AdUnifiedPlayer.kt`, **`AdViewportSizing.kt`**
 - `PresetColorDialog`, `NotificationSoundDialog`, `PresetColorSwatchTile`
@@ -38,7 +38,8 @@ Technical architecture, component responsibilities, MQTT semantics, and data flo
 | Class | Responsibility |
 |-------|----------------|
 | `TokenDisplayViewModel` | Cache-first `loadData`, ads, `configRefreshRequests` consumer; `forceImmediate` bypasses 30s MQTT refresh throttle when true |
-| `MqttViewModel` | Multi-broker MQTT, validation, `parseMqttMessage`, CLR, `TokenUiProcessResult`, token channels, `resolveCounterIdentityFromSerial` (keypad SN; CLR route-before-`CLR`) |
+| `MqttViewModel` | Multi-broker MQTT, validation, `parseMqttMessage`, CLR, `TokenUiProcessResult`, bounded token channels (128), `resolveCounterIdentityFromSerial` + route cache |
+| `MqttCounterRouteCache.kt` | `CounterRouteLookupCache`, `MqttCounterRouteKeys`, `ResolvedCounterIdentity` |
 | `MqttCounterRouting.kt` | `findCounterEntityForMqttRoute` (button_index, then keypad_index) |
 | `KeypadPayloadParser` | Serial extraction (fixed, CLR, short wrapper) |
 | Registration VMs | Device/customer flows |
@@ -59,6 +60,8 @@ Technical architecture, component responsibilities, MQTT semantics, and data flo
 | `TokenAnnouncer` | TTS bind/warm, idle synthesis keep-warm (15s), announce APIs, 3s silent heartbeat, normalization |
 | `ThemeColorManager` | ThemePrefs, brushes, chimes, blink mode |
 | `DiagnosticsExporter` | Support ZIP export |
+| `StoragePermissionHelper` | Runtime storage, notifications, all-files access; startup/main gate |
+| `NetworkCompat` / `WebViewErrorCompat` / `ProcessCompat` | API 21+ safe network/WebView/process helpers |
 
 ---
 
@@ -78,16 +81,18 @@ Main surface: counter grid, ads, scrolling footer, overlays (reconnect, pending 
 
 - `internalTokenMap` + `_tokensPerCounter` LiveData
 - `vipEmergencyTokensByKey` — `Set` of raw VIP token values per counter key (`getVipEmergencyTokensByKey()`)
-- `tokenUpdateChannel` / `tokenReplaceChannel` (`TokenUiEvent`)
+- `tokenUpdateChannel` / `tokenReplaceChannel` (`TokenUiEvent`, capacity **128**, drop-oldest)
+- `configRefreshRequests` (capacity **16**, drop-oldest; CLR uses `forceImmediate = true`, no 15s debounce gate)
+- `CounterRouteLookupCache` — 5 min TTL for serial+route → `ResolvedCounterIdentity`
 - `processTokenUpdateForKeys` → `TokenUiProcessResult(playCueUi, speakTokenAnnouncement)`
 - `replaceTokenForKeys` — type `C` full replace
-- `configRefreshRequests` — CLR uses `forceImmediate = true` (no 15s debounce gate)
 - CLR clears map + history + dedupe; always posts snapshot; immediate config refresh
 
 ### 3.4 Repositories
 
-- **`TvConfigRepository`**: fetch/map/persist TV config transactionally
-- **`MqttPayloadLogRepository`**: received/displayed timestamps, upload, 2-day cleanup on uploaded only
+- **`TvConfigRepository`**: fetch/map/persist TV config; adaptive retries + `FileLogger` telemetry
+- **`ProjectRepository`**, **`ServiceUrlRepository`**: registration/discovery with retries
+- **`MqttPayloadLogRepository`**: received/displayed timestamps, upload with per-row retries, 2-day cleanup on uploaded only
 - **`TokenHistoryRepository`**: newest-first per counter key; clear per counter or all
 
 ---
@@ -99,7 +104,8 @@ MqttClientManager.onMessageReceived
   → rawMessageQueue (bounded)
   → Default dispatcher: validate serial, CLR, parseMqttMessage
   → SemanticMqttParser
-  → tokenUpdateChannel | tokenReplaceChannel
+  → tokenUpdateChannel | tokenReplaceChannel (bounded 128, drop-oldest if UI lags)
+  → resolveCounterIdentityFromSerial (CounterRouteLookupCache, else Room on IO)
   → TokenDisplayScreen LaunchedEffect (announcementMutex)
   → resolveCounterIdentityFromSerial(keypad SN; CLR may use route-before-CLR)
   → findCounterEntityForMqttRoute (button_index, then keypad_index)
@@ -209,13 +215,14 @@ See [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md) §3.10 for supported fo
 | `SemanticMqttParserTest` | Fixed protocol types |
 | `KeypadPayloadParserTest` | Serial + CLR frames |
 | `MqttCounterRoutingTest` | Counter entity resolution |
+| `CounterRouteLookupCacheTest` | Route cache TTL, scope, keys |
 | `TvConfigParsingTest` | API JSON / flexible ints |
-| `TokenAnnouncerSpeechTest`, `TokenFormatTest` | Speech / display helpers |
+| `TokenAnnouncerSpeechTest`, `TokenFormatTest`, `VipEmergencyTokenPrefixTest` | Speech / display / VIP ER |
 
-Run: `./gradlew test`.
+Run: `./gradlew testCallQTVDebugUnitTest` (**44** tests).
 
 ---
 
 **`TokenAnnouncer` (idle / prime):** `HEARTBEAT_INTERVAL_MS` 3s · `IDLE_SYNTHESIS_KEEP_WARM_INTERVAL_MS` 15s · `SPEECH_WAKE_IDLE_MS` 60s · `PRIME_VOLUME` 0.01 · phrase `wellcome`.
 
-*Derived from CallQTV May 2026 source (app `1.0.1` / `versionCode` 2, Room v17, `AdViewportSizing`). Update when [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md) changes.*
+*Derived from CallQTV May 2026 source (app `1.0.1` / `versionCode` 2, Room v17, `minSdk` 21, permission gate, bounded channels, route cache). Update when [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md) changes.*

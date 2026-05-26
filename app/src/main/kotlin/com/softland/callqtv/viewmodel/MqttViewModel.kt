@@ -19,6 +19,8 @@ import com.softland.callqtv.data.repository.MqttPayloadLogRepository
 import com.softland.callqtv.data.repository.TokenHistoryRepository
 import com.softland.callqtv.utils.FileLogger
 import com.softland.callqtv.utils.SemanticMqttParser
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -46,13 +48,6 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     data class TokenUiProcessResult(
         val playCueUi: Boolean,
         val speakTokenAnnouncement: Boolean,
-    )
-
-    private data class ResolvedCounterIdentity(
-        /** Token map / UI route key — `button_index` from TV config / counters row (not `keypad_index`). */
-        val storageKey: String,
-        /** Counter id/name for payload logs and announcements. */
-        val counterLabel: String,
     )
 
     private val managers = mutableMapOf<String, MqttClientManager>()
@@ -118,7 +113,28 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     private var tokenHistoryLimit: Int = 15
 
     fun applyTokenHistoryLimitFromConfig(config: com.softland.callqtv.data.local.TvConfigEntity?) {
-        tokenHistoryLimit = config?.tokensPerCounter?.coerceAtLeast(1) ?: 15
+        val newLimit = config?.tokensPerCounter?.coerceAtLeast(1) ?: 15
+        val limitChanged = newLimit != tokenHistoryLimit
+        tokenHistoryLimit = newLimit
+        if (!limitChanged) return
+        viewModelScope.launch {
+            stateMutex.withLock {
+                var mapChanged = false
+                for (key in internalTokenMap.keys.toList()) {
+                    val prior = internalTokenMap[key] ?: continue
+                    val trimmed = trimTokenHistory(prior)
+                    if (trimmed != prior) {
+                        internalTokenMap[key] = trimmed
+                        mapChanged = true
+                    }
+                    pruneVipEmergencyTokens(key, trimmed)
+                }
+                if (mapChanged) {
+                    _tokensPerCounter.postValue(internalTokenMap.toMap())
+                }
+                postVipEmergencyTokensSnapshot()
+            }
+        }
     }
 
     private fun trimTokenHistory(list: List<String>): List<String> =
@@ -129,6 +145,9 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     private val keypadSerials = mutableSetOf<String>()
     @Volatile
     private var keypadSerialsLoaded = false
+
+    private val counterRouteCache =
+        CounterRouteLookupCache<ResolvedCounterIdentity>(MqttCounterRouteKeys.CACHE_TTL_MS)
 
     private data class MqttConnectionDetails(
         val serverUri: String,
@@ -232,18 +251,22 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     private val lastKeypadSeenAtByButton = ConcurrentHashMap<String, Long>()
     private var indicatorWatchdogJob: kotlinx.coroutines.Job? = null
 
-    val tokenUpdateChannel =
-        kotlinx.coroutines.channels.Channel<TokenUiEvent>(capacity = kotlinx.coroutines.channels.Channel.UNLIMITED)
-    val tokenReplaceChannel =
-        kotlinx.coroutines.channels.Channel<TokenUiEvent>(capacity = kotlinx.coroutines.channels.Channel.UNLIMITED)
+    val tokenUpdateChannel: Channel<TokenUiEvent> = createTokenUiChannel("tokenUpdate")
+    val tokenReplaceChannel: Channel<TokenUiEvent> = createTokenUiChannel("tokenReplace")
     /**
      * Requests to refresh TV configuration based on a *specific* MQTT response.
      * (Used to remove FCM dependency and keep refresh driven by MQTT.)
      */
-    val configRefreshRequests =
-        kotlinx.coroutines.channels.Channel<TvConfigRefreshSignal>(
-            capacity = kotlinx.coroutines.channels.Channel.UNLIMITED
-        )
+    val configRefreshRequests: Channel<TvConfigRefreshSignal> = Channel(
+        capacity = MqttCounterRouteKeys.CONFIG_REFRESH_CHANNEL_CAPACITY,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        onUndeliveredElement = { dropped ->
+            android.util.Log.w(
+                "MqttViewModel",
+                "configRefresh channel full; dropped oldest refresh signal: ${dropped.reason}",
+            )
+        },
+    )
     private val queuedTokenTimestamps = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private val queuedPayloadTimestamps = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
@@ -268,6 +291,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         _vipEmergencyTokensByKey.postValue(
             vipEmergencyTokensByKey.mapValues { (_, tokens) -> tokens.toSet() },
         )
+        persistVipEmergencyTokensToPrefs()
     }
 
     private fun markVipEmergencyToken(key: String, token: String) {
@@ -280,6 +304,53 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         set.retainAll(active)
         if (set.isEmpty()) vipEmergencyTokensByKey.remove(key)
     }
+
+    private val vipEmergencyPrefs by lazy {
+        getApplication<Application>().getSharedPreferences(VIP_EMERGENCY_PREFS_NAME, Context.MODE_PRIVATE)
+    }
+
+    private fun vipEmergencyPrefsStorageKey(customerId: String): String = "vip_tokens_$customerId"
+
+    private fun currentCustomerIdForPrefs(): String {
+        val authPrefs = getApplication<Application>().getSharedPreferences(
+            com.softland.callqtv.data.local.AppSharedPreferences.AUTHENTICATION,
+            Context.MODE_PRIVATE,
+        )
+        return String.format(
+            java.util.Locale.ROOT,
+            "%04d",
+            authPrefs.getInt(com.softland.callqtv.utils.PreferenceHelper.customer_id, 0),
+        )
+    }
+
+    private fun persistVipEmergencyTokensToPrefs() {
+        val customerId = currentCustomerIdForPrefs()
+        val snapshot = vipEmergencyTokensByKey.mapValues { (_, tokens) -> tokens.toList() }
+        vipEmergencyPrefs.edit()
+            .putString(vipEmergencyPrefsStorageKey(customerId), gson.toJson(snapshot))
+            .apply()
+    }
+
+    private fun restoreVipEmergencyTokensFromPrefs(customerId: String) {
+        val json = vipEmergencyPrefs.getString(vipEmergencyPrefsStorageKey(customerId), null) ?: return
+        val type = object : TypeToken<Map<String, List<String>>>() {}.type
+        val loaded: Map<String, List<String>> = try {
+            gson.fromJson(json, type) ?: return
+        } catch (_: Exception) {
+            return
+        }
+        loaded.forEach { (key, tokens) ->
+            val trimmed = tokens.map { it.trim() }.filter { it.isNotEmpty() }
+            if (trimmed.isNotEmpty()) {
+                vipEmergencyTokensByKey[key] = ConcurrentHashMap.newKeySet<String>().apply { addAll(trimmed) }
+            }
+        }
+    }
+
+    private fun clearVipEmergencyTokensPrefs(customerId: String) {
+        vipEmergencyPrefs.edit().remove(vipEmergencyPrefsStorageKey(customerId)).apply()
+    }
+
     @Volatile
     private var isHistoryLoaded = false
 
@@ -325,17 +396,20 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
 
     fun loadPersistedHistory() {
         viewModelScope.launch(Dispatchers.IO) {
-            try {
+            val customerId = run {
                 val app = getApplication<Application>()
                 val authPrefs = app.getSharedPreferences(
                     com.softland.callqtv.data.local.AppSharedPreferences.AUTHENTICATION,
-                    Context.MODE_PRIVATE
+                    Context.MODE_PRIVATE,
                 )
-                val customerId = String.format(
+                String.format(
                     java.util.Locale.ROOT,
                     "%04d",
-                    authPrefs.getInt(com.softland.callqtv.utils.PreferenceHelper.customer_id, 0)
+                    authPrefs.getInt(com.softland.callqtv.utils.PreferenceHelper.customer_id, 0),
                 )
+            }
+            try {
+                val app = getApplication<Application>()
                 val macAddress = com.softland.callqtv.utils.Variables.getMacId(app)
                 applyTokenHistoryLimitFromConfig(tvConfigDao.getByMacAndCustomer(macAddress, customerId))
             } catch (_: Exception) {
@@ -343,6 +417,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
             }
             stateMutex.withLock {
                 try {
+                    restoreVipEmergencyTokensFromPrefs(customerId)
                     val persisted = tokenHistoryRepo.loadAll()
                     val coldStart = !isHistoryLoaded
                     // Cold start: merge DB with any MQTT tokens that arrived early.
@@ -354,8 +429,10 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                         if (combined.isNotEmpty()) {
                             internalTokenMap[key] = combined
                         }
+                        pruneVipEmergencyTokens(key, combined)
                     }
                     isHistoryLoaded = true
+                    postVipEmergencyTokensSnapshot()
                     _tokensPerCounter.postValue(internalTokenMap.toMap())
                 } catch (e: Exception) {
                     android.util.Log.w(
@@ -384,10 +461,12 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                     _tokensPerCounter.postValue(emptyMap())
                     announcedTokenTimestamps.clear()
                     vipEmergencyTokensByKey.clear()
+                    clearVipEmergencyTokensPrefs(currentCustomerIdForPrefs())
                     _vipEmergencyTokensByKey.postValue(emptyMap())
                     queuedTokenTimestamps.clear()
                     queuedPayloadTimestamps.clear()
                     announcementQueueSize.set(0)
+                    invalidateCounterRoutingCache()
                 } catch (e: Exception) {
                     android.util.Log.w(
                         "MqttViewModel",
@@ -896,7 +975,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun normalizeKeypadSerial(serial: String): String =
-        serial.trim().uppercase(java.util.Locale.ROOT)
+        MqttCounterRouteKeys.normalizeKeypadSerial(serial)
 
     /**
      * True only when [serial] is registered for this TV (MAC + customer) in local DB:
@@ -1003,6 +1082,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
      * keypad serial cache so it will be rebuilt on the next keypad message.
      */
     fun invalidateKeypadSerialCache() {
+        invalidateCounterRoutingCache()
         stateMutex.tryLock()?.let { lockAcquired ->
             try {
                 if (lockAcquired) {
@@ -1016,6 +1096,11 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
             // If mutex is busy, fall back to simple volatile flag reset; cache will be refilled later.
             keypadSerialsLoaded = false
         }
+    }
+
+    /** Clears serial+route → counter resolution cache (e.g. after TV config sync). */
+    fun invalidateCounterRoutingCache() {
+        counterRouteCache.invalidate()
     }
 
     fun retryConnect(resetAttempts: Boolean = false) {
@@ -1534,20 +1619,22 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                     SemanticMqttParser.PayloadAction.DB_ONLY -> return
                     SemanticMqttParser.PayloadAction.REPLACE_COUNTER -> {
                         if (shouldSuppressRepeatedPayload(message)) return
-                        announcementQueueSize.incrementAndGet()
-                        tokenReplaceChannel.send(TokenUiEvent(routedCounter, token, message))
+                        enqueueTokenUiEvent(
+                            tokenReplaceChannel,
+                            TokenUiEvent(routedCounter, token, message),
+                        )
                         return
                     }
                     SemanticMqttParser.PayloadAction.NORMAL -> {
                         if (shouldSuppressRepeatedPayload(message)) return
-                        announcementQueueSize.incrementAndGet()
-                        tokenUpdateChannel.send(
+                        enqueueTokenUiEvent(
+                            tokenUpdateChannel,
                             TokenUiEvent(
                                 routedCounter,
                                 token,
                                 message,
                                 isVipEmergency = fixed.isVipEmergency,
-                            )
+                            ),
                         )
                         return
                     }
@@ -1573,13 +1660,13 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 saveTokenRecord(message, identity.counterLabel, token)
                 if (shouldSuppressRepeatedPayload(message)) return
-                announcementQueueSize.incrementAndGet()
-                tokenUpdateChannel.send(
+                enqueueTokenUiEvent(
+                    tokenUpdateChannel,
                     TokenUiEvent(
                         counter = identity.storageKey,
                         token = token,
                         payload = message,
-                    )
+                    ),
                 )
             }
         } catch (e: Exception) {
@@ -1638,6 +1725,21 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         routeIndex: String,
     ): ResolvedCounterIdentity? {
         if (serial.isBlank()) return null
+        val scope = routingCacheScope()
+        val cacheKey = MqttCounterRouteKeys.routeCacheKey(serial, routeIndex)
+        when (val cached = counterRouteCache.lookup(scope, cacheKey)) {
+            is RouteCacheLookup.Hit -> return cached.value
+            is RouteCacheLookup.Miss -> Unit
+        }
+        val resolved = resolveCounterIdentityFromSerialUncached(serial, routeIndex)
+        counterRouteCache.store(scope, cacheKey, resolved)
+        return resolved
+    }
+
+    private suspend fun resolveCounterIdentityFromSerialUncached(
+        serial: String,
+        routeIndex: String,
+    ): ResolvedCounterIdentity? {
         return withContext(Dispatchers.IO) {
             try {
                 val app = getApplication<Application>()
@@ -2087,7 +2189,47 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun createTokenUiChannel(name: String): Channel<TokenUiEvent> =
+        Channel(
+            capacity = MqttCounterRouteKeys.TOKEN_UI_CHANNEL_CAPACITY,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+            onUndeliveredElement = {
+                val remaining = announcementQueueSize.decrementAndGet()
+                if (remaining < 0) {
+                    announcementQueueSize.set(0)
+                }
+                android.util.Log.w(
+                    "MqttViewModel",
+                    "$name channel full; dropped oldest pending token UI event",
+                )
+            },
+        )
+
+    private fun enqueueTokenUiEvent(channel: Channel<TokenUiEvent>, event: TokenUiEvent) {
+        announcementQueueSize.incrementAndGet()
+        if (!channel.trySend(event).isSuccess) {
+            announcementQueueSize.decrementAndGet()
+            android.util.Log.w("MqttViewModel", "Token UI channel closed; event not queued")
+        }
+    }
+
+    private fun routingCacheScope(): String {
+        val app = getApplication<Application>()
+        val authPrefs = app.getSharedPreferences(
+            com.softland.callqtv.data.local.AppSharedPreferences.AUTHENTICATION,
+            Context.MODE_PRIVATE,
+        )
+        val customerId = String.format(
+            java.util.Locale.ROOT,
+            "%04d",
+            authPrefs.getInt(com.softland.callqtv.utils.PreferenceHelper.customer_id, 0),
+        )
+        val macAddress = com.softland.callqtv.utils.Variables.getMacId(app)
+        return MqttCounterRouteKeys.deviceScope(macAddress, customerId)
+    }
+
     companion object {
+        private const val VIP_EMERGENCY_PREFS_NAME = "vip_emergency_tokens"
         private const val MQTT_MESSAGE_LIVENESS_TIMEOUT_MS = 90_000L
         private const val MQTT_LIVENESS_STALE_STRIKES_BEFORE_RECONNECT = 2
         private const val MQTT_MESSAGE_LIVENESS_TIMEOUT_MS_LOW_NETWORK = 120_000L
@@ -2098,21 +2240,8 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         private const val MQTT_PAYLOAD_SYNC_DEBOUNCE_MS = 15_000L
     }
 
-    private fun isLowBandwidthNetwork(): Boolean {
-        return try {
-            val cm = getApplication<Application>()
-                .getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-                ?: return false
-            val network = cm.activeNetwork ?: return false
-            val caps = cm.getNetworkCapabilities(network) ?: return false
-            val downKbps = caps.linkDownstreamBandwidthKbps
-            val onCellular = caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
-            val downIsLow = downKbps in 1..4_000
-            onCellular || downIsLow
-        } catch (_: Exception) {
-            false
-        }
-    }
+    private fun isLowBandwidthNetwork(): Boolean =
+        com.softland.callqtv.utils.NetworkCompat.isLowBandwidthNetwork(getApplication())
 
     private fun getMqttLivenessTimeoutMs(): Long {
         return if (isLowBandwidthNetwork()) {

@@ -46,6 +46,7 @@ import com.softland.callqtv.utils.ApkUpdateHelper
 import com.softland.callqtv.utils.KeyboardUtils
 import com.softland.callqtv.utils.NetworkUtil
 import com.softland.callqtv.utils.PreferenceHelper
+import com.softland.callqtv.utils.StoragePermissionHelper
 import com.softland.callqtv.utils.ThemeColorManager
 import com.softland.callqtv.utils.Variables
 import com.softland.callqtv.viewmodel.DownloadViewModel
@@ -86,6 +87,12 @@ class CustomerIdActivity : AppCompatActivity() {
         if (apkPath != null) {
             installApk(apkPath)
         }
+    }
+
+    private val storagePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { _ ->
+        StoragePermissionHelper.onRuntimePermissionResult(this)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -363,13 +370,18 @@ class CustomerIdActivity : AppCompatActivity() {
 
     private fun navigateToMainIfNeeded() {
         if (hasNavigatedToMain || isFinishing || isDestroyed) return
-        hasNavigatedToMain = true
-        val intent = Intent(this, TokenDisplayActivity::class.java).apply {
-            // Ensure we re-use an existing TokenDisplayActivity when possible.
-            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        StoragePermissionHelper.runWhenStorageAccessReady(
+            this,
+            storagePermissionLauncher,
+        ) {
+            if (hasNavigatedToMain || isFinishing || isDestroyed) return@runWhenStorageAccessReady
+            hasNavigatedToMain = true
+            val intent = Intent(this, TokenDisplayActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+            startActivity(intent)
+            finish()
         }
-        startActivity(intent)
-        finish()
     }
 
     private fun observeDownloadStatus() {
@@ -428,6 +440,7 @@ class CustomerIdActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        StoragePermissionHelper.onActivityResumed(this, storagePermissionLauncher)
     }
 
     override fun onPause() {
