@@ -78,6 +78,8 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
     private var offlineAdSyncJob: Job? = null
     private var mqttConfigRefreshListenerStarted = false
     private var currentConfigLoadJob: Job? = null
+    /** Monotonic id so a cancelled load's `finally` cannot clear loading for a newer retry. */
+    private var activeConfigLoadId = 0
     private var lastMqttRefreshHandledAtMs: Long = 0L
     private var lastOfflineSyncedAds: List<AdFileEntity> = emptyList()
     private data class CachedUiSnapshot(
@@ -166,13 +168,17 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
             }
         }
 
+        val loadId = ++activeConfigLoadId
+        if (forceShowOverlay) {
+            // Set before cancelling any in-flight job so a stale `finally` cannot hide the overlay.
+            _isLoading.value = true
+            hasShownInitialLoadingOverlay = true
+        }
+
         currentConfigLoadJob?.cancel()
         currentConfigLoadJob = viewModelScope.launch {
             val loadStartMs = System.currentTimeMillis()
-            if (forceShowOverlay) {
-                _isLoading.value = true
-                hasShownInitialLoadingOverlay = true
-            } else {
+            if (!forceShowOverlay) {
                 // For automatic retries or subsequent hidden loads, keep the overlay hidden.
                 _isLoading.value = false
             }
@@ -317,7 +323,9 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                     launch { initMqttIfNeeded(mqttViewModel) }
                 }
             } finally {
-                _isLoading.value = false
+                if (loadId == activeConfigLoadId) {
+                    _isLoading.value = false
+                }
                 // Connected devices may have changed; invalidate keypad serial cache so that
                 // subsequent keypad validation uses the latest mapping.
                 mqttViewModel.invalidateKeypadSerialCache()

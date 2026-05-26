@@ -78,6 +78,7 @@ This file is the **canonical** reference for architecture, product behavior, MQT
 - Cached config, counters, ads, and devices are loaded first to reduce startup wait.
 - If cache exists, the UI renders immediately while config sync continues in background.
 - If cache is absent, a loading overlay is shown until data is available.
+- **Manual Retry** (config unavailable, pending approval, license expired, Settings Refresh): `loadData(..., forceShowOverlay = true)` sets `_isLoading` **synchronously** before cancelling any in-flight load; `activeConfigLoadId` ensures a cancelled job’s `finally` cannot clear loading for a newer retry. **`AnimatedLoadingOverlay`** is composed **on top of** error dialogs while `isLoading` is true.
 - TTS engine binding can start as soon as `tv_config` is known (including cached config during API fetch); the **“Preparing voice engine…”** overlay is shown only when the audio language changes during an active config load, not for the whole loading overlay.
 
 ### 3.2 MQTT Token Processing
@@ -97,6 +98,7 @@ This file is the **canonical** reference for architecture, product behavior, MQT
 - `CLR` clears:
   - current live token state for matched keys in `internalTokenMap`
   - persisted `token_history` rows for those counter keys
+  - **`vipEmergencyTokensByKey`** entries for those counter keys (VIP **ER** markers)
   - recent dedupe / queued-payload timestamps for that serial (route-aware when route is known; serial-wide for queued payloads when route is blank)
 - **`LiveData`**: `_tokensPerCounter` is updated after CLR even when no in-memory keys matched (history may still have been cleared).
 - This prevents old pre-clear tokens from staying on screen, blocking the next valid token, or reappearing after app restart when config and map keys stay aligned.
@@ -113,8 +115,9 @@ This file is the **canonical** reference for architecture, product behavior, MQT
 ### 3.4.1 On-screen token label (`token_format` + counter prefix)
 - **`tv_config.token_format`**: patterns like **`T1`** / **`T2`** set **digit width only** (zero-padding). They do **not** add a literal **`T`** on screen (token `2` + `T1` → **`2`**, not `T2`).
 - When **`enable_counter_prefix`** is on, display is **`{counter.code}-{formattedToken}`** (e.g. `NU-2`), using `CounterEntity.code` / `default_code`.
-- **VIP/emergency** (fixed-protocol index 4 = **`D`**): top slot always shows **`ER-{formattedToken}`** and TTS spells **`ER`** before the token, **even when** `enable_counter_prefix` is off (`VIP_EMERGENCY_COUNTER_PREFIX` in `TokenDisplayActivity.kt`).
-- Implemented in **`formatTokenByPattern`** / **`CounterTokenSlot`** (`TokenDisplayActivity.kt`); tests in **`TokenFormatTest`**.
+- **VIP/emergency** (fixed-protocol index 4 = **`D`**): any slot whose **raw** token value was received as VIP shows **`ER-{formattedToken}`** and TTS spells **`ER`** before the token, **even when** `enable_counter_prefix` is off (`VIP_EMERGENCY_COUNTER_PREFIX`, `tokenUsesVipEmergencyPrefix` in `TokenDisplayActivity.kt`).
+- **`MqttViewModel`** keeps a **`Set<String>`** of VIP raw tokens per counter map key (`vipEmergencyTokensByKey`); marking survives when the token moves to a **previous** slot. Arrival of a later **normal** token does **not** remove VIP markers for earlier VIP tokens still in history. Markers are pruned when the token leaves the trimmed history list or the counter is cleared (`CLR` / full clear).
+- Implemented in **`formatTokenByPattern`** / **`CounterTokenSlot`**; tests: **`TokenFormatTest`**, **`VipEmergencyTokenPrefixTest`**.
 
 ### 3.5 Announcement Behavior
 - Token UI events are processed under **`announcementMutex`** so chime/TTS do not overlap and **the next token cannot start until the previous announcement finishes** (mutex held through TTS `onDone`; no fixed speech timeout).
@@ -244,6 +247,7 @@ Under **`announcementMutex`**, each `tokenUpdateChannel` / `tokenReplaceChannel`
 
 #### 3.9.5 Scrolling footer (ticker strip)
 - **Composable:** `ScrollingFooter` in `TokenDisplayActivity` — `SeamlessTickerView` marquee when `scroll_enabled` is on and `scrollTextLinesJson` has lines.
+- **Scroll behavior:** Footer ticker loops **continuously** (no idle pause between loops). Counter **name** headers use `CounterNameTickerView`, which still pauses **3s** at each loop start (`COUNTER_NAME_MARQUEE_RESTART_PAUSE_MS`) so long names remain readable.
 - **Background:** Uses stored **`theme_color`** string passed as **`appThemeHex`** (from `TokenDisplayActivity` → `TokenDisplayContent` → `TokenDisplayFooter`), not a fixed color.
 - **`getTickerStripBackgroundBrush(hex)`:** For **`GRADIENT:…`**, **horizontal** multi-stop gradient across the wide bar; for **solid** hex, horizontal blend `lerp(#121212, primary, 0.52→0.78)` so white ticker text stays readable.
 - **Material theme:** Footer strip is independent of `MaterialTheme.colorScheme` surface; it follows the user’s theme/gradient preference directly.
@@ -603,6 +607,9 @@ flowchart TD
 - Validate Settings → Display → **Token blink**: whole-tile vs text-only behavior when `blink_current_token` is on.
 - Validate **app theme**: solid and **gradient** `theme_color` — Material accents use first gradient stop; counter/token **brushes** show full **vertical** gradient where applicable; **scrolling footer** uses **horizontal** `getTickerStripBackgroundBrush`.
 - Validate **notification chime** on every `playCueUi` UI update (including VIP-only / fallback-key sync), not only when TTS speaks.
+- Validate VIP **ER-** prefix on **previous** token slots after a normal token arrives; VIP markers cleared on **CLR**.
+- Validate config **Retry** shows loading overlay for full fetch (unavailable config, pending approval, license expired).
+- Validate footer ticker scrolls continuously (no long pause between loops).
 - Validate **Settings → Display** color pickers: open without ANR; D-pad **focus ring** on navigated swatch; initial focus on **current** `selectedHex`; no crash from duplicate hex (grid keys use name+index).
 - Validate **Notification sound** picker: preview chime; focus on current selection.
 - Validate uploaded rows older than 2 days are cleaned and unuploaded rows remain.
@@ -635,12 +642,16 @@ flowchart TD
 - **May 2026**: Room **v17** — `mqtt_payload_logs` table; **`MqttPayloadLogRepository`** + **`TokenReportRequest`** upload; **`FlexibleIntDeserializer`** on API counter index fields.
 - **May 2026**: **`PublicCallqtvConfigStorage`**, expanded **`DiagnosticsExporter`** / **`FileLogger`**; **`MyApplication`** non-fatal exception filtering.
 - **May 2026**: Unit tests — `MqttCounterRoutingTest`, `TvConfigParsingTest`, `SemanticMqttParserTest`, `KeypadPayloadParserTest`, `TokenAnnouncerSpeechTest`, `TokenFormatTest`.
-- **May 2026**: Source index — [SOURCE_CODE_DOCUMENTATION.md](./SOURCE_CODE_DOCUMENTATION.md) refreshed (~91 main Kotlin files, Room v17, 8 unit test classes).
+- **May 2026**: Source index — [SOURCE_CODE_DOCUMENTATION.md](./SOURCE_CODE_DOCUMENTATION.md) refreshed (~91 main Kotlin files, Room v17, 9 unit test classes).
 - **May 2026**: **`AdViewportSizing.kt`** — `BoxWithConstraints` in `AdArea`; Coil decode + preload at pane size; ExoPlayer `updateViewport` + per-clip track/bitrate caps; faster ad buffer; §3.10 expanded (types, pane layout, limitations).
 - **May 2026**: **MQTT token routing** — normal/special fixed payloads resolve counter by **`keypad_sn` only**; fixed-frame index **18** is not `keypad_index`; `SemanticMqttParser.FixedPayload` no longer carries `routeIndex` (§3.4).
 - **May 2026**: **`token_format`** — `T1`/`T2` patterns pad digits only (no literal **`T`** on screen); counter prefix → `CODE-token` (§3.4.1, `TokenFormatTest`).
 - **May 2026**: **TTS cold-start** — `TokenAnnouncer.awaitReady` + `awaitSynthesisPrimeIfNeeded`; early `warmTokenAnnouncerIfEnabled` in `TokenDisplayViewModel`; quiet synthesis prime **`wellcome`** at 1% volume after ad duck when `enable_ad_sound` is on; parallel engine bind during chime (§3.5.1).
 - **May 2026**: **Announcement sequencing** — current token tile at chime cue; **`announcementMutex`** held through TTS `onDone` so the **next** token cannot publish until the previous announcement finishes; idle synthesis keep-warm every **15 s** via heartbeat (§3.5, §3.5.1).
-- **May 2026**: **VIP/emergency (`D`)** — fixed-protocol index 4 always uses **`ER`** counter prefix on tile and in TTS, even when `enable_counter_prefix` is off (`VIP_EMERGENCY_COUNTER_PREFIX`, `vipEmergencyTopTokenByKey`) (§3.4.1, §3.5).
+- **May 2026**: **VIP/emergency (`D`)** — fixed-protocol index 4 always uses **`ER`** on tile and in TTS, even when `enable_counter_prefix` is off (`VIP_EMERGENCY_COUNTER_PREFIX`) (§3.4.1, §3.5).
+- **May 2026**: **VIP ER on history slots** — `vipEmergencyTokensByKey` (`Set` per counter); **`ER-`** on previous tokens after a normal token arrives; cleared on CLR/history trim (§3.4.1).
+- **May 2026**: **Config Retry overlay** — `activeConfigLoadId` + synchronous `forceShowOverlay` loading; overlay on top of `TvConfigurationUnavailableScreen` / approval / license dialogs (§3.1).
+- **May 2026**: **Footer ticker** — `SeamlessTickerView` continuous scroll (no loop pause); counter-name marquee keeps 3s pause (§3.9.5).
+- **May 2026**: **`VipEmergencyTokenPrefixTest`** — unit coverage for `tokenUsesVipEmergencyPrefix`.
 - **May 2026**: **TTS bind vs prime** — `finishInitAttempt(true)` when engine binds; prime async; token `awaitReady` capped at **12 s** so first announcement is not blocked indefinitely (§3.5.1–§3.5.2).
 

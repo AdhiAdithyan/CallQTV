@@ -47,7 +47,7 @@ flowchart TD
     M -->|D/-/normal| P[Normal token flow]
 ```
 
-**Normal token flow (detail):** `parseMqttMessage` → `resolveCounterIdentityFromSerial` (**keypad SN** from frame; not fixed index 18) → `tokenUpdateChannel` → `TokenDisplayScreen` → **`findCounterEntityForMqttRoute`** → `processTokenUpdateForKeys` → announcement path (§3). On-screen label: `formatTokenByPattern` + optional `{code}-` when `enable_counter_prefix`; index 4 **`D`** → always **`ER-`** (§3.4.1 in [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md)).
+**Normal token flow (detail):** `parseMqttMessage` → `resolveCounterIdentityFromSerial` (**keypad SN** from frame; not fixed index 18) → `tokenUpdateChannel` → `TokenDisplayScreen` → **`findCounterEntityForMqttRoute`** → `processTokenUpdateForKeys` → announcement path (§3). On-screen label: `formatTokenByPattern` + optional `{code}-` when `enable_counter_prefix`; index 4 **`D`** → **`ER-`** on any slot via `vipEmergencyTokensByKey` (§3.4.1 in [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md)).
 
 ---
 

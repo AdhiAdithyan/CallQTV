@@ -85,7 +85,7 @@ Match extracted serial against **DB-mapped** keypad / `connected_devices` cache;
 
 - **`tv_config.token_format`**: `T1`, `T2`, `00`, `000`, etc. Patterns **`T{n}`** pad the numeric token to **n** digits **without** a literal `T` (e.g. `2` + `T1` → `2`; `5` + `T2` → `05`).
 - With **`enable_counter_prefix`**, show **`{counter.code}-{formattedToken}`** (e.g. `NU-2`).
-- **VIP/emergency (index 4 = `D`):** always **`ER-{formattedToken}`** on the top slot and spell **`ER`** in TTS, even when **`enable_counter_prefix`** is off (`SemanticMqttParser.isVipEmergency` → `vipEmergencyTopTokenByKey` → `CounterTokenSlot`).
+- **VIP/emergency (index 4 = `D`):** always **`ER-{formattedToken}`** on **any** slot for that raw token (including previous/history) and spell **`ER`** in TTS, even when **`enable_counter_prefix`** is off (`SemanticMqttParser.isVipEmergency` → `vipEmergencyTokensByKey` / `markVipEmergencyToken` → `tokenUsesVipEmergencyPrefix` → `CounterTokenSlot`).
 
 ---
 
@@ -96,7 +96,7 @@ On **valid CLR** (serial passes validation):
 1. Build key set: `ResolvedCounterIdentity`, all plausible **`internalTokenMap` keys** for counters under that keypad SN in **`tv_config.keypadsJson`**, plus Room counter aliases.
 2. **Route match:** `keypadsJson` → `counters[]` where **`keypad_index` OR `button_index`** matches route digit; fallback to `CounterEntity` fields.
 3. **If no row matches route:** clear **all counters listed for that keypad SN** in config (avoid stuck UI).
-4. Clear **live map** keys, **`token_history`** for those keys, **dedupe / queued-payload** state (route-aware when route known).
+4. Clear **live map** keys, **`token_history`**, **`vipEmergencyTokensByKey`**, **dedupe / queued-payload** state (route-aware when route known).
 5. **Always** post `tokensPerCounter` (or equivalent) after CLR attempt.
 6. **TV configuration after CLR:** emit **`TvConfigRefreshSignal(forceImmediate = true)`** on `configRefreshRequests` so the display VM runs **`loadData(..., forceShowOverlay = true)`** immediately (same full config API as Settings **Refresh**), **bypassing** the display VM’s **30s** MQTT-refresh throttle. Non-CLR MQTT refresh uses `forceImmediate = false` and remains subject to **15s** debounce on `MqttViewModel` and **30s** min interval on the collector.
 7. Run clear when serial known and CLR validates **even if** structured CLR parse returns null in edge cases.
@@ -106,6 +106,7 @@ On **valid CLR** (serial passes validation):
 ## 7) Runtime UX
 
 - **Startup:** Load cache → render immediately; background sync; loading overlay only if no cache.
+- **Config Retry:** `forceShowOverlay` sets loading synchronously; `activeConfigLoadId` avoids race with cancelled jobs; overlay on top of error dialogs.
 - **TTS:** “Preparing voice engine…” when audio language changes; early `warmUp` from cached config during `loadData` when announcements enabled.
 - **Connectivity:** Multiple brokers; “connected” if **any broker connected** OR **recent MQTT traffic**; reconnect badge (“Connecting to BLUCON…”, try count, timer); **~30s** reconnect cycle.
 - **Counter tiles:** Left dot = **dispense**, right = **keypad**; red default → green on activity → red after **~5 min** idle.
@@ -127,7 +128,7 @@ On **valid CLR** (serial passes validation):
   - **`speakTokenAnnouncement`**: TTS only when primary-key announce rules pass and `enable_token_announcement` is on.
 - **Dedupe:** identical raw payload within **10s** → single channel event; **re-call after 10s** allowed with fresh blink/TTS.
 - **Normal:** space-separated — “Token”, optional **spelled counter prefix**, token label, optional counter name when `enable_counter_announcement` on.
-- **VIP/emergency (`D`):** always spell **`ER`** before the token in TTS; on-screen **`ER-{token}`** regardless of `enable_counter_prefix`.
+- **VIP/emergency (`D`):** always spell **`ER`** before the token in TTS; on-screen **`ER-{token}`** on current and previous slots regardless of `enable_counter_prefix`.
 - **Special (`C` / `__MSG__`):** message + optional counter name (space, no comma).
 - **TTS:** NFC normalize, strip controls, collapse whitespace; optional letter-spaced collapse; long ALL-CAPS handling for special messages.
 - **Ad sound (`enable_ad_sound`):** `runWithAdvertisementAudioDuckedForSpeech` ducks Exo + YouTube **before** `awaitSynthesisPrimeIfNeeded` and real TTS; restore on end/cancel; skip duck if ad sound off.
@@ -198,7 +199,9 @@ As required by features: `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`
 - Chime on all **`playCueUi`** paths; TTS only when **`speakTokenAnnouncement`**.
 - Back-to-back tokens: second tile must not appear until first TTS completes (mutex).
 - Idle 2+ min with announcements on: next token speaks without multi-second cold delay (15s idle prime).
-- VIP payload (index 4 = `D`) with counter prefix **off**: tile shows **ER-{token}** and TTS spells **ER**.
+- VIP payload (index 4 = `D`) with counter prefix **off**: tile shows **ER-{token}** and TTS spells **ER**; after a normal token, previous slot still **ER-{vip}**.
+- Config unavailable Retry: loading overlay visible for full fetch.
+- Footer ticker: continuous scroll (no 3s loop pause on footer strip).
 - Color/sound pickers: no ANR; TV focus on current selection; visible focus ring while navigating.
 - Support export / diagnostics; error log file behavior; **CLR** forces **immediate** config `loadData` (verify via network or server state); export ZIP appears on **removable** path when SD/USB mounted, else Downloads / app-scoped per Toast.
 

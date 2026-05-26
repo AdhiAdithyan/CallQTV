@@ -20,6 +20,8 @@ Acceptance tests aligned with current source (app `1.0.1`, Room v17, May 2026). 
 - [ ] First announcement after cold start: tile at chime **and speech plays** (not tile-only silence from stuck `awaitReady`)
 - [ ] First announcement after long idle (2+ min): no multi-second gap before real speech (idle keep-warm ~15s)
 - [ ] Settings **Refresh** fetches latest config (counters, ads, devices)
+- [ ] **TV configuration unavailable** → tap **Retry** → **Loading TV configuration** overlay appears immediately and stays until fetch completes
+- [ ] **Device awaiting approval** / **license expired** Retry shows the same loading overlay
 
 ---
 
@@ -33,6 +35,8 @@ Acceptance tests aligned with current source (app `1.0.1`, Room v17, May 2026). 
 - [ ] Type **B** transferred payload → **no** token tile change (DB-only)
 - [ ] Type **C** → special message replaces area; multiline readable (padding, line height)
 - [ ] VIP/emergency (index 4 = `D`) shows **ER-** prefix on tile and in TTS even when `enable_counter_prefix` is off
+- [ ] After a **normal** token arrives, a prior VIP token in a **previous** slot still shows **ER-** (not the counter code prefix)
+- [ ] **CLR** clears VIP **ER** markers for cleared counters
 
 ### 3.1 CLR
 
@@ -78,6 +82,7 @@ Acceptance tests aligned with current source (app `1.0.1`, Room v17, May 2026). 
 - [ ] **App theme**: solid and **gradient** — Material primary = first gradient stop
 - [ ] **Counter/token** areas show vertical gradients for `GRADIENT:` values
 - [ ] **Scrolling footer** uses horizontal theme strip (`getTickerStripBackgroundBrush`)
+- [ ] Footer ticker scrolls **continuously** (no long pause between loops); counter **name** marquee may still pause briefly at loop start
 - [ ] **Token blink**: whole-tile vs text-only (Settings → Display) when server blink on
 
 ### 6.1 Color pickers (TV)

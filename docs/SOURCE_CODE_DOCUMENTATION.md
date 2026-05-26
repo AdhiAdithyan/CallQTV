@@ -4,7 +4,7 @@ Developer index of packages, classes, persistence, and tests. For product behavi
 
 **Package root:** `com.softland.callqtv`  
 **App version (Gradle):** `1.0.1` (`versionCode` 2)  
-**Last aligned with source:** May 2026 (app `1.0.1`, Room v17, announcements + VIP ER prefix)
+**Last aligned with source:** May 2026 (app `1.0.1`, Room v17, VIP ER on all history slots, config retry overlay, continuous footer ticker)
 
 ---
 
@@ -21,7 +21,7 @@ Developer index of packages, classes, persistence, and tests. For product behavi
 | Data repository | `…/data/repository/` | 11 |
 | Utils | `…/utils/` | 23 (incl. `SemanticMqttParser.kt`, `TokenAnnouncer.kt`) |
 | **Main `app` module total** | `…/kotlin/com/softland/callqtv/` | **~91** `.kt` files |
-| Unit tests | `app/src/test/kotlin/com/softland/callqtv/` | **8** test classes |
+| Unit tests | `app/src/test/kotlin/com/softland/callqtv/` | **9** test classes |
 
 **Main module:** `app/` — AGP 8.7.x, Kotlin 2.1.0, Compose BOM `2024.12.01`, `compileSdk` / `targetSdk` **35**, `minSdk` **26**, Java **17**.
 
@@ -44,7 +44,9 @@ Developer index of packages, classes, persistence, and tests. For product behavi
 |--------|---------|
 | `TokenDisplayScreen` | Primary screen; `LaunchedEffect` collectors on `tokenUpdateChannel` / `tokenReplaceChannel` |
 | `TokenDisplayContent` / `TokenDisplayFooter` | Header, body, footer layout |
-| `ScrollingFooter` / `SeamlessTickerView` | Marquee; `getTickerStripBackgroundBrush` |
+| `ScrollingFooter` / `SeamlessTickerView` | Footer marquee (continuous loop, no inter-loop pause); `CounterNameTickerView` uses `COUNTER_NAME_MARQUEE_RESTART_PAUSE_MS` (3s) for long counter names only |
+| `TvConfigurationUnavailableScreen` | Full-screen config error; Retry → `loadData(..., forceShowOverlay = true)` |
+| `AnimatedLoadingOverlay` | Config load progress; drawn on top of error dialogs when `isLoading` |
 | `CountersArea` / `CounterBoard` / `TokenCard` | Counter grid and token cells (incl. special-message layout) |
 | `PresetColorDialog` / `PresetColorSwatchTile` | TV-focusable theme/background pickers |
 | `NotificationSoundDialog` | Notification chime picker |
@@ -60,7 +62,8 @@ Developer index of packages, classes, persistence, and tests. For product behavi
 | `getTokensForCounter` | Resolves token list by `button_index`, `keypad_index`, id, name aliases |
 | `findCounterEntityForMqttRoute` | From `MqttCounterRouting.kt` — button_index, then keypad_index |
 | `VIP_EMERGENCY_COUNTER_PREFIX` | `"ER"` — fixed-protocol index 4 `D`; display + TTS always |
-| `CounterTokenSlot` / `CounterTokenSlotsGrid` | Token grid cells; VIP top slot uses ER prefix independent of config |
+| `tokenUsesVipEmergencyPrefix` | Any slot: raw token in `vipEmergencyRawTokens` set → **`ER-{token}`** |
+| `CounterTokenSlot` / `CounterTokenSlotsGrid` | Token grid cells; VIP ER prefix on current **and** previous slots |
 
 ### 2.1 Advertisement pipeline
 
@@ -88,7 +91,7 @@ tv_config.ad_files[] → AdFileEntity (Room)
 | `MqttViewModel.kt` | Multi-broker MQTT, keypad validation, `parseMqttMessage`, CLR, token map, channels, `TokenUiProcessResult`, payload log save, config refresh signals |
 | `MqttCounterRouting.kt` | **`findCounterEntityForMqttRoute`**, `mqttRouteMatchesButtonIndex`, `mqttRouteMatchesKeypadIndex` |
 | `KeypadPayloadParser.kt` | Keypad serial extraction (fixed, `000-` CLR, short wrapper) |
-| `TokenDisplayViewModel.kt` | Cache-first `loadData`, ads, `warmTokenAnnouncerIfEnabled`, consumer of `configRefreshRequests` |
+| `TokenDisplayViewModel.kt` | Cache-first `loadData` (`activeConfigLoadId`, sync `_isLoading` before job cancel on retry), ads, `warmTokenAnnouncerIfEnabled`, consumer of `configRefreshRequests` |
 | `RegistrationViewModel.kt` | Device registration / customer ID |
 | `ServiceUrlViewModel.kt` | Service URL discovery |
 | `LicenseCheckViewModel.kt` | License validation |
@@ -104,7 +107,7 @@ Two layers cooperate; do not confuse **`keypad_index`** (config / CLR route digi
 | Payload → storage key | `MqttViewModel.resolveCounterIdentityFromSerial` | **Normal tokens:** match **`keypad_sn` only** in `keypadsJson` (fixed-frame index 18 is **not** `keypad_index`). Pick counter row (single row, or first matching Room entity). **CLR:** optional route digit before `CLR` → match **`keypad_index`** when non-blank. Builds **`storageKey`** preferring **`button_index`**. |
 | Storage key → UI row | `findCounterEntityForMqttRoute` | Matches `CounterEntity` by **`button_index` first**, then **`keypad_index`** (so storage keys that are only keypad indices still resolve) |
 | Token list lookup | `getTokensForCounter` | Reads map by button_index, keypad_index, counter id/name, or fuzzy route match |
-| On-screen label | `formatTokenByPattern`, `CounterTokenSlot` in `TokenDisplayActivity.kt` | `T1`/`T2` pad digits only; **`{code}-`** when `enable_counter_prefix`; VIP **`D`** → always **`ER-`** via `VIP_EMERGENCY_COUNTER_PREFIX` + `vipDisplayTopToken` |
+| On-screen label | `formatTokenByPattern`, `CounterTokenSlot` in `TokenDisplayActivity.kt` | `T1`/`T2` pad digits only; **`{code}-`** when `enable_counter_prefix`; VIP **`D`** → **`ER-`** on any slot via `tokenUsesVipEmergencyPrefix` + `getVipEmergencyTokensByKey()` |
 
 **Key types (`MqttViewModel.kt`):**
 
@@ -252,6 +255,7 @@ private data class ResolvedCounterIdentity(
 | `TvConfigParsingTest` | Gson counter indices as strings (`FlexibleIntDeserializer`) |
 | `TokenAnnouncerSpeechTest` | TTS string normalization |
 | `TokenFormatTest` | `token_format` padding (`T1`/`T2` without literal `T` prefix) |
+| `VipEmergencyTokenPrefixTest` | `tokenUsesVipEmergencyPrefix` for current/previous VIP slots |
 | `LicenseDateUtilsTest` | License date parsing |
 | `ExampleUnitTest` | Placeholder |
 
@@ -264,8 +268,10 @@ Run: `./gradlew test` or `./gradlew testCallQTVDebugUnitTest`.
 | Feature | Primary files |
 |---------|----------------|
 | MQTT fixed/CLR parsing | `SemanticMqttParser.kt` (no `routeIndex` on `FixedPayload`), `KeypadPayloadParser.kt`, `MqttViewModel.kt` |
-| On-screen token label / VIP ER prefix | `formatTokenByPattern`, `CounterTokenSlot`, `VIP_EMERGENCY_COUNTER_PREFIX` |
-| VIP/emergency MQTT flag | `SemanticMqttParser.FixedPayload.isVipEmergency`, `TokenUiEvent.isVipEmergency`, `vipEmergencyTopTokenByKey` |
+| On-screen token label / VIP ER prefix | `formatTokenByPattern`, `CounterTokenSlot`, `tokenUsesVipEmergencyPrefix`, `VIP_EMERGENCY_COUNTER_PREFIX` |
+| VIP/emergency MQTT flag | `SemanticMqttParser.FixedPayload.isVipEmergency`, `TokenUiEvent.isVipEmergency`, `vipEmergencyTokensByKey` / `getVipEmergencyTokensByKey()` |
+| Config error Retry / loading overlay | `TokenDisplayViewModel.loadData` (`activeConfigLoadId`, `forceShowOverlay`), `TvConfigurationUnavailableScreen`, `AnimatedLoadingOverlay` |
+| Footer ticker scroll | `SeamlessTickerView` (continuous); `CounterNameTickerView` (3s pause at loop start) |
 | Counter route → UI row | `MqttCounterRouting.kt`, `MqttViewModel.resolveCounterIdentityFromSerial` |
 | Token UI update / chime / TTS | `TokenDisplayActivity.kt` (`TokenDisplayScreen` collectors) |
 | Token map / history / CLR keys | `MqttViewModel.kt` (`processTokenUpdateForKeys`, `clearTokensForResolvedCounter`) |

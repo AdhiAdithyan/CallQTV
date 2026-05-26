@@ -258,14 +258,27 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     // Thread-safe internal state to prevent race conditions during updates
     private val internalTokenMap = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
     private val announcedTokenTimestamps = java.util.concurrent.ConcurrentHashMap<String, Long>()
-    /** Raw token value for which slot 0 should show VIP/emergency prefix (ER), per map key. */
-    private val vipEmergencyTopTokenByKey = ConcurrentHashMap<String, String>()
-    private val _vipEmergencyTopTokenByKey = MutableLiveData<Map<String, String>>(emptyMap())
+    /** Raw token values that keep VIP/emergency prefix (ER) on any history slot, per map key. */
+    private val vipEmergencyTokensByKey = ConcurrentHashMap<String, MutableSet<String>>()
+    private val _vipEmergencyTokensByKey = MutableLiveData<Map<String, Set<String>>>(emptyMap())
 
-    fun getVipEmergencyTopTokenByKey(): LiveData<Map<String, String>> = _vipEmergencyTopTokenByKey
+    fun getVipEmergencyTokensByKey(): LiveData<Map<String, Set<String>>> = _vipEmergencyTokensByKey
 
-    private fun postVipEmergencyTopTokenSnapshot() {
-        _vipEmergencyTopTokenByKey.postValue(HashMap(vipEmergencyTopTokenByKey))
+    private fun postVipEmergencyTokensSnapshot() {
+        _vipEmergencyTokensByKey.postValue(
+            vipEmergencyTokensByKey.mapValues { (_, tokens) -> tokens.toSet() },
+        )
+    }
+
+    private fun markVipEmergencyToken(key: String, token: String) {
+        vipEmergencyTokensByKey.getOrPut(key) { ConcurrentHashMap.newKeySet() }.add(token)
+    }
+
+    private fun pruneVipEmergencyTokens(key: String, activeTokens: List<String>) {
+        val active = activeTokens.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        val set = vipEmergencyTokensByKey[key] ?: return
+        set.retainAll(active)
+        if (set.isEmpty()) vipEmergencyTokensByKey.remove(key)
     }
     @Volatile
     private var isHistoryLoaded = false
@@ -370,8 +383,8 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                     isHistoryLoaded = true
                     _tokensPerCounter.postValue(emptyMap())
                     announcedTokenTimestamps.clear()
-                    vipEmergencyTopTokenByKey.clear()
-                    _vipEmergencyTopTokenByKey.postValue(emptyMap())
+                    vipEmergencyTokensByKey.clear()
+                    _vipEmergencyTokensByKey.postValue(emptyMap())
                     queuedTokenTimestamps.clear()
                     queuedPayloadTimestamps.clear()
                     announcementQueueSize.set(0)
@@ -416,9 +429,9 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 changed = internalTokenMap.remove(key) != null || changed
                 announcedTokenTimestamps.entries.removeIf { it.key.startsWith("${key}_") }
                 queuedTokenTimestamps.entries.removeIf { it.key.startsWith("${key}_") }
-                vipEmergencyTopTokenByKey.remove(key)
+                vipEmergencyTokensByKey.remove(key)
             }
-            postVipEmergencyTopTokenSnapshot()
+            postVipEmergencyTokensSnapshot()
             tokenHistoryRepo.clearCounterKeys(keysToClear)
             clearQueuedPayloadsForCounter(serial, trimmedRoute)
 
@@ -1349,7 +1362,9 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
 
             var shouldAnnounce = false
             var mapChanged = false
-            val vipBefore = keysToUpdate.associateWith { vipEmergencyTopTokenByKey[it] }
+            val vipBefore = keysToUpdate.associateWith { k ->
+                vipEmergencyTokensByKey[k]?.toSet() ?: emptySet<String>()
+            }
 
             for (key in keysToUpdate) {
                 val priorStored = internalTokenMap[key] ?: emptyList()
@@ -1390,17 +1405,18 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 mapChanged = true
             }
 
-            for (key in keysToUpdate) {
-                if (isVipEmergency) {
-                    vipEmergencyTopTokenByKey[key] = trimmedToken
-                } else {
-                    vipEmergencyTopTokenByKey.remove(key)
+            if (isVipEmergency) {
+                for (key in keysToUpdate) {
+                    markVipEmergencyToken(key, trimmedToken)
                 }
             }
-            postVipEmergencyTopTokenSnapshot()
+            for (key in keysToUpdate) {
+                pruneVipEmergencyTokens(key, internalTokenMap[key] ?: emptyList())
+            }
+            postVipEmergencyTokensSnapshot()
 
             val vipChanged = keysToUpdate.any { k ->
-                vipBefore[k] != vipEmergencyTopTokenByKey[k]
+                vipBefore[k] != (vipEmergencyTokensByKey[k]?.toSet() ?: emptySet<String>())
             }
 
             val playCueUi = mapChanged || shouldAnnounce || vipChanged
@@ -1452,9 +1468,8 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 if (!isSpecialOverlay) {
                     persistToken(key, trimmedToken)
                 }
-                vipEmergencyTopTokenByKey.remove(key)
             }
-            postVipEmergencyTopTokenSnapshot()
+            postVipEmergencyTokensSnapshot()
             if (publishImmediately) {
                 publishTokensSnapshot()
             }

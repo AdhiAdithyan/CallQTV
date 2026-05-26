@@ -70,13 +70,14 @@ Main surface: counter grid, ads, scrolling footer, overlays (reconnect, pending 
 
 ### 3.2 `TokenDisplayViewModel`
 
-- `loadData(mqttViewModel, forceShowOverlay)` — full config sync
+- `loadData(mqttViewModel, forceShowOverlay)` — full config sync; **`activeConfigLoadId`** prevents stale cancelled jobs from clearing loading; **`forceShowOverlay`** sets `_isLoading` before cancelling prior job
 - Subscribes to `MqttViewModel.configRefreshRequests` (`TvConfigRefreshSignal`)
-- CLR: `forceImmediate = true` → immediate load with overlay (matches Settings Refresh)
+- CLR / Retry / Settings Refresh: `forceShowOverlay = true` → **`AnimatedLoadingOverlay`** on top of error states
 
 ### 3.3 `MqttViewModel`
 
 - `internalTokenMap` + `_tokensPerCounter` LiveData
+- `vipEmergencyTokensByKey` — `Set` of raw VIP token values per counter key (`getVipEmergencyTokensByKey()`)
 - `tokenUpdateChannel` / `tokenReplaceChannel` (`TokenUiEvent`)
 - `processTokenUpdateForKeys` → `TokenUiProcessResult(playCueUi, speakTokenAnnouncement)`
 - `replaceTokenForKeys` — type `C` full replace
@@ -126,7 +127,7 @@ MqttClientManager.onMessageReceived
 1. Validate keypad serial against mapped devices.
 2. Parse route = character before `CLR` in `000-` frame (SN = `body[4..14]`).
 3. Build key set: `ResolvedCounterIdentity` + all `keypadsJson` aliases for SN.
-4. Clear `internalTokenMap`, `token_history`, dedupe keys.
+4. Clear `internalTokenMap`, `token_history`, `vipEmergencyTokensByKey`, dedupe keys.
 5. `publishTokensSnapshot()`.
 6. `requestConfigRefresh(forceImmediate = true)`.
 
@@ -151,7 +152,7 @@ If route does not match any `counters[]` row, clear **all** counters under that 
 
 - **`formatTokenByPattern`:** `T1` / `T2` → zero-pad only (no literal `T`).
 - **`enable_counter_prefix`:** `{code}-{token}` on counter tiles (e.g. `NU-2`).
-- **VIP/emergency (`D`):** `MqttViewModel` sets `vipEmergencyTopTokenByKey`; `CounterTokenSlot` shows **`ER-{token}`** when slot 0 matches that raw token (prefix not gated on `enable_counter_prefix`).
+- **VIP/emergency (`D`):** `MqttViewModel.markVipEmergencyToken` adds raw token to `vipEmergencyTokensByKey`; `CounterTokenSlot` shows **`ER-{token}`** on **any** slot where `tokenUsesVipEmergencyPrefix` is true (including previous tokens after a normal token arrives).
 
 ---
 
@@ -159,6 +160,7 @@ If route does not match any `counters[]` row, clear **all** counters under that 
 
 - User changes theme/counter/token hex in `PresetColorDialog` → `ThemePrefs` → `MaterialTheme` / brushes / footer strip update.
 - `getBackgroundBrush` (vertical) for counters/tokens; `getTickerStripBackgroundBrush` (horizontal) for footer.
+- Footer **`SeamlessTickerView`**: continuous marquee (no loop pause). Counter **`CounterNameTickerView`**: 3s pause at loop start for readability.
 
 ---
 

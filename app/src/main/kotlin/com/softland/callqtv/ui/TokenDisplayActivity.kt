@@ -181,6 +181,11 @@ private const val SPECIAL_COUNTER_MSG_LINE_HEIGHT_EM = 1.42f
 /** Fixed-protocol index-4 `D` (VIP / emergency): always shown/spoken as this prefix (even if counter prefix is off). */
 private const val VIP_EMERGENCY_COUNTER_PREFIX = "ER"
 
+internal fun tokenUsesVipEmergencyPrefix(rawToken: String?, vipEmergencyRawTokens: Set<String>): Boolean {
+    val trimmed = rawToken?.trim().orEmpty()
+    return trimmed.isNotEmpty() && vipEmergencyRawTokens.contains(trimmed)
+}
+
 private fun encodeSpecialMessageToken(value: String): String = SPECIAL_MSG_PREFIX + value
 private fun isSpecialMessageToken(value: String?): Boolean =
     value?.contains("__MSG__", ignoreCase = false) == true
@@ -1149,56 +1154,67 @@ fun TokenDisplayScreen(
         VoiceInitializationDialog(isVisible = true)
     }
 
+    if (!isLoading) {
+        if (isPendingApproval) {
+            AlertDialog(
+                onDismissRequest = { /* Prevent dismiss */ },
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 1f),
+                title = {
+                    Text(
+                        "Device Awaiting Approval",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                },
+                text = {
+                    Column {
+                        Text(
+                            errorMessage
+                                ?: "This display is awaiting approval from the administrator.\n" +
+                                   "Please contact support or tap Retry after approval.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Start
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "Device ID: $macAddress",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        viewModel.loadData(
+                            mqttViewModel,
+                            forceShowOverlay = true,
+                            clearCacheBeforeFetch = true,
+                        )
+                    }) {
+                        Text("Retry")
+                    }
+                }
+            )
+        } else if (isLicenseExpired) {
+            LicenseExpiredDialog(
+                macAddress = macAddress,
+                errorMessage = errorMessage,
+                onRefresh = { viewModel.loadData(mqttViewModel, forceShowOverlay = true, clearCacheBeforeFetch = true) }
+            )
+        } else if (config == null) {
+            TvConfigurationUnavailableScreen(
+                macAddress = macAddress,
+                appVersion = appVersion,
+                isNetworkAvailable = isNetworkAvailable,
+                errorMessage = errorMessage,
+                onRetry = { viewModel.loadData(mqttViewModel, forceShowOverlay = true, clearCacheBeforeFetch = true) },
+            )
+        }
+    }
+
+    // Loading overlay after error states so Retry always shows visible progress on top.
     if (isLoading) {
         AnimatedLoadingOverlay(
             message = "Loading TV configuration.\nPlease wait...",
             isVisible = true
-        )
-    } else if (isPendingApproval) {
-        AlertDialog(
-            onDismissRequest = { /* Prevent dismiss */ },
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 1f),
-            title = {
-                Text(
-                    "Device Awaiting Approval",
-                    style = MaterialTheme.typography.titleMedium
-                )
-            },
-            text = {
-                Column {
-                    Text(
-                        errorMessage
-                            ?: "This display is awaiting approval from the administrator.\n" +
-                               "Please contact support or tap Retry after approval.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Start
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "Device ID: $macAddress",
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                }
-            },
-            confirmButton = {
-                Button(onClick = { viewModel.loadData(mqttViewModel, clearCacheBeforeFetch = true) }) {
-                    Text("Retry")
-                }
-            }
-        )
-    } else if (isLicenseExpired) {
-        LicenseExpiredDialog(
-            macAddress = macAddress,
-            errorMessage = errorMessage,
-            onRefresh = { viewModel.loadData(mqttViewModel, forceShowOverlay = true, clearCacheBeforeFetch = true) }
-        )
-    } else if (config == null) {
-        TvConfigurationUnavailableScreen(
-            macAddress = macAddress,
-            appVersion = appVersion,
-            isNetworkAvailable = isNetworkAvailable,
-            errorMessage = errorMessage,
-            onRetry = { viewModel.loadData(mqttViewModel, forceShowOverlay = true, clearCacheBeforeFetch = true) },
         )
     }
 
@@ -1393,7 +1409,7 @@ private fun TokenDisplayContent(
 ) {
     val viewModel = viewModel<com.softland.callqtv.viewmodel.TokenDisplayViewModel>()
     val mqttViewModel = viewModel<MqttViewModel>()
-    val vipTopTokenByKey by mqttViewModel.getVipEmergencyTopTokenByKey().observeAsState(emptyMap())
+    val vipEmergencyTokensByKey by mqttViewModel.getVipEmergencyTokensByKey().observeAsState(emptyMap())
     val context = LocalContext.current
     var is24HourPref by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) {
@@ -1522,7 +1538,7 @@ private fun TokenDisplayContent(
                     adPlacement = adPlacement,
                     blinkTriggers = blinkTriggers,
                     tokenBlinkMode = tokenBlinkMode,
-                    vipTopTokenByKey = vipTopTokenByKey,
+                    vipEmergencyTokensByKey = vipEmergencyTokensByKey,
                     showReconnectBadge = false,
                     reconnectRetryAttempt = reconnectRetryAttempt,
                     reconnectUiSeconds = reconnectUiSeconds,
@@ -1573,7 +1589,7 @@ private fun TokenDisplayBody(
     adPlacement: String,
     blinkTriggers: Map<String, Long>,
     tokenBlinkMode: TokenBlinkMode = TokenBlinkMode.WHOLE_TILE,
-    vipTopTokenByKey: Map<String, String> = emptyMap(),
+    vipEmergencyTokensByKey: Map<String, Set<String>> = emptyMap(),
     showReconnectBadge: Boolean,
     reconnectRetryAttempt: Int,
     reconnectUiSeconds: Int
@@ -1613,11 +1629,11 @@ private fun TokenDisplayBody(
                         if (isTop) {
                             Box(modifier = Modifier.weight(adWeight).fillMaxWidth().clipToBounds()) { adAreaContent() }
                             Box(modifier = Modifier.weight(countersWeight).fillMaxWidth()) {
-                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers, tokenBlinkMode = tokenBlinkMode, vipTopTokenByKey = vipTopTokenByKey)
+                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers, tokenBlinkMode = tokenBlinkMode, vipEmergencyTokensByKey = vipEmergencyTokensByKey)
                             }
                         } else {
                             Box(modifier = Modifier.weight(countersWeight).fillMaxWidth()) {
-                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers, tokenBlinkMode = tokenBlinkMode, vipTopTokenByKey = vipTopTokenByKey)
+                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers, tokenBlinkMode = tokenBlinkMode, vipEmergencyTokensByKey = vipEmergencyTokensByKey)
                             }
                             Box(modifier = Modifier.weight(adWeight).fillMaxWidth().clipToBounds()) { adAreaContent() }
                         }
@@ -1627,13 +1643,13 @@ private fun TokenDisplayBody(
                     Row(modifier = Modifier.fillMaxSize()) {
                         if (isRight) {
                             Box(modifier = Modifier.weight(countersWeight).fillMaxHeight()) {
-                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers, tokenBlinkMode = tokenBlinkMode, vipTopTokenByKey = vipTopTokenByKey)
+                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers, tokenBlinkMode = tokenBlinkMode, vipEmergencyTokensByKey = vipEmergencyTokensByKey)
                             }
                             Box(modifier = Modifier.weight(adWeight).fillMaxHeight().clipToBounds()) { adAreaContent() }
                         } else {
                             Box(modifier = Modifier.weight(adWeight).fillMaxHeight().clipToBounds()) { adAreaContent() }
                             Box(modifier = Modifier.weight(countersWeight).fillMaxHeight()) {
-                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers, tokenBlinkMode = tokenBlinkMode, vipTopTokenByKey = vipTopTokenByKey)
+                                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers, tokenBlinkMode = tokenBlinkMode, vipEmergencyTokensByKey = vipEmergencyTokensByKey)
                             }
                         }
                     }
@@ -1653,7 +1669,7 @@ private fun TokenDisplayBody(
                     hasAds = hasAds,
                     blinkTriggers = blinkTriggers,
                     tokenBlinkMode = tokenBlinkMode,
-                    vipTopTokenByKey = vipTopTokenByKey,
+                    vipEmergencyTokensByKey = vipEmergencyTokensByKey,
                 )
             }
         } else {
@@ -1662,17 +1678,17 @@ private fun TokenDisplayBody(
                     if (adPlacement.equals("left", ignoreCase = true)) {
                         Box(modifier = Modifier.weight(adWeight).fillMaxHeight().clipToBounds()) { adAreaContent() }
                         Box(modifier = Modifier.weight(countersWeight).fillMaxHeight()) {
-                            CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers, tokenBlinkMode = tokenBlinkMode, vipTopTokenByKey = vipTopTokenByKey)
+                            CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers, tokenBlinkMode = tokenBlinkMode, vipEmergencyTokensByKey = vipEmergencyTokensByKey)
                         }
                     } else {
                         Box(modifier = Modifier.weight(countersWeight).fillMaxHeight()) {
-                            CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers, tokenBlinkMode = tokenBlinkMode, vipTopTokenByKey = vipTopTokenByKey)
+                            CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers, tokenBlinkMode = tokenBlinkMode, vipEmergencyTokensByKey = vipEmergencyTokensByKey)
                         }
                         Box(modifier = Modifier.weight(adWeight).fillMaxHeight().clipToBounds()) { adAreaContent() }
                     }
                 }
             } else {
-                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers, tokenBlinkMode = tokenBlinkMode, vipTopTokenByKey = vipTopTokenByKey)
+                CountersArea(countersToDisplay, tokensPerCounter, config, rows, columns, layoutType, scale, counterBgHex, tokenBgHex, isPortrait = usePortraitLayout, hasAds = hasAds, blinkTriggers = blinkTriggers, tokenBlinkMode = tokenBlinkMode, vipEmergencyTokensByKey = vipEmergencyTokensByKey)
             }
         }
 
@@ -4348,7 +4364,7 @@ fun CountersArea(
     hasAds: Boolean = false,
     blinkTriggers: Map<String, Long> = emptyMap(),
     tokenBlinkMode: TokenBlinkMode = TokenBlinkMode.WHOLE_TILE,
-    vipTopTokenByKey: Map<String, String> = emptyMap(),
+    vipEmergencyTokensByKey: Map<String, Set<String>> = emptyMap(),
 ) {
     Box(modifier = Modifier.fillMaxSize().padding(1.dp)) {
         val numCounters = counters.size
@@ -4375,16 +4391,16 @@ fun CountersArea(
                         firstHalf.forEach { counter ->
                             val sk = counterStorageLookupKey(counter)
                             val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
-                            val vipTok = vipTopTokenByKey[sk]?.takeIf { it.isNotBlank() }
-                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sk] ?: 0L, tokenBlinkMode = tokenBlinkMode, layoutType = layoutType, vipDisplayTopToken = vipTok)
+                            val vipTokens = vipEmergencyTokensByKey[sk].orEmpty()
+                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sk] ?: 0L, tokenBlinkMode = tokenBlinkMode, layoutType = layoutType, vipEmergencyRawTokens = vipTokens)
                         }
                     }
                     Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
                         secondHalf.forEach { counter ->
                             val sk = counterStorageLookupKey(counter)
                             val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
-                            val vipTok = vipTopTokenByKey[sk]?.takeIf { it.isNotBlank() }
-                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sk] ?: 0L, tokenBlinkMode = tokenBlinkMode, layoutType = layoutType, vipDisplayTopToken = vipTok)
+                            val vipTokens = vipEmergencyTokensByKey[sk].orEmpty()
+                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sk] ?: 0L, tokenBlinkMode = tokenBlinkMode, layoutType = layoutType, vipEmergencyRawTokens = vipTokens)
                         }
                         if (secondHalf.size < firstHalf.size) {
                             Spacer(modifier = Modifier.weight(1f))
@@ -4398,16 +4414,16 @@ fun CountersArea(
                         firstHalf.forEach { counter ->
                             val sk = counterStorageLookupKey(counter)
                             val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
-                            val vipTok = vipTopTokenByKey[sk]?.takeIf { it.isNotBlank() }
-                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sk] ?: 0L, tokenBlinkMode = tokenBlinkMode, layoutType = layoutType, vipDisplayTopToken = vipTok)
+                            val vipTokens = vipEmergencyTokensByKey[sk].orEmpty()
+                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sk] ?: 0L, tokenBlinkMode = tokenBlinkMode, layoutType = layoutType, vipEmergencyRawTokens = vipTokens)
                         }
                     }
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                         secondHalf.forEach { counter ->
                             val sk = counterStorageLookupKey(counter)
                             val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
-                            val vipTok = vipTopTokenByKey[sk]?.takeIf { it.isNotBlank() }
-                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sk] ?: 0L, tokenBlinkMode = tokenBlinkMode, layoutType = layoutType, vipDisplayTopToken = vipTok)
+                            val vipTokens = vipEmergencyTokensByKey[sk].orEmpty()
+                            CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sk] ?: 0L, tokenBlinkMode = tokenBlinkMode, layoutType = layoutType, vipEmergencyRawTokens = vipTokens)
                         }
                         if (secondHalf.size < firstHalf.size) {
                             Spacer(modifier = Modifier.weight(1f))
@@ -4422,8 +4438,8 @@ fun CountersArea(
                     counters.forEach { counter ->
                         val sk = counterStorageLookupKey(counter)
                         val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
-                        val vipTok = vipTopTokenByKey[sk]?.takeIf { it.isNotBlank() }
-                        CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sk] ?: 0L, tokenBlinkMode = tokenBlinkMode, layoutType = layoutType, vipDisplayTopToken = vipTok)
+                        val vipTokens = vipEmergencyTokensByKey[sk].orEmpty()
+                        CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxWidth(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sk] ?: 0L, tokenBlinkMode = tokenBlinkMode, layoutType = layoutType, vipEmergencyRawTokens = vipTokens)
                     }
                 }
             } else {
@@ -4432,8 +4448,8 @@ fun CountersArea(
                     counters.forEach { counter ->
                         val sk = counterStorageLookupKey(counter)
                         val tokens = remember(tokensPerCounter, counter) { getTokensForCounter(counter, tokensPerCounter) }
-                        val vipTok = vipTopTokenByKey[sk]?.takeIf { it.isNotBlank() }
-                        CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sk] ?: 0L, tokenBlinkMode = tokenBlinkMode, layoutType = layoutType, vipDisplayTopToken = vipTok)
+                        val vipTokens = vipEmergencyTokensByKey[sk].orEmpty()
+                        CounterBoard(counter, tokens, config, rows, columns, Modifier.weight(1f).fillMaxHeight(), scale, counterBgHex, tokenBgHex, isPortrait, hasAds, blinkTriggers[sk] ?: 0L, tokenBlinkMode = tokenBlinkMode, layoutType = layoutType, vipEmergencyRawTokens = vipTokens)
                     }
                 }
             }
@@ -4462,7 +4478,7 @@ private fun CounterTokenSlotsGrid(
     shouldBlink: Boolean,
     isInverted: Boolean,
     tokenBlinkMode: TokenBlinkMode = TokenBlinkMode.WHOLE_TILE,
-    vipEmergencyTopRawToken: String? = null,
+    vipEmergencyRawTokens: Set<String> = emptySet(),
 ) {
     val cols = columns.coerceAtLeast(1)
     if (totalSlots <= 0) {
@@ -4503,7 +4519,7 @@ private fun CounterTokenSlotsGrid(
                                 shouldBlink = shouldBlink,
                                 isInverted = isInverted,
                                 tokenBlinkMode = tokenBlinkMode,
-                                vipEmergencyTopRawToken = vipEmergencyTopRawToken,
+                                vipEmergencyRawTokens = vipEmergencyRawTokens,
                             )
                         }
                     }
@@ -4528,25 +4544,22 @@ private fun CounterTokenSlot(
     shouldBlink: Boolean,
     isInverted: Boolean,
     tokenBlinkMode: TokenBlinkMode = TokenBlinkMode.WHOLE_TILE,
-    vipEmergencyTopRawToken: String? = null,
+    vipEmergencyRawTokens: Set<String> = emptySet(),
 ) {
     val token = tokens.getOrNull(index)
     val isFirst = index == 0
     val formattedToken = remember(token, config.tokenFormat) {
         formatTokenByPattern(token, config.tokenFormat)
     }
-    val isVipEmergencyTop =
-        isFirst &&
-            !vipEmergencyTopRawToken.isNullOrBlank() &&
-            token?.trim().orEmpty() == vipEmergencyTopRawToken.trim()
+    val isVipEmergencyToken = tokenUsesVipEmergencyPrefix(token, vipEmergencyRawTokens)
     val prefixForSlot = when {
-        isVipEmergencyTop -> VIP_EMERGENCY_COUNTER_PREFIX
+        isVipEmergencyToken -> VIP_EMERGENCY_COUNTER_PREFIX
         else -> counterCode
     }
     val displayToken = when {
         formattedToken == null -> null
         isSpecialMessageToken(formattedToken) -> decodeSpecialMessageToken(formattedToken)
-        isVipEmergencyTop -> "$VIP_EMERGENCY_COUNTER_PREFIX-$formattedToken"
+        isVipEmergencyToken -> "$VIP_EMERGENCY_COUNTER_PREFIX-$formattedToken"
         usePrefix && prefixForSlot.isNotBlank() -> "$prefixForSlot-$formattedToken"
         else -> formattedToken
     }
@@ -4603,7 +4616,7 @@ fun CounterBoard(
     blinkTrigger: Long = 0L,
     tokenBlinkMode: TokenBlinkMode = TokenBlinkMode.WHOLE_TILE,
     layoutType: String = "1",
-    vipDisplayTopToken: String? = null,
+    vipEmergencyRawTokens: Set<String> = emptySet(),
 ) {
     val counterName = remember(counter.name, counter.defaultName) { 
         (counter.name.orEmpty().ifBlank { counter.defaultName.orEmpty().ifBlank { "Counter" } }).uppercase()
@@ -4741,7 +4754,7 @@ fun CounterBoard(
                                 shouldBlink = shouldBlink,
                                 isInverted = isInverted,
                                 tokenBlinkMode = tokenBlinkMode,
-                                vipEmergencyTopRawToken = vipDisplayTopToken,
+                                vipEmergencyRawTokens = vipEmergencyRawTokens,
                             )
                         }
                     }
@@ -4804,7 +4817,7 @@ fun CounterBoard(
                             shouldBlink = shouldBlink,
                             isInverted = isInverted,
                             tokenBlinkMode = tokenBlinkMode,
-                            vipEmergencyTopRawToken = vipDisplayTopToken,
+                            vipEmergencyRawTokens = vipEmergencyRawTokens,
                         )
                     }
                 }
@@ -6670,8 +6683,8 @@ private fun configureAdTickerTextView(tv: TextView, color: Int, sizeSp: Float, i
     tv.setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
 }
 
-/** Pause at the start of each marquee loop so the label can be read before scrolling again. */
-private const val MARQUEE_RESTART_PAUSE_MS = 3_000L
+/** Pause at the start of each counter-name marquee loop so the label can be read before scrolling again. */
+private const val COUNTER_NAME_MARQUEE_RESTART_PAUSE_MS = 3_000L
 
 /** Counter header text must never ellipsize; width is set from paint measure and laid out in [CounterNameTickerView]. */
 private fun configureCounterNameTextView(tv: TextView, color: Int, sizeSp: Float) {
@@ -6760,7 +6773,7 @@ private class CounterNameTickerView(context: Context) : FrameLayout(context) {
         marqueePauseRunnable = Runnable {
             if (marqueeActive) runMarqueeScroll(0f)
         }
-        postDelayed(marqueePauseRunnable!!, MARQUEE_RESTART_PAUSE_MS)
+        postDelayed(marqueePauseRunnable!!, COUNTER_NAME_MARQUEE_RESTART_PAUSE_MS)
     }
 
     private fun runMarqueeScroll(fromOffset: Float) {
@@ -6947,7 +6960,6 @@ private class SeamlessTickerView(context: Context) : FrameLayout(context) {
     private var cachedIsBold: Boolean = false
     private var currentOffset: Float = 0f
     private var lastDistance: Float = 1f
-    private var marqueePauseRunnable: Runnable? = null
     private var marqueeDistance: Float = 0f
     private var marqueeDurationMs: Long = 1L
 
@@ -6995,28 +7007,19 @@ private class SeamlessTickerView(context: Context) : FrameLayout(context) {
         when {
             textChanged -> restartAnimation(preservePhase = false)
             sizeChanged || speedChanged -> restartAnimation(preservePhase = true)
-            animator?.isRunning != true && marqueePauseRunnable == null ->
-                restartAnimation(preservePhase = true)
+            animator?.isRunning != true -> restartAnimation(preservePhase = true)
         }
     }
 
     private fun cancelMarqueeAnimation() {
         animator?.cancel()
         animator = null
-        marqueePauseRunnable?.let { removeCallbacks(it) }
-        marqueePauseRunnable = null
     }
 
     private fun applyMarqueeOffset(offset: Float) {
         currentOffset = offset
         text1.translationX = -offset
         text2.translationX = marqueeDistance - offset
-    }
-
-    private fun scheduleMarqueePause() {
-        applyMarqueeOffset(0f)
-        marqueePauseRunnable = Runnable { runMarqueeScroll(0f) }
-        postDelayed(marqueePauseRunnable!!, MARQUEE_RESTART_PAUSE_MS)
     }
 
     private fun runMarqueeScroll(fromOffset: Float) {
@@ -7035,11 +7038,7 @@ private class SeamlessTickerView(context: Context) : FrameLayout(context) {
             addListener(object : AnimatorListenerAdapter() {
                 override fun onAnimationEnd(animation: Animator) {
                     applyMarqueeOffset(0f)
-                    scheduleMarqueePause()
-                }
-
-                override fun onAnimationCancel(animation: Animator) {
-                    marqueePauseRunnable?.let { removeCallbacks(it) }
+                    runMarqueeScroll(0f)
                 }
             })
             start()
@@ -7066,11 +7065,7 @@ private class SeamlessTickerView(context: Context) : FrameLayout(context) {
                 0f
             }
 
-            if (startFraction > 0f && preservePhase) {
-                runMarqueeScroll(distance * startFraction)
-            } else {
-                scheduleMarqueePause()
-            }
+            runMarqueeScroll(distance * startFraction)
         }
     }
 

@@ -81,7 +81,7 @@ CallQTV is an Android TV application for **real-time queue token display** and *
 |----|-------------|
 | FR-55 | Apply `token_format` for on-screen padding; patterns `T1`/`T2` must **not** insert a literal `T` before the number. |
 | FR-56 | When counter prefix is enabled, display `{counter.code}-{formattedToken}` (e.g. `NU-2`). |
-| FR-57 | VIP/emergency (index 4 = **`D`**): display **`ER-{formattedToken}`** on the primary slot even when counter prefix is disabled. |
+| FR-57 | VIP/emergency (index 4 = **`D`**): display **`ER-{formattedToken}`** on **any** history slot for that raw token (current or previous), even when counter prefix is disabled; VIP marking cleared on CLR or when token leaves trimmed history. |
 
 ### 2.6 Connectivity and status
 
