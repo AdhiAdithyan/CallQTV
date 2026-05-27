@@ -20,6 +20,7 @@ object KeypadPayloadParser {
         val routeIndex: String
     )
 
+    /** Extracts keypad serial from legacy, CLR, or fixed-protocol payload formats. */
     fun extractKeypadSerial(message: String): String? {
         val trimmed = message.trim()
         if (!trimmed.startsWith("$") || !trimmed.endsWith("*")) return null
@@ -60,6 +61,7 @@ object KeypadPayloadParser {
         return serial.ifEmpty { null }
     }
 
+    /** Extracts CLR-specific serial and route index from a raw payload frame. */
     fun extractClearPayloadInfo(message: String): ClearPayloadInfo? {
         val trimmed = message.trim()
         if (!trimmed.startsWith("$") || !trimmed.endsWith("*")) return null

@@ -234,9 +234,7 @@ object DiagnosticsExporter {
             val values = ContentValues().apply {
                 put(MediaStore.Downloads.DISPLAY_NAME, zipName)
                 put(MediaStore.Downloads.MIME_TYPE, "application/zip")
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/$EXPORT_ROOT")
-                }
+                put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/$EXPORT_ROOT")
             }
 
             val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI

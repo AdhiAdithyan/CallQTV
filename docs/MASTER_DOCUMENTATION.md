@@ -29,6 +29,7 @@ This file is the **canonical** reference for architecture, product behavior, MQT
 ### 2.1 Main Layers
 - `ui`
   - Compose screens, dialogs, display rendering, ad area, settings
+  - Reusable modules: `ui/settings/` (appearance settings, pickers, status dialogs), `ui/theme/` (colors, dimens, hex parsing), `ui/display/` (main-screen blocking overlays)
 - `viewmodel`
   - UI state, MQTT lifecycle, config loading, token processing
 - `data`
@@ -51,7 +52,7 @@ This file is the **canonical** reference for architecture, product behavior, MQT
   - Token update queueing and announcement sequencing
   - `configRefreshRequests`: bounded **`Channel`** (capacity **16**, `DROP_OLDEST`); `requestConfigRefresh(reason, forceImmediate = false)`. **CLR** calls with `forceImmediate = true` (always enqueued, no **15s** `CONFIG_REFRESH_DEBOUNCE_MS` gate). Other triggers (e.g. route-marker / 17th-char refresh) stay debounced on the MQTT VM side.
   - **`tokenUpdateChannel` / `tokenReplaceChannel`**: capacity **128**, `DROP_OLDEST`; `enqueueTokenUiEvent` + `onUndeliveredElement` keep `announcementQueueSize` aligned when oldest events are dropped under flood.
-  - **`CounterRouteLookupCache`**: 5-minute TTL cache for `resolveCounterIdentityFromSerial` (key = normalized SN + route); invalidated via `invalidateCounterRoutingCache()` (also from `invalidateKeypadSerialCache()` and full history clear).
+  - **`CounterRouteLookupCache`**: 5-minute TTL cache for `MqttCounterIdentityResolver.resolve` (key = normalized SN + route); invalidated via `invalidateCounterRoutingCache()` (also from `invalidateKeypadSerialCache()` and full history clear).
   - **`CLR` handling**: clears in-memory token map keys and `token_history` for resolved counters; merges keys from `tv_config.keypadsJson` (keypad SN → `counters[]`) so UI keys (`counter_id`, `name`, `default_name`, `button_index`) align with `TokenDisplayActivity` storage; matches route using `keypad_index` **or** `button_index` on keypad counter rows; if route-specific match finds no row, **all counters listed under that keypad SN** are cleared; always posts `tokensPerCounter` after a CLR attempt; runs clear whenever CLR validates and a serial is known (even if `extractClearPayloadInfo` is null); then requests **immediate** TV configuration refresh (see above)
 - `TvConfigRepository`
   - Fetches config, maps response, updates Room transactionally
@@ -69,10 +70,10 @@ This file is the **canonical** reference for architecture, product behavior, MQT
     - supported short-wrapper payloads like `"$0Je-AdCAL0k0071010001*"`
 
 ### 2.3 MQTT payload path to UI (summary)
-- `MqttClientManager.onMessageReceived` → trim → `rawMessageQueue` (bounded) → `viewModelScope` on **Default** dispatcher for validation / CLR / `parseMqttMessage`.
-- Verified payloads: `_receivedMessage` / `_lastPayload` **LiveData**; `parseMqttMessage` → `SemanticMqttParser` → **`resolveCounterIdentityFromSerial`** (`CounterRouteLookupCache`) → **`tokenUpdateChannel`** or **`tokenReplaceChannel`** (capacity **128**, drop-oldest; `TokenUiEvent`: counter route, token text, raw payload, VIP flag).
+- `MqttClientManager.onMessageReceived` → trim → `rawMessageQueue` (bounded) → `viewModelScope` on **Default** dispatcher → **`MqttInboundPayloadRouter`** (validation / CLR / verified).
+- Verified payloads: `_receivedMessage` / `_lastPayload` **LiveData**; **`MqttVerifiedMessageParser`** → `SemanticMqttParser` → **`MqttCounterIdentityResolver.resolve`** (`CounterRouteLookupCache`) → **`tokenUpdateChannel`** or **`tokenReplaceChannel`** (capacity **128**, drop-oldest; `TokenUiEvent`: counter route, token text, raw payload, VIP flag).
 - `TokenDisplayScreen` **`LaunchedEffect` + `receiveAsFlow().collect`** on each channel (serialized with **`announcementMutex`**): resolve `CounterEntity` via **`findCounterEntityForMqttRoute`** (`MqttCounterRouting.kt` — matches **`button_index`**, then **`keypad_index`**), compute **storage keys** (`button_index` primary, `keypad_index` fallback), `processTokenUpdateForKeys` / `replaceTokenForKeys`, chime/TTS, `publishTokensSnapshot()` → **`tokensPerCounter` LiveData**; Compose **`CountersArea`** reads lists via **`getTokensForCounter`** (same alias order).
-- **`MqttViewModel.resolveCounterIdentityFromSerial`**: for **normal token / special-message** payloads, resolves the counter from **`keypad_sn` only** (via `KeypadPayloadParser` / `SemanticMqttParser.parseFixedPayload` serial); **fixed-frame index 18 (1-based) is part of the 11-char serial, not `keypad_index`**. When a keypad has one `counters[]` row, that row is used; when several, the first row that matches a Room `CounterEntity` is used. **`CLR`** still uses the route digit **immediately before `CLR`** (and optional `keypad_index` match) when present. Emits **`storageKey`** preferring **`button_index`**. **`saveTokenRecord`** matches counters by id, name, default name, and codes (not code-only).
+- **`MqttCounterIdentityResolver.resolve`** (called from `MqttViewModel` / parser): for **normal token / special-message** payloads, resolves the counter from **`keypad_sn` only** (via `KeypadPayloadParser` / `SemanticMqttParser.parseFixedPayload` serial); **fixed-frame index 18 (1-based) is part of the 11-char serial, not `keypad_index`**. When a keypad has one `counters[]` row, that row is used; when several, the first row that matches a Room `CounterEntity` is used. **`CLR`** still uses the route digit **immediately before `CLR`** (and optional `keypad_index` match) when present. Emits **`storageKey`** preferring **`button_index`**. **`saveTokenRecord`** matches counters by id, name, default name, and codes (not code-only).
 
 ## 3. Product and Runtime Behavior
 
@@ -109,7 +110,7 @@ This file is the **canonical** reference for architecture, product behavior, MQT
 
 ### 3.4 Fixed Payload Routing
 - **Frame layout** (`SemanticMqttParser.parseFixedPayload`, 1-based indices): `$` … type at **4** (`A`/`B`/`C`/`D`/`-`) … **11-char keypad serial** at **6–16** (Kotlin `substring(5, 16)`) … four-digit token at **20–23** (`substring(19, 23)`). **Index 18 is inside the serial**, not a `keypad_index` route digit (e.g. `$0NV-AbCAL0K000625-0002*`).
-- **Token UI routing:** `parseMqttMessage` → `resolveCounterIdentityFromSerial(serial)` — **`CounterRouteLookupCache`** on hit; else lookup `tv_config.keypadsJson` by **`keypad_sn`** only on IO (no payload digit → `keypad_index` match for normal flow).
+- **Token UI routing:** `MqttVerifiedMessageParser` → `MqttCounterIdentityResolver.resolve(serial)` — **`CounterRouteLookupCache`** on hit; else lookup `tv_config.keypadsJson` by **`keypad_sn`** only on IO (no payload digit → `keypad_index` match for normal flow).
 - **`TokenUiEvent.counter`** is the canonical **`button_index`** storage key when configured.
 - **`TokenDisplayActivity`** resolves the visible row with **`findCounterEntityForMqttRoute`** (`button_index` first, then **`keypad_index`** fallback on the storage key).
 - Persistence still uses canonical per-counter keys (`internalTokenMap` / `token_history`) so history remains stable across aliases.
@@ -118,21 +119,21 @@ This file is the **canonical** reference for architecture, product behavior, MQT
 ### 3.4.1 On-screen token label (`token_format` + counter prefix)
 - **`tv_config.token_format`**: patterns like **`T1`** / **`T2`** set **digit width only** (zero-padding). They do **not** add a literal **`T`** on screen (token `2` + `T1` → **`2`**, not `T2`).
 - When **`enable_counter_prefix`** is on, display is **`{counter.code}-{formattedToken}`** (e.g. `NU-2`), using `CounterEntity.code` / `default_code`.
-- **VIP/emergency** (fixed-protocol index 4 = **`D`**): any slot whose **raw** token value was received as VIP shows **`ER-{formattedToken}`** and TTS spells **`ER`** before the token, **even when** `enable_counter_prefix` is off (`VIP_EMERGENCY_COUNTER_PREFIX`, `tokenUsesVipEmergencyPrefix` in `TokenDisplayActivity.kt`).
+- **VIP/emergency** (fixed-protocol index 4 = **`D`**): any slot whose **raw** token value was received as VIP shows **`ER-{formattedToken}`** and TTS spells **`ER`** before the token, **even when** `enable_counter_prefix` is off (`VIP_EMERGENCY_COUNTER_PREFIX`, `tokenUsesVipEmergencyPrefix` in `TokenFormatting.kt`).
 - **`MqttViewModel`** keeps a **`Set<String>`** of VIP raw tokens per counter map key (`vipEmergencyTokensByKey`); marking survives when the token moves to a **previous** slot. Arrival of a later **normal** token does **not** remove VIP markers for earlier VIP tokens still in history. Markers are pruned when the token leaves the trimmed history list or the counter is cleared (`CLR` / full clear).
 - Implemented in **`formatTokenByPattern`** / **`CounterTokenSlot`**; tests: **`TokenFormatTest`**, **`VipEmergencyTokenPrefixTest`**.
 
 ### 3.5 Announcement Behavior
-- Token UI events are processed under **`announcementMutex`** so chime/TTS do not overlap and **the next token cannot start until the previous announcement finishes** (mutex held through TTS `onDone`; no fixed speech timeout).
+- Token UI events are processed under **`announcementMutex`** so chime/TTS do not overlap and **the next token cannot start until the current TTS completes or times out**.
 - **`MqttViewModel.processTokenUpdateForKeys`** returns **`TokenUiProcessResult`** (with `publishImmediately = false` in the UI collector; snapshot published from `TokenDisplayScreen`):
   - **`playCueUi`**: `true` when the token map changed, VIP/emergency overlay changed, or the primary token is eligible for a **re-call** (same token at top after **>10s**). Drives **chime**, **`publishTokensSnapshot`**, and **blink** in `TokenDisplayScreen`.
-  - **`speakTokenAnnouncement`**: `true` only on primary-key rules (new/moved token, or re-call after **10s**). Drives **TTS** when `enable_token_announcement` is on.
-- **Chime** therefore runs for more UI updates than TTS (e.g. fallback-key sync, VIP overlay-only change, `__MSG__` list cleanup at slot 0) — not only when speech fires.
+  - **`speakTokenAnnouncement`** is still computed by `MqttViewModel`, but `TokenDisplayScreen` drives **TTS from `playCueUi`** (so whenever the tile/chime cue happens, the spoken details happen too when enabled).
+- **Chime** therefore runs for the same UI cue moments as TTS (not only the primary-key re-call cases).
 - **`replaceTokenForKeys`** (type `C`) always runs chime + publish when replace succeeds.
 - **Current token** tile update happens at **chime cue start** (`playTokenChime` `onAudioStart` + one-shot fallback `publishTokenTile()`).
-- **Next token** tile update waits until the previous token’s **`announcementMutex`** turn completes (including full TTS when `speakTokenAnnouncement` is true).
-- **Per-token order (announcements on):** start `async { awaitReady() }` → `processTokenUpdateForKeys` → **`withTimeoutOrNull(12s)`** await warm (if speaking; logs warning and **still attempts TTS** on timeout) → `playTokenChime` → publish tile + blink → duck/prime/speak → release mutex.
-- **Chime → TTS:** `awaitReady()` (bind + silent poke + synthesis prime when needed) overlaps map update and chime start; collector **does not** wait for the full custom chime clip. Custom URL chimes may still play in the background until `MediaPlayer` completion.
+- **Next token** tile update waits until the previous token’s **`announcementMutex`** turn completes (including full TTS when speech is enabled for the cue).
+- **Per-token order (announcements on):** start bind-only `async { awaitReady(performPoke=false, primeSynthesis=false) }` → `processTokenUpdateForKeys` → `playTokenChime` → publish tile + blink → wait `estimatedChimeAudibleMs` (chime tail) → **`withTimeoutOrNull(12s)`** await bind (`awaitTtsWarmForTokenAnnounce`) → `suspendAnnounceTokenUpdate` (calls `TokenAnnouncer.prepareForNextTokenAnnouncement()`, optional ad ducking + synthesis prime when needed, then speaks until `onDone`, bounded by `TOKEN_ANNOUNCE_CYCLE_TIMEOUT_MS`) → release mutex.
+- **Chime → TTS:** speech starts after an estimated chime-tail delay to avoid starting mid-chime; custom URL chimes may still continue playing in the background until `MediaPlayer` completion.
 - **Normal tokens (spoken phrase)**: space-separated — `Token`, optional **spelled counter prefix** (letters/digits with spaces when counter prefix is enabled), token label, optional **counter display name** when `enable_counter_announcement` is on (same ordering as on-screen emphasis).
 - **Special messages (`__MSG__` / type `C`)**: spoken as **message** then optional **counter name** (single space, no comma) when counter announcement is enabled.
 - If counter prefix is enabled for normal tokens, the prefix is part of the same utterance as the token (spelled with spaces between characters).
@@ -141,7 +142,9 @@ This file is the **canonical** reference for architecture, product behavior, MQT
 - Special messages: use `TokenAnnouncer.announceMessage` path; blink using existing current-token blink timing.
 - Identical raw payloads received within 10 seconds are announced only once.
 
-#### 3.5.1 TTS implementation notes (`TokenAnnouncer`)
+#### 3.5.1 TTS implementation notes (`TokenAnnouncer` → `TokenTtsEngine`)
+
+Public API remains **`TokenAnnouncer`**; engine lifecycle and phrasing live in **`TokenTtsEngine`** / **`TokenSpeechPhrasing`** (`utils/`).
 
 **Early engine warm (`TokenDisplayViewModel` + UI)**
 
@@ -158,7 +161,9 @@ This file is the **canonical** reference for architecture, product behavior, MQT
 | `awaitReady` | Suspend until engine is **bound**; optional poke; if **`primeSynthesis = true`**, then `awaitSynthesisPrimeIfNeeded()` (waits for cold prime / in-flight prime) |
 | `awaitSynthesisPrimeIfNeeded` | Suspend until quiet prime finishes when `needsSpeechWake()`, or queue on `pendingAfterPrime` if `synthesisPrimeInFlight` |
 | `announceTokenCall` / `announceMessage` | Real speech; `skipSynthesisPrime` when prime already ran in duck path |
-| `ensureHeartbeatScheduled` | Start 3 s keep-alive loop if not already running |
+| `ensureHeartbeatScheduled` | Start 3 s keep-alive loop if not already running (suppressed during token announcement cycles) |
+| `enterTokenAnnouncementCycle` / `exitTokenAnnouncementCycle` | Suppress heartbeats/idle primes/pokes while a token announcement is active |
+| `prepareForNextTokenAnnouncement` | Stops current utterances and cancels pending token/message callbacks before the next speak |
 
 **Engine bind vs synthesis warm**
 
@@ -187,9 +192,9 @@ This file is the **canonical** reference for architecture, product behavior, MQT
 
 Under **`announcementMutex`**, each `tokenUpdateChannel` / `tokenReplaceChannel` event:
 
-1. If `enable_token_announcement`: `async { TokenAnnouncer.awaitReady(performPoke = true) }` (starts **before** `processTokenUpdateForKeys`).
+1. If `enable_token_announcement`: `async { TokenAnnouncer.awaitReady(performPoke = false, primeSynthesis = false) }` (bind-only; starts **before** `processTokenUpdateForKeys`).
 2. `processTokenUpdateForKeys(..., publishImmediately = false, isVipEmergency = pair.isVipEmergency)`.
-3. If `playCueUi`: **`withTimeoutOrNull(12_000)`** on `awaitReady` when speaking → **`playTokenChime`** (awaited) → **`publishTokenTile`** at `onAudioStart` + fallback → TTS until `onDone` → release mutex (next token blocked until TTS completes).
+3. If `playCueUi`: `playTokenChime` + **token tile publish** (`publishTokenTile` at `onAudioStart` + one-shot fallback) → wait `estimatedChimeAudibleMs` (chime tail) → await bind result capped by `awaitTtsWarmForTokenAnnounce` (12_000ms) → call `suspendAnnounce*` which runs `TokenAnnouncer.prepareForNextTokenAnnouncement()`, ducks ads if enabled, primes synthesis only when `needsSynthesisWarmUp()`, then performs TTS until `onDone`; the whole cycle is bounded by `TOKEN_ANNOUNCE_CYCLE_TIMEOUT_MS`.
 4. **`publishTokenTile`**: `publishTokensSnapshot`, `markAsAnnounced`, `markPayloadDisplayed`, blink trigger.
 5. **VIP TTS:** `spokenPrefix` = spelled **`ER`** when `pair.isVipEmergency`, else counter code only if `enable_counter_prefix`; passed to `announceTokenCall` as `spelledCounterPrefix`.
 6. **`TokenDisplayActivity.onDestroy`**: `TokenAnnouncer.shutdown()` only when `isFinishing` (transient teardown keeps TTS warm).
@@ -233,7 +238,7 @@ Under **`announcementMutex`**, each `tokenUpdateChannel` / `tokenReplaceChannel`
 - Other `ThemePrefs` keys include **`counter_bg_color`**, **`token_bg_color`**, **`notification_sound_key`**, 24-hour clock, YouTube/offline/ad-sound toggles, etc. **`getBackgroundIntensity`** exists in `ThemeColorManager` as a fixed constant (reserved / legacy hook).
 
 #### 3.9.3 Notification chime (`notification_sound_key`)
-- **Catalog:** `ThemeColorManager.notificationSoundOptions` — single list of **~51** keys/labels (dings, doubles, soft, alerts, bells, church, pings, long, chimes, high/low beeps, misc tones). Each key must match a branch in **`playSystemTone`** (`TokenDisplayActivity.kt`).
+- **Catalog:** `ThemeColorManager.notificationSoundOptions` — single list of **~51** keys/labels (dings, doubles, soft, alerts, bells, church, pings, long, chimes, high/low beeps, misc tones). Each key must match a branch in **`playSystemTone`** (`TokenChimePlayer.kt` / `utils/`).
 - **Persistence:** `getNotificationSoundKey` / `setNotificationSoundKey` validate against the catalog; unknown keys fall back to **`ding`**.
 - **Playback:** `playTokenChime` — one cue per event: per-counter URL, else global `tokenAudioUrl`, else system tone from prefs. Used for token updates and preview in **Notification sound** settings.
 
@@ -255,6 +260,12 @@ Under **`announcementMutex`**, each `tokenUpdateChannel` / `tokenReplaceChannel`
 - **`getTickerStripBackgroundBrush(hex)`:** For **`GRADIENT:…`**, **horizontal** multi-stop gradient across the wide bar; for **solid** hex, horizontal blend `lerp(#121212, primary, 0.52→0.78)` so white ticker text stays readable.
 - **Material theme:** Footer strip is independent of `MaterialTheme.colorScheme` surface; it follows the user’s theme/gradient preference directly.
 
+#### 3.9.6 Settings focus and adaptive details grids
+- **TV remote first-content focus:** On Settings dialog open, focus is routed to the first actionable item in the initial tab (Display/Audios/Other/Portal/System) instead of defaulting to `Close`.
+- **Help dialog first-content focus:** On Settings Help dialog open, the active help tab focuses the first help tile.
+- **Focusable details tiles:** Portal and Help tiles are explicitly D-pad focusable with visible focus ring.
+- **Adaptive columns:** Portal details and Help details now use `GridCells.Adaptive(minSize = 220.dp)`, so large screens can render 3+ columns automatically while smaller screens stay around 2.
+
 ### 3.10 Advertisement Behavior
 
 #### 3.10.1 Configuration (`tv_config` + local prefs)
@@ -270,11 +281,11 @@ Under **`announcementMutex`**, each `tokenUpdateChannel` / `tokenReplaceChannel`
 | `ThemePrefs.enable_ad_sound` | Video + YouTube volume; enables TTS ducking when on |
 | Offline ads | `PreferenceHelper` + `AdDownloader` → `Download/CALLQTV_ADV/` |
 
-Ads are sorted by **`position`** (array index in `ad_files`). Multiple ads use **strict round-robin** (`AdArea` in `TokenDisplayActivity.kt`).
+Ads are sorted by **`position`** (array index in `ad_files`). Multiple ads use **strict round-robin** (`AdArea` in `AdPlayback.kt`).
 
 #### 3.10.2 Supported media types (`AdMediaType`)
 
-Classification: `resolveAdMediaType()` / `fastInferMediaType()` in `TokenDisplayActivity.kt`. Playback: `AdUnifiedPlayer.kt`.
+Classification: `resolveAdMediaType()` / `fastInferMediaType()` in `AdPlayback.kt`. Playback: `AdUnifiedPlayer.kt`.
 
 | Type | Detection | Playback |
 |------|-----------|----------|
@@ -616,6 +627,9 @@ flowchart TD
 - Validate footer ticker scrolls continuously (no long pause between loops).
 - Validate **Settings → Display** color pickers: open without ANR; D-pad **focus ring** on navigated swatch; initial focus on **current** `selectedHex`; no crash from duplicate hex (grid keys use name+index).
 - Validate **Notification sound** picker: preview chime; focus on current selection.
+- Validate Settings tab focus defaults to first content item (not `Close`) for Display/Audios/Other/Portal/System.
+- Validate Settings Help tab focus defaults to first help tile on each tab.
+- Validate Portal/Help grids on larger screens show >2 columns when width permits.
 - Validate uploaded rows older than 2 days are cleaned and unuploaded rows remain.
 - Validate support export location and diagnostics behavior: with **SD/USB** mounted (`isExternalStorageRemovable`), snapshot ZIP prefers **`…/Android/data/.../files/Download/CALLQTV_EXPORT/`** on that volume; without removable storage, confirm **Downloads/CALLQTV_EXPORT** or app-scoped fallback from Toast path.
 - After **CLR**, confirm **configuration API** runs (network trace or server-side version bump) and UI picks up latest counters/devices without waiting 30s.
@@ -640,7 +654,7 @@ flowchart TD
 - **May 2026**: **`MqttViewModel` CLR** — key set built from `ResolvedCounterIdentity`, internal-map aliases, and **`tv_config.keypadsJson`** counter entries for the keypad SN; `button_index` on keypad counter rows participates in route match; clear runs when serial is known even if `extractClearPayloadInfo` is null; ambiguous route clears **all** counters listed for that keypad; `tokensPerCounter` always posted after CLR.
 - **May 2026**: **Announcements** — normal tokens: space-separated `Token` + optional spelled prefix + token + optional counter name; special: message + optional counter name (space); **ad audio ducking** when `enable_ad_sound` is on (`TokenAnnouncementAdAudio` + `MediaEngine` in `TokenDisplayActivity`).
 - **May 2026**: **Special message UI** — `TokenCard` multiline counter messages: increased padding and explicit **line height** (~1.42×) with matching auto-fit measurement to reduce clipping and cramped lines.
-- **May 2026**: **`TokenUiProcessResult`** — **`playCueUi`** vs **`speakTokenAnnouncement`**; chime + blink for all qualifying UI/map/VIP changes; TTS only when primary-key announce rules pass (§3.5).
+- **May 2026**: **`TokenUiProcessResult`** — **`playCueUi`** vs **`speakTokenAnnouncement`**; chime + blink for all qualifying UI/map/VIP changes; in `TokenDisplayScreen`, spoken details are driven by `playCueUi` when announcements are enabled (with chime-tail delay + TTS cycle guards) (§3.5).
 - **May 2026**: **`ThemeColorManager.notificationSoundOptions`**, brush caches, **`getTickerStripBackgroundBrush`**, **`PresetColorDialog`** / **`PresetColorSwatchTile`** (TV focus, throttled warm, unique grid keys) (§3.9.3–§3.9.5).
 - **May 2026**: **`MqttCounterRouting.kt`** — shared `findCounterEntityForMqttRoute` / `mqttRouteMatches*` helpers; UI channel handlers use keypad_index fallback when storage key is not a button_index.
 - **May 2026**: Room **v17** — `mqtt_payload_logs` table; **`MqttPayloadLogRepository`** + **`TokenReportRequest`** upload; **`FlexibleIntDeserializer`** on API counter index fields.
@@ -664,4 +678,6 @@ flowchart TD
 - **May 2026**: **Network resilience** — adaptive retries in `TvConfigRepository`, `ProjectRepository`, `ServiceUrlRepository`, `MqttPayloadLogRepository`; telemetry via `FileLogger` (`*RepoNet` tags).
 - **May 2026**: **`minSdk` 21** with `NetworkCompat`, `WebViewErrorCompat`, `ProcessCompat`.
 - **May 2026**: Source index — [SOURCE_CODE_DOCUMENTATION.md](./SOURCE_CODE_DOCUMENTATION.md) refreshed (~92 main Kotlin files, **10** unit test classes, **44** JVM tests).
+- **May 2026**: **Settings D-pad navigation** — first-content focus per tab (main + help), focusable Portal/Help tiles with ring, avoiding default focus on `Close`.
+- **May 2026**: **Settings responsive details grids** — Portal + Help switched to adaptive columns (`GridCells.Adaptive(minSize = 220.dp)`) for larger screens.
 

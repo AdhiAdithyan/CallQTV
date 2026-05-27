@@ -59,7 +59,7 @@ flowchart TD
     M -->|D/-/normal| P[Normal token flow]
 ```
 
-**Normal token flow (detail):** `parseMqttMessage` → `resolveCounterIdentityFromSerial` (**CounterRouteLookupCache** or Room on IO; **keypad SN** from frame; not fixed index 18) → `tokenUpdateChannel` (cap **128**, drop-oldest) → `TokenDisplayScreen` → **`findCounterEntityForMqttRoute`** → `processTokenUpdateForKeys` → announcement path (§3). On-screen label: `formatTokenByPattern` + optional `{code}-` when `enable_counter_prefix`; index 4 **`D`** → **`ER-`** on any slot via `vipEmergencyTokensByKey` (§3.4.1 in [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md)).
+**Normal token flow (detail):** `MqttVerifiedMessageParser` → `MqttCounterIdentityResolver.resolve` (**CounterRouteLookupCache** or Room on IO; **keypad SN** from frame; not fixed index 18) → `tokenUpdateChannel` (cap **128**, drop-oldest) → `TokenDisplayScreen` → **`findCounterEntityForMqttRoute`** → `processTokenUpdateForKeys` → announcement path (§3). On-screen label: `formatTokenByPattern` + optional `{code}-` when `enable_counter_prefix`; index 4 **`D`** → **`ER-`** on any slot via `vipEmergencyTokensByKey` (§3.4.1 in [MASTER_DOCUMENTATION.md](./MASTER_DOCUMENTATION.md)).
 
 ---
 
@@ -118,7 +118,7 @@ flowchart TD
 ```mermaid
 flowchart LR
     A[MqttClientManager] --> B[rawMessageQueue]
-    B --> C[parseMqttMessage]
+    B --> C[MqttVerifiedMessageParser]
     C --> D[tokenUpdateChannel or tokenReplaceChannel]
     D --> E[TokenDisplayScreen collect]
     E --> F[announcementMutex per token]

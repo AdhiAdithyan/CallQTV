@@ -77,7 +77,13 @@ object ApkUpdateHelper {
     }
 
     fun createInstallUnknownAppsIntent(context: Context): Intent {
-        return Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+        // Only called when [needsInstallPermissionSettings] is true (API 26+).
+        val action = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES
+        } else {
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+        }
+        return Intent(action).apply {
             data = Uri.parse("package:${context.packageName}")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }

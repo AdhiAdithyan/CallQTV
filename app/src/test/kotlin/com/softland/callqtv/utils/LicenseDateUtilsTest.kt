@@ -35,4 +35,12 @@ class LicenseDateUtilsTest {
         val future = LocalDate.now().plusDays(30).toString()
         assertTrue(LicenseDateUtils.isLicenseValid(future))
     }
+
+    @Test
+    fun formatLicenseEndDateForDisplay_ddMmYyyy() {
+        assertEquals(
+            "20-05-2026",
+            LicenseDateUtils.formatLicenseEndDateForDisplay("2026-05-20"),
+        )
+    }
 }

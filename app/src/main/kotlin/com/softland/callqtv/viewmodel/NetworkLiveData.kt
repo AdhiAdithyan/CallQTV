@@ -15,6 +15,7 @@ class NetworkLiveData(context: Context) : LiveData<Boolean>() {
     private val connectivityManager =
         appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
+    /** Evaluates whether a given network currently has usable validated internet. */
     private fun checkNetwork(network: Network) {
         val capabilities = NetworkCompat.networkCapabilities(connectivityManager, network)
         val hasInternet = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
@@ -40,6 +41,7 @@ class NetworkLiveData(context: Context) : LiveData<Boolean>() {
         }
     }
 
+    /** Registers callbacks and publishes initial connectivity state when observed. */
     override fun onActive() {
         super.onActive()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -58,6 +60,7 @@ class NetworkLiveData(context: Context) : LiveData<Boolean>() {
         }
     }
 
+    /** Unregisters network callbacks when there are no active observers. */
     override fun onInactive() {
         super.onInactive()
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return

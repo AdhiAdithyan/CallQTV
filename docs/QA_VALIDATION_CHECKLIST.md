@@ -113,6 +113,20 @@ Acceptance tests aligned with current source (app `1.0.1`, Room v17, `minSdk` 21
 - [ ] Focus on current sound; gold highlight when navigating
 - [ ] Chime matches selected tone on next token
 
+### 6.3 Settings dialog TV navigation and responsive grids
+
+- [ ] Opening Settings focuses first content control in active tab (not `Close`)
+- [ ] Tab-switch focus mapping works:
+  - Display → App Theme
+  - Audios → Notification Sound
+  - Other → Help / Settings Guide
+  - Portal → first portal tile
+  - System → Export Logs/Config Snapshot
+- [ ] Opening Settings Help focuses first tile in selected help tab
+- [ ] Portal details tiles are D-pad focusable with visible focus ring
+- [ ] Help details tiles are D-pad focusable with visible focus ring
+- [ ] On wide screens, Portal/Help details grids show 3+ columns when width allows (adaptive columns)
+
 ---
 
 ## 7. Advertisements
@@ -150,7 +164,17 @@ Acceptance tests aligned with current source (app `1.0.1`, Room v17, `minSdk` 21
 
 ## 9.1 Unit tests (CI / local)
 
-- [ ] `./gradlew test` passes (`SemanticMqttParserTest`, `KeypadPayloadParserTest`, `MqttCounterRoutingTest`, `TvConfigParsingTest`, …)
+- [ ] `./gradlew testCallQTVDebugUnitTest` passes (`SemanticMqttParserTest`, `KeypadPayloadParserTest`, `MqttCounterRoutingTest`, `TvConfigParsingTest`, …)
+
+### Automated run log (agent / CI — not a substitute for §2–§8 on device)
+
+| Check | Result | Notes |
+|-------|--------|--------|
+| `assembleCallQTVDebug` | Pass | May 2026 refactor pass |
+| `testCallQTVDebugUnitTest` | Pass | 10 test classes; routing, parser, TTS phrasing, VIP prefix |
+| `compileSdk` / `targetSdk` 35, `minSdk` 21 | Pass | From `app/build.gradle` |
+| On-device TV/emulator smoke (§2–§8) | **Manual** | Requires hardware: permissions, MQTT broker, ads, TTS |
+
 
 ---
 

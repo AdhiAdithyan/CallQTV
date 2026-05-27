@@ -8,7 +8,7 @@ import android.util.Log
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
-import com.softland.callqtv.ui.MediaEngine
+import com.softland.callqtv.ui.ads.MediaEngine
 import com.softland.callqtv.ui.SplashScreenActivity
 import com.softland.callqtv.utils.TokenAnnouncer
 import com.softland.callqtv.viewmodel.MqttViewModel

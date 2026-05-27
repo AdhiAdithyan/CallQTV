@@ -22,6 +22,22 @@ enum class TokenBlinkMode {
 }
 
 object ThemeColorManager {
+    private const val PREFS_NAME = "ThemePrefs"
+    private const val KEY_THEME_COLOR = "theme_color"
+    private const val KEY_COUNTER_BG = "counter_bg_color"
+    private const val KEY_TOKEN_BG = "token_bg_color"
+    private const val KEY_NOTIFICATION_SOUND = "notification_sound_key"
+
+    const val KEY_USE_24_HOUR_FORMAT = "use_24_hour_format"
+    const val KEY_ENABLE_AD_SOUND = "enable_ad_sound"
+    const val KEY_ALLOW_YOUTUBE_ADS = "allow_youtube_ads"
+    const val KEY_YOUTUBE_STRICT_AUTOPLAY = "youtube_strict_autoplay"
+    const val KEY_YOUTUBE_PLAY_UNTIL_ENDED = "youtube_play_until_ended"
+    const val KEY_YOUTUBE_AD_MAX_SECONDS = "youtube_ad_max_seconds"
+
+    private fun themePrefs(context: Context) =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
     private val defaultThemePrimaryCompose = Color(0xFF2196F3)
     private val backgroundBrushCache = ConcurrentHashMap<String, Brush>()
     private val tickerStripBrushCache = ConcurrentHashMap<String, Brush>()
@@ -59,13 +75,11 @@ object ThemeColorManager {
     }
 
     fun getSelectedThemeColorHex(context: Context): String {
-        return context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
-            .getString("theme_color", "#2196F3") ?: "#2196F3"
+        return themePrefs(context).getString(KEY_THEME_COLOR, "#2196F3") ?: "#2196F3"
     }
 
     fun setThemeColor(context: Context, hex: String) {
-        context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
-            .edit().putString("theme_color", hex).apply()
+        themePrefs(context).edit().putString(KEY_THEME_COLOR, hex).apply()
     }
 
     fun createDarkColorScheme(primaryColor: Color) = darkColorScheme(
@@ -89,27 +103,23 @@ object ThemeColorManager {
     fun getBackgroundIntensity(context: Context): Float = 0.15f
 
     fun getCounterBackgroundColor(context: Context): String {
-        return context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
-            .getString("counter_bg_color", "#FFFFFF") ?: "#FFFFFF"
+        return themePrefs(context).getString(KEY_COUNTER_BG, "#FFFFFF") ?: "#FFFFFF"
     }
 
     fun setCounterBackgroundColor(context: Context, hex: String) {
-        context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
-            .edit().putString("counter_bg_color", hex).apply()
+        themePrefs(context).edit().putString(KEY_COUNTER_BG, hex).apply()
     }
 
     fun getTokenBackgroundColor(context: Context): String {
-        return context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
-            .getString("token_bg_color", "#FFFFFF") ?: "#FFFFFF"
+        return themePrefs(context).getString(KEY_TOKEN_BG, "#FFFFFF") ?: "#FFFFFF"
     }
 
     fun setTokenBackgroundColor(context: Context, hex: String) {
-        context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
-            .edit().putString("token_bg_color", hex).apply()
+        themePrefs(context).edit().putString(KEY_TOKEN_BG, hex).apply()
     }
 
     /**
-     * Every key must match a branch in `playSystemTone` (TokenDisplayActivity). Order: dings →
+     * Every key must match a branch in `TokenChimePlayer.kt` (`systemToneForKey`). Order: dings →
      * doubles → soft → alerts → bells → church → pings → long → chimes → high/low beeps → misc tones.
      */
     val notificationSoundOptions: List<Pair<String, String>> = listOf(
@@ -175,22 +185,17 @@ object ThemeColorManager {
             }
 
     fun getNotificationSoundKey(context: Context): String {
-        val raw = context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
-            .getString("notification_sound_key", "ding") ?: "ding"
+        val raw = themePrefs(context).getString(KEY_NOTIFICATION_SOUND, "ding") ?: "ding"
         return raw.takeIf { notificationSoundKeys.contains(it) } ?: "ding"
     }
 
     fun setNotificationSoundKey(context: Context, key: String) {
         val safe = key.takeIf { notificationSoundKeys.contains(it) } ?: "ding"
-        context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
-            .edit().putString("notification_sound_key", safe).apply()
+        themePrefs(context).edit().putString(KEY_NOTIFICATION_SOUND, safe).apply()
     }
 
     fun getTokenBlinkMode(context: Context): TokenBlinkMode {
-        return when (
-            context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
-                .getString(TOKEN_BLINK_MODE_KEY, TOKEN_BLINK_VALUE_TILE)
-        ) {
+        return when (themePrefs(context).getString(TOKEN_BLINK_MODE_KEY, TOKEN_BLINK_VALUE_TILE)) {
             TOKEN_BLINK_VALUE_TEXT -> TokenBlinkMode.TEXT_ONLY
             else -> TokenBlinkMode.WHOLE_TILE
         }
@@ -198,8 +203,51 @@ object ThemeColorManager {
 
     fun setTokenBlinkMode(context: Context, mode: TokenBlinkMode) {
         val v = if (mode == TokenBlinkMode.TEXT_ONLY) TOKEN_BLINK_VALUE_TEXT else TOKEN_BLINK_VALUE_TILE
-        context.getSharedPreferences("ThemePrefs", Context.MODE_PRIVATE)
-            .edit().putString(TOKEN_BLINK_MODE_KEY, v).apply()
+        themePrefs(context).edit().putString(TOKEN_BLINK_MODE_KEY, v).apply()
+    }
+
+    fun is24HourFormat(context: Context): Boolean =
+        themePrefs(context).getBoolean(KEY_USE_24_HOUR_FORMAT, true)
+
+    fun set24HourFormat(context: Context, enabled: Boolean) {
+        themePrefs(context).edit().putBoolean(KEY_USE_24_HOUR_FORMAT, enabled).apply()
+    }
+
+    fun isAdSoundEnabled(context: Context): Boolean =
+        themePrefs(context).getBoolean(KEY_ENABLE_AD_SOUND, false)
+
+    fun setAdSoundEnabled(context: Context, enabled: Boolean) {
+        themePrefs(context).edit().putBoolean(KEY_ENABLE_AD_SOUND, enabled).apply()
+    }
+
+    fun isYouTubeAdsEnabled(context: Context): Boolean =
+        themePrefs(context).getBoolean(KEY_ALLOW_YOUTUBE_ADS, true)
+
+    fun setYouTubeAdsEnabled(context: Context, enabled: Boolean) {
+        themePrefs(context).edit().putBoolean(KEY_ALLOW_YOUTUBE_ADS, enabled).apply()
+    }
+
+    fun isYouTubeStrictAutoplay(context: Context): Boolean =
+        themePrefs(context).getBoolean(KEY_YOUTUBE_STRICT_AUTOPLAY, false)
+
+    fun setYouTubeStrictAutoplay(context: Context, enabled: Boolean) {
+        themePrefs(context).edit().putBoolean(KEY_YOUTUBE_STRICT_AUTOPLAY, enabled).apply()
+    }
+
+    fun isYouTubePlayUntilEnded(context: Context, defaultIfUnset: Boolean = false): Boolean =
+        themePrefs(context).getBoolean(KEY_YOUTUBE_PLAY_UNTIL_ENDED, defaultIfUnset)
+
+    fun setYouTubePlayUntilEnded(context: Context, enabled: Boolean) {
+        themePrefs(context).edit().putBoolean(KEY_YOUTUBE_PLAY_UNTIL_ENDED, enabled).apply()
+    }
+
+    fun getYouTubeAdMaxSeconds(
+        context: Context,
+        allowedSeconds: List<Int>,
+        defaultSeconds: Int,
+    ): Int {
+        val stored = themePrefs(context).getInt(KEY_YOUTUBE_AD_MAX_SECONDS, defaultSeconds)
+        return if (stored in allowedSeconds) stored else defaultSeconds
     }
 
     val themeColorOptions = listOf(

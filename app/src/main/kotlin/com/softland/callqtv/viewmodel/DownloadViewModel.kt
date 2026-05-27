@@ -29,6 +29,7 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
 
     private var wakeLock: PowerManager.WakeLock? = null
 
+    /** Downloads the APK in background, posts progress, and emits final file path on success. */
     fun downloadApk(context: Context, downloadUrl: String, versionName: String) {
         viewModelScope.launch {
             _downloadStatus.value = DownloadStatus(DownloadStatus.StatusType.DOWNLOADING, 0)
@@ -83,14 +84,17 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /** Emits an install event consumed by UI to launch package installer flow. */
     fun triggerApkInstall(apkFilePath: String) {
         _installIntentLiveData.value = InstallEvent(apkFilePath)
     }
 
+    /** Clears one-shot install event after UI handles installation intent. */
     fun clearInstallEvent() {
         _installIntentLiveData.value = null
     }
 
+    /** Releases any held wake lock when ViewModel is being destroyed. */
     override fun onCleared() {
         super.onCleared()
         wakeLock?.let { if (it.isHeld) it.release() }

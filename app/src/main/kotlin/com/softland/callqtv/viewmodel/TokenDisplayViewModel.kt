@@ -8,8 +8,11 @@ import com.softland.callqtv.data.local.CounterEntity
 import com.softland.callqtv.data.local.AdFileEntity
 import com.softland.callqtv.data.local.ConnectedDeviceEntity
 import com.softland.callqtv.data.local.AppSharedPreferences
+import com.softland.callqtv.data.model.CheckDeviceStatusRequest
+import com.softland.callqtv.data.repository.ProjectRepository
 import com.softland.callqtv.data.repository.TvConfigRepository
 import com.softland.callqtv.data.repository.TvConfigResult
+import com.softland.callqtv.utils.LicenseApiMessages
 import com.softland.callqtv.utils.AdDownloader
 import com.softland.callqtv.utils.FileLogger
 import com.softland.callqtv.utils.LicenseDateUtils
@@ -21,6 +24,8 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -30,9 +35,14 @@ import java.util.*
 class TokenDisplayViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = TvConfigRepository(application)
+    private val projectRepository = ProjectRepository(application)
     
     private val _isLoading = MutableLiveData(false)
     val isLoading: LiveData<Boolean> = _isLoading
+
+    /** True while the initial/manual overlay load is in flight (survives cache-first isLoading=false). */
+    private val _isStartupLoadInFlight = MutableLiveData(false)
+    val isStartupLoadInFlight: LiveData<Boolean> = _isStartupLoadInFlight
     
     private val _errorMessage = MutableLiveData<String?>(null)
     val errorMessage: LiveData<String?> = _errorMessage
@@ -77,6 +87,7 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
     private var tokenHistorySeeded = false
     private var offlineAdSyncJob: Job? = null
     private var mqttConfigRefreshListenerStarted = false
+    private val mqttInitMutex = Mutex()
     private var currentConfigLoadJob: Job? = null
     /** Monotonic id so a cancelled load's `finally` cannot clear loading for a newer retry. */
     private var activeConfigLoadId = 0
@@ -93,13 +104,21 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
         // Initialize macAddress on a background thread to avoid blocking main thread at startup
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             _macAddress = Variables.getMacId(getApplication())
+            applyLicenseExpiryFromPrefs()
         }
         startDateTimeUpdates()
         startExpiryCheck()
     }
 
+    sealed class LicenseRefreshResult {
+        data object Valid : LicenseRefreshResult()
+        data class StillExpired(val message: String) : LicenseRefreshResult()
+        data class Failed(val message: String) : LicenseRefreshResult()
+    }
+
     private var is24HourFormat = true
 
+    /** Updates the in-memory time format flag used by the live clock ticker. */
     fun setTimeFormat(is24Hour: Boolean) {
         is24HourFormat = is24Hour
     }
@@ -109,6 +128,7 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
         _errorMessage.value = null
     }
 
+    /** Starts a 1-second ticker that publishes date-time text for the display header. */
     private fun startDateTimeUpdates() {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
             while (isActive) {
@@ -121,18 +141,160 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
+    /** Re-evaluates license expiry from preferences on a fixed background interval. */
     private fun startExpiryCheck() {
         viewModelScope.launch {
             while (true) {
-                _daysUntilExpiry.value = computeDaysUntilExpiry()
+                applyLicenseExpiryFromPrefs()
                 delay(15 * 60 * 1000L)
             }
         }
     }
 
+    /** Computes days remaining from the persisted license end-date string. */
     private fun computeDaysUntilExpiry(): Int? = LicenseDateUtils.daysUntilExpiry(
         authPrefs.getString(PreferenceHelper.product_license_end, null),
     )
+
+    /** Syncs license expiry from stored end date (e.g. after midnight rollover). */
+    fun applyLicenseExpiryFromPrefs() {
+        val days = computeDaysUntilExpiry()
+        _daysUntilExpiry.postValue(days)
+        when {
+            days != null && days < 0 -> {
+                _isLicenseExpired.postValue(true)
+                if (_errorMessage.value.isNullOrBlank()) {
+                    _errorMessage.postValue(
+                        "Your Call-Q TV license has expired.\n" +
+                            "Tap Retry to fetch updated license details from the server.",
+                    )
+                }
+            }
+            days != null && days >= 0 -> {
+                _isLicenseExpired.postValue(false)
+            }
+        }
+    }
+
+    /** Calls CheckDeviceStatus and persists refreshed license end date when available. */
+    private suspend fun refreshLicenseFromServer(): LicenseRefreshResult {
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            if (!com.softland.callqtv.utils.NetworkUtil.isNetworkAvailable(getApplication())) {
+                return@withContext LicenseRefreshResult.Failed(
+                    "No internet connection. Please check network and retry.",
+                )
+            }
+            val customerId = authPrefs.getInt(PreferenceHelper.customer_id, 0)
+            val deviceRegId = authPrefs.getInt(PreferenceHelper.device_registration_id, 0)
+            val productRegId = authPrefs.getInt(PreferenceHelper.product_registration_id, 0)
+            if (customerId == 0 || deviceRegId == 0) {
+                return@withContext LicenseRefreshResult.Failed(
+                    "Device registration details are missing. Please contact support.",
+                )
+            }
+            val statusReq = CheckDeviceStatusRequest().apply {
+                uniqueIDentifier = authPrefs.getString(PreferenceHelper.device_unique_id, null)
+                this.customerId = customerId.toString()
+                productRegistrationId = productRegId.toString()
+                deviceRegistrationId = deviceRegId
+                projectNAme = authPrefs.getString(PreferenceHelper.project_name, null)
+            }
+            try {
+                val statusRes = projectRepository.getCheckDeviceStatus("CheckDeviceStatus", statusReq)
+                when (statusRes.status) {
+                    1, 3 -> {
+                        statusRes.licenceActiveTo?.trim()?.takeIf { it.isNotBlank() }?.let { endDate ->
+                            authPrefs.edit()
+                                .putString(PreferenceHelper.product_license_end, endDate)
+                                .apply()
+                        }
+                        applyLicenseExpiryFromPrefs()
+                        val daysLeft = computeDaysUntilExpiry()
+                        if (daysLeft != null && daysLeft < 0) {
+                            LicenseRefreshResult.StillExpired(
+                                statusRes.message?.trim().orEmpty().ifBlank {
+                                    "Your license is still expired. Please renew with your administrator."
+                                },
+                            )
+                        } else {
+                            LicenseRefreshResult.Valid
+                        }
+                    }
+                    7 -> LicenseRefreshResult.StillExpired(
+                        statusRes.message?.trim().orEmpty().ifBlank { "License expired" },
+                    )
+                    else -> LicenseRefreshResult.Failed(
+                        statusRes.message?.trim().orEmpty().ifBlank { "Could not verify license status." },
+                    )
+                }
+            } catch (e: Exception) {
+                FileLogger.logError(getApplication(), "TokenDisplayVM", "License refresh failed", e)
+                LicenseRefreshResult.Failed(
+                    LicenseApiMessages.userMessageFor(e, "License check"),
+                )
+            }
+        }
+    }
+
+    /**
+     * Fetches license from the server, then reloads TV config. Used from the license-expired dialog.
+     */
+    fun refreshLicenseThenLoadData(
+        mqttViewModel: MqttViewModel,
+        clearCacheBeforeFetch: Boolean = false,
+    ) {
+        viewModelScope.launch {
+            _isStartupLoadInFlight.value = true
+            _isLoading.value = true
+            when (val licenseResult = refreshLicenseFromServer()) {
+                is LicenseRefreshResult.Valid -> {
+                    _isLicenseExpired.value = false
+                    _errorMessage.value = null
+                    loadData(
+                        mqttViewModel,
+                        forceShowOverlay = true,
+                        clearCacheBeforeFetch = clearCacheBeforeFetch,
+                        bypassActiveLoadGuard = true,
+                    )
+                }
+                is LicenseRefreshResult.StillExpired -> {
+                    _isLicenseExpired.value = true
+                    _errorMessage.value = licenseResult.message
+                    _isLoading.value = false
+                    _isStartupLoadInFlight.value = false
+                }
+                is LicenseRefreshResult.Failed -> {
+                    applyLicenseExpiryFromPrefs()
+                    _errorMessage.value = licenseResult.message
+                    if (_isLicenseExpired.value != true) {
+                        loadData(
+                            mqttViewModel,
+                            forceShowOverlay = true,
+                            clearCacheBeforeFetch = clearCacheBeforeFetch,
+                            bypassActiveLoadGuard = true,
+                        )
+                    } else {
+                        _isLoading.value = false
+                        _isStartupLoadInFlight.value = false
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Loads TV configuration, counters, ads, and devices using stale-while-revalidate.
+     *
+     * Supports both cache-first background refresh and force-overlay manual/cold-start reload modes.
+     */
+    /**
+     * Arms loading flags before the first Compose frame so cold-start gating does not treat a
+     * transient `config == null` as a finished load (common right after APK upgrade).
+     */
+    fun armInitialStartupLoad() {
+        _isLoading.value = true
+        _isStartupLoadInFlight.value = true
+    }
 
     fun loadData(
         mqttViewModel: MqttViewModel,
@@ -172,6 +334,7 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
         if (forceShowOverlay) {
             // Set before cancelling any in-flight job so a stale `finally` cannot hide the overlay.
             _isLoading.value = true
+            _isStartupLoadInFlight.value = true
             hasShownInitialLoadingOverlay = true
         }
 
@@ -219,6 +382,11 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
                 _localAdFiles.value = emptyList()
                 _connectedDevices.value = emptyList()
                 mqttViewModel.invalidateKeypadSerialCache()
+            }
+
+            // Broker host/credentials live in mapped_broker (Room), not tv_config — connect in parallel with API.
+            launch(kotlinx.coroutines.Dispatchers.IO) {
+                initMqttIfNeeded(mqttViewModel)
             }
 
             var showedCacheFirst = false
@@ -325,10 +493,12 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
             } finally {
                 if (loadId == activeConfigLoadId) {
                     _isLoading.value = false
+                    _isStartupLoadInFlight.value = false
                 }
                 // Connected devices may have changed; invalidate keypad serial cache so that
                 // subsequent keypad validation uses the latest mapping.
                 mqttViewModel.invalidateKeypadSerialCache()
+                applyLicenseExpiryFromPrefs()
                 android.util.Log.i(
                     "TokenDisplayVMPerf",
                     "loadData total time: ${System.currentTimeMillis() - loadStartMs} ms"
@@ -337,11 +507,15 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
+    /** Initializes/updates MQTT broker connections from mapped broker rows after config sync. */
     private suspend fun initMqttIfNeeded(mqttViewModel: MqttViewModel) {
-        val endpoints = loadBrokerEndpoints()
-        mqttViewModel.reconcileBrokersAfterConfigSync(endpoints, getApplication())
+        mqttInitMutex.withLock {
+            val endpoints = loadBrokerEndpoints()
+            mqttViewModel.reconcileBrokersAfterConfigSync(endpoints, getApplication())
+        }
     }
 
+    /** Reads broker endpoints for this device/customer from Room cache. */
     private suspend fun loadBrokerEndpoints(): List<MqttViewModel.BrokerEndpoint> {
         val customerIdInt = authPrefs.getInt(PreferenceHelper.customer_id, 0)
         val customerId = String.format(Locale.ROOT, "%04d", customerIdInt)
@@ -354,6 +528,7 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
         return rows.mapNotNull { broker -> broker.toBrokerEndpoint(_macAddress) }
     }
 
+    /** Maps a DB broker entity into runtime MQTT connection details. */
     private fun com.softland.callqtv.data.local.MappedBrokerEntity.toBrokerEndpoint(
         macAddress: String,
     ): MqttViewModel.BrokerEndpoint? {
@@ -382,6 +557,7 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
         private const val MQTT_REFRESH_MIN_INTERVAL_MS = 30_000L
     }
 
+    /** Loads cached config/counters/ads/devices snapshot from local Room tables. */
     private suspend fun loadCachedSnapshot(macAddress: String, customerId: String): CachedUiSnapshot {
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             CachedUiSnapshot(
@@ -415,6 +591,7 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
+    /** Starts or cancels offline ad download/sync depending on current offline mode toggle. */
     private fun startOfflineAdSyncIfNeeded(
         remoteFiles: List<AdFileEntity>,
         offlineEnabled: Boolean,
@@ -457,6 +634,7 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
         TokenAnnouncer.warmUp(app, cfg.audioLanguage, performPoke = true)
     }
 
+    /** Merges remote ad rows with downloaded local file paths when offline ads are enabled. */
     private fun buildEffectiveAdList(
         remoteAds: List<AdFileEntity>,
         offlineEnabled: Boolean,
@@ -476,6 +654,7 @@ class TokenDisplayViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
+    /** Returns true when an ad URL/path points to YouTube-hosted content. */
     private fun isYouTubePath(path: String): Boolean {
         val lc = path.lowercase()
         return lc.contains("youtube.com") || lc.contains("youtu.be") || lc.contains("youtube-nocookie.com")

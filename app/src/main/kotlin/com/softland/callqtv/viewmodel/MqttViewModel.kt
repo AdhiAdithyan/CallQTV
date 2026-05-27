@@ -12,13 +12,23 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.softland.callqtv.data.local.AppDatabase
 import com.softland.callqtv.data.local.CounterEntity
-import com.softland.callqtv.data.model.CounterConfig
-import com.softland.callqtv.data.model.KeypadConfig
 import com.softland.callqtv.data.repository.MqttClientManager
 import com.softland.callqtv.data.repository.MqttPayloadLogRepository
 import com.softland.callqtv.data.repository.TokenHistoryRepository
 import com.softland.callqtv.utils.FileLogger
 import com.softland.callqtv.utils.SemanticMqttParser
+import com.softland.callqtv.viewmodel.mqtt.MqttBrokerCallbacks
+import com.softland.callqtv.viewmodel.mqtt.MqttBrokerConnector
+import com.softland.callqtv.viewmodel.mqtt.MqttBrokerListenerFactory
+import com.softland.callqtv.viewmodel.mqtt.MqttClrTokenOperations
+import com.softland.callqtv.viewmodel.mqtt.mqttClrPayloadMatchesResolvedCounter
+import com.softland.callqtv.viewmodel.mqtt.MqttConnectionDetails
+import com.softland.callqtv.viewmodel.mqtt.MqttCounterIdentityResolver
+import com.softland.callqtv.viewmodel.mqtt.MqttInboundPayloadRouter
+import com.softland.callqtv.viewmodel.mqtt.MqttKeypadSerialRegistry
+import com.softland.callqtv.viewmodel.mqtt.MqttRawPayloadGate
+import com.softland.callqtv.viewmodel.mqtt.MqttReconnectPolicy
+import com.softland.callqtv.viewmodel.mqtt.MqttVerifiedMessageParser
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.Dispatchers
@@ -28,9 +38,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Collections
 import java.util.Random
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
 
 class MqttViewModel(application: Application) : AndroidViewModel(application) {
     data class TokenUiEvent(
@@ -43,7 +55,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * [playCueUi]: chime + token snapshot + blink (any user-visible token grid or VIP overlay change).
-     * [speakTokenAnnouncement]: prior primary-key rules only (move / re-call after 10s) for TTS.
+     * [speakTokenAnnouncement]: primary-key token should be spoken (each queued UI event).
      */
     data class TokenUiProcessResult(
         val playCueUi: Boolean,
@@ -105,6 +117,135 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         performRecordsCleanup()
     }
 
+    private val keypadSerialRegistry by lazy {
+        MqttKeypadSerialRegistry(getApplication(), connectedDeviceDao, tvConfigDao, gson, stateMutex)
+    }
+
+    private val counterIdentityResolver by lazy {
+        MqttCounterIdentityResolver(
+            getApplication(),
+            counterDao,
+            tvConfigDao,
+            gson,
+            counterRouteCache,
+        ) { routingCacheScope() }
+    }
+
+    private val inboundPayloadRouter by lazy {
+        MqttInboundPayloadRouter(keypadSerialRegistry, inboundPayloadHost)
+    }
+
+    private val verifiedMessageParser by lazy {
+        MqttVerifiedMessageParser(keypadSerialRegistry, counterIdentityResolver, verifiedMessageHost)
+    }
+
+    private val clrTokenOperations by lazy {
+        MqttClrTokenOperations(counterIdentityResolver, clrTokenHost)
+    }
+
+    private val inboundPayloadHost = object : MqttInboundPayloadRouter.Host {
+        override suspend fun isValidKeypadMessage(message: String): Boolean =
+            keypadSerialRegistry.isValidMessage(message)
+
+        override fun saveIncomingMqttPayload(trimmed: String) {
+            this@MqttViewModel.saveIncomingMqttPayload(trimmed)
+        }
+
+        override fun onVerifiedPayload(topic: String, trimmed: String) {
+            _receivedMessage.postValue(trimmed)
+            _lastPayload.postValue(trimmed)
+            viewModelScope.launch(Dispatchers.Default) {
+                verifiedMessageParser.parse(topic, trimmed)
+            }
+        }
+
+        override suspend fun clearTokensForClr(serial: String, routeIndex: String) {
+            clrTokenOperations.clearTokensForResolvedCounter(serial, routeIndex)
+        }
+
+        override fun markPayloadDisplayed(payload: String) {
+            this@MqttViewModel.markPayloadDisplayed(payload)
+        }
+
+        override fun requestConfigRefresh(reason: String, forceImmediate: Boolean) {
+            this@MqttViewModel.requestConfigRefresh(reason, forceImmediate)
+        }
+    }
+
+    private val verifiedMessageHost = object : MqttVerifiedMessageParser.Host {
+        override fun shouldSuppressRepeatedPayload(payload: String): Boolean =
+            this@MqttViewModel.shouldSuppressRepeatedPayload(payload)
+
+        override fun enqueueTokenUpdate(event: TokenUiEvent) {
+            enqueueTokenUiEvent(tokenUpdateChannel, event)
+        }
+
+        override fun enqueueTokenReplace(event: TokenUiEvent) {
+            enqueueTokenUiEvent(tokenReplaceChannel, event)
+        }
+
+        override suspend fun saveTokenRecord(message: String, counterKey: String, token: String) {
+            this@MqttViewModel.saveTokenRecord(message, counterKey, token)
+        }
+
+        override fun markKeypadSeen(buttonKey: String) {
+            this@MqttViewModel.markKeypadSeen(buttonKey)
+        }
+
+        override fun markDispenseSeen(buttonKey: String) {
+            this@MqttViewModel.markDispenseSeen(buttonKey)
+        }
+
+        override fun shouldSkipQueuedToken(key: String, now: Long): Boolean {
+            val lastQueued = queuedTokenTimestamps[key] ?: 0L
+            // Short debounce only; each distinct queued event is announced in order on the UI.
+            return now - lastQueued < 1_500L
+        }
+
+        override fun recordQueuedToken(key: String, now: Long) {
+            queuedTokenTimestamps[key] = now
+            if (queuedTokenTimestamps.size > 500) {
+                queuedTokenTimestamps.entries.removeIf { now - it.value > 60000L }
+            }
+        }
+    }
+
+    private val clrTokenHost = object : MqttClrTokenOperations.Host {
+        override suspend fun resolveIdentity(serial: String, routeIndex: String) =
+            counterIdentityResolver.resolve(serial, routeIndex)
+
+        override suspend fun applyClear(keysToClear: Set<String>, serial: String, routeIndex: String) {
+            stateMutex.withLock {
+                var changed = false
+                keysToClear.forEach { key ->
+                    changed = internalTokenMap.remove(key) != null || changed
+                    announcedTokenTimestamps.entries.removeIf { it.key.startsWith("${key}_") }
+                    queuedTokenTimestamps.entries.removeIf { it.key.startsWith("${key}_") }
+                    vipEmergencyTokensByKey.remove(key)
+                }
+                postVipEmergencyTokensSnapshot()
+                tokenHistoryRepo.clearCounterKeys(keysToClear.toList())
+                val route = routeIndex.trim()
+                queuedPayloadTimestamps.entries.removeIf { entry ->
+                    val payloadSerial = KeypadPayloadParser.extractKeypadSerial(entry.key)
+                        ?: return@removeIf false
+                    if (!payloadSerial.trim().equals(serial.trim(), ignoreCase = true)) return@removeIf false
+                    if (route.isEmpty()) return@removeIf true
+                    mqttClrPayloadMatchesResolvedCounter(entry.key, serial, route)
+                }
+                if (!changed) {
+                    android.util.Log.w(
+                        "MqttViewModel",
+                        "CLR cleared DB/history for keys=$keysToClear but no in-memory token map entries matched " +
+                            "(serial=$serial route='$routeIndex')",
+                    )
+                }
+                _tokensPerCounter.postValue(internalTokenMap.toMap())
+            }
+        }
+
+    }
+
     @Volatile
     private var lastPayloadSyncAtMs: Long = 0L
 
@@ -112,6 +253,12 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     @Volatile
     private var tokenHistoryLimit: Int = 15
 
+    /**
+     * Updates the in-memory token history limit based on TV config.
+     *
+     * If the limit changes, it trims existing token history lists and prunes VIP/emergency
+     * tokens so both history and VIP sets remain consistent with the new retention window.
+     */
     fun applyTokenHistoryLimitFromConfig(config: com.softland.callqtv.data.local.TvConfigEntity?) {
         val newLimit = config?.tokensPerCounter?.coerceAtLeast(1) ?: 15
         val limitChanged = newLimit != tokenHistoryLimit
@@ -137,26 +284,14 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Trims the given history list to the currently configured [tokenHistoryLimit].
+     */
     private fun trimTokenHistory(list: List<String>): List<String> =
         list.take(tokenHistoryLimit.coerceAtLeast(1))
 
-    // In-memory cache of allowed keypad serials (normalized uppercase),
-    // to avoid a DB lookup on every MQTT message.
-    private val keypadSerials = mutableSetOf<String>()
-    @Volatile
-    private var keypadSerialsLoaded = false
-
     private val counterRouteCache =
         CounterRouteLookupCache<ResolvedCounterIdentity>(MqttCounterRouteKeys.CACHE_TTL_MS)
-
-    private data class MqttConnectionDetails(
-        val serverUri: String,
-        val clientId: String,
-        val username: String?,
-        val password: String?,
-        val topic: String,
-        val qos: Int,
-    )
 
     /** Broker endpoint from TV config / mapped_broker table (used after config sync). */
     data class BrokerEndpoint(
@@ -171,37 +306,70 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     @Volatile
     private var isLicenseExpired = false
 
+    /**
+     * Sets the license-expired flag and blocks MQTT/UI token processing when expired.
+     *
+     * When toggled to `true`, it clears queued token UI events, cancels retry/connect jobs,
+     * stops background MQTT loops/watchdogs, and disconnects active broker managers.
+     */
     fun setLicenseExpired(expired: Boolean) {
+        if (isLicenseExpired == expired) return
         isLicenseExpired = expired
         if (expired) {
             android.util.Log.w("MqttViewModel", "License expired; MQTT message processing is BLOCKED.")
+            setPayloadUiReady(false)
+            pendingTokenUiEvents.clear()
+            viewModelScope.launch {
+                retryJobs.values.forEach { it.cancel() }
+                retryJobs.clear()
+                stopConnectTimer()
+                stopContinuousPublishLoop()
+                messageLivenessWatchdogJob?.cancel()
+                messageLivenessWatchdogJob = null
+                indicatorWatchdogJob?.cancel()
+                indicatorWatchdogJob = null
+                managers.values.forEach { manager ->
+                    runCatching { manager.disconnect() }
+                }
+                _connectionStatus.postValue(false)
+                _connectionStatusMap.postValue(emptyMap())
+                _isConnectingToMqtt.postValue(false)
+            }
         }
     }
 
     private val _receivedMessage = MutableLiveData<String>()
+    /** Latest raw received MQTT message preview. */
     fun getReceivedMessage(): LiveData<String> = _receivedMessage
 
     private val _lastPayload = MutableLiveData<String>("")
+    /** Most recent accepted MQTT payload string. */
     fun getLastPayload(): LiveData<String> = _lastPayload
 
     private val _connectionStatusMap = MutableLiveData<Map<String, Boolean>>(emptyMap())
+    /** Map of broker server URI to connection status. */
     fun getConnectionStatusMap(): LiveData<Map<String, Boolean>> = _connectionStatusMap
 
     private val _connectionStatus = MutableLiveData<Boolean>(false)
+    /** Aggregated connection status (true when all relevant brokers are connected). */
     fun getConnectionStatus(): LiveData<Boolean> = _connectionStatus
 
     private val _errorMessage = MutableLiveData<String>("")
+    /** Last MQTT-related error message shown to the UI. */
     fun getErrorMessage(): LiveData<String> = _errorMessage
 
     private val _isConnectingToMqtt = MutableLiveData<Boolean>(false)
+    /** True while MQTT connection attempts/timers are active. */
     fun isConnectingToMqtt(): LiveData<Boolean> = _isConnectingToMqtt
 
     private val _connectTimer = MutableLiveData<Int>(0)
+    /** Seconds counter used by the MQTT retry dialog. */
     fun getConnectTimer(): LiveData<Int> = _connectTimer
 
     private var timerJob: kotlinx.coroutines.Job? = null
     private var connectTime = 0
 
+    /** Starts a 1-second connect watchdog timer used for UI retry feedback. */
     private fun startConnectTimer() {
         if (timerJob?.isActive == true) return
 
@@ -220,6 +388,10 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Stops the connect timer when all brokers are connected.
+     * (Prevents the timer UI from lingering after stable connection.)
+     */
     private fun stopConnectTimer() {
         // Only stop if ALL brokers are considered connected.
         val allConnected = connectionDetailsMap.keys.all { managers[it]?.isConnected() == true }
@@ -231,20 +403,25 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private val _isAutoRetryExhausted = MutableLiveData<Boolean>(false)
+    /** True once auto-retry budget has been exhausted for the current MQTT session. */
     fun isAutoRetryExhausted(): LiveData<Boolean> = _isAutoRetryExhausted
 
     // Exposes current MQTT retry attempt (for UI display)
     private val _mqttRetryAttempt = MutableLiveData<Int>(0)
+    /** Current MQTT auto-retry attempt counter exposed for UI messaging. */
     fun getMqttRetryAttempt(): LiveData<Int> = _mqttRetryAttempt
 
     // Exposes whether the broker host/port is reachable via a short TCP ping.
     private val _isBrokerReachable = MutableLiveData<Boolean>(false)
+    /** True when the broker endpoint is reachable (used as a UI hint). */
     fun isBrokerReachable(): LiveData<Boolean> = _isBrokerReachable
 
     private val _dispenseConnectedByButton = MutableLiveData<Map<String, Boolean>>(emptyMap())
+    /** Connection status per dispense button route. */
     fun getDispenseConnectedByButton(): LiveData<Map<String, Boolean>> = _dispenseConnectedByButton
 
     private val _keypadConnectedByButton = MutableLiveData<Map<String, Boolean>>(emptyMap())
+    /** Connection status per keypad button route. */
     fun getKeypadConnectedByButton(): LiveData<Map<String, Boolean>> = _keypadConnectedByButton
 
     private val lastDispenseSeenAtByButton = ConcurrentHashMap<String, Long>()
@@ -276,6 +453,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         java.util.concurrent.ConcurrentLinkedQueue<String>()
 
     private val _tokensPerCounter = MutableLiveData<Map<String, List<String>>>(emptyMap())
+    /** Current mapped token history per counter key for UI rendering. */
     fun getTokensPerCounter(): LiveData<Map<String, List<String>>> = _tokensPerCounter
 
     // Thread-safe internal state to prevent race conditions during updates
@@ -285,8 +463,10 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     private val vipEmergencyTokensByKey = ConcurrentHashMap<String, MutableSet<String>>()
     private val _vipEmergencyTokensByKey = MutableLiveData<Map<String, Set<String>>>(emptyMap())
 
+    /** VIP/emergency token sets per token-map key for UI/state reconciliation. */
     fun getVipEmergencyTokensByKey(): LiveData<Map<String, Set<String>>> = _vipEmergencyTokensByKey
 
+    /** Publishes VIP/emergency token snapshots and persists them to shared preferences. */
     private fun postVipEmergencyTokensSnapshot() {
         _vipEmergencyTokensByKey.postValue(
             vipEmergencyTokensByKey.mapValues { (_, tokens) -> tokens.toSet() },
@@ -294,10 +474,15 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         persistVipEmergencyTokensToPrefs()
     }
 
+    /** Adds a VIP/emergency token to the in-memory set for the given map key. */
     private fun markVipEmergencyToken(key: String, token: String) {
         vipEmergencyTokensByKey.getOrPut(key) { ConcurrentHashMap.newKeySet() }.add(token)
     }
 
+    /**
+     * Prunes VIP/emergency token sets by removing tokens that are no longer present
+     * in the active token list for that map key.
+     */
     private fun pruneVipEmergencyTokens(key: String, activeTokens: List<String>) {
         val active = activeTokens.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
         val set = vipEmergencyTokensByKey[key] ?: return
@@ -309,8 +494,10 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         getApplication<Application>().getSharedPreferences(VIP_EMERGENCY_PREFS_NAME, Context.MODE_PRIVATE)
     }
 
+    /** Builds the per-customer SharedPreferences key for VIP/emergency token snapshots. */
     private fun vipEmergencyPrefsStorageKey(customerId: String): String = "vip_tokens_$customerId"
 
+    /** Returns the current customer id (zero-padded) used for VIP/emergency prefs scoping. */
     private fun currentCustomerIdForPrefs(): String {
         val authPrefs = getApplication<Application>().getSharedPreferences(
             com.softland.callqtv.data.local.AppSharedPreferences.AUTHENTICATION,
@@ -323,6 +510,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    /** Persists the in-memory VIP/emergency token sets into shared preferences. */
     private fun persistVipEmergencyTokensToPrefs() {
         val customerId = currentCustomerIdForPrefs()
         val snapshot = vipEmergencyTokensByKey.mapValues { (_, tokens) -> tokens.toList() }
@@ -331,6 +519,11 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
             .apply()
     }
 
+    /**
+     * Restores VIP/emergency token sets from shared preferences for the given customer id.
+     *
+     * If parsing fails or the prefs entry is missing, this is a no-op.
+     */
     private fun restoreVipEmergencyTokensFromPrefs(customerId: String) {
         val json = vipEmergencyPrefs.getString(vipEmergencyPrefsStorageKey(customerId), null) ?: return
         val type = object : TypeToken<Map<String, List<String>>>() {}.type
@@ -347,12 +540,56 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Removes stored VIP/emergency token snapshot from shared preferences for the customer. */
     private fun clearVipEmergencyTokensPrefs(customerId: String) {
         vipEmergencyPrefs.edit().remove(vipEmergencyPrefsStorageKey(customerId)).apply()
     }
 
     @Volatile
     private var isHistoryLoaded = false
+
+    @Volatile
+    private var uiReadyForTokenUiEvents = false
+
+    private data class PendingTokenUiEvent(
+        val channel: Channel<TokenUiEvent>,
+        val event: TokenUiEvent,
+    )
+
+    private val pendingTokenUiEvents = ConcurrentLinkedQueue<PendingTokenUiEvent>()
+
+    /**
+     * When false, token announcement/replace events are held until the UI opens the gate on cold start.
+     * Opening the gate does not flush held events — call [flushHeldTokenUiEvents] once counter routing
+     * is available so flushed tokens can be announced (important after APK upgrade / config reload).
+     */
+    fun setPayloadUiReady(ready: Boolean) {
+        uiReadyForTokenUiEvents = ready
+        if (ready) {
+            publishTokensSnapshot()
+        }
+    }
+
+    /** Delivers tokens that were held while [setPayloadUiReady] was false (FIFO). */
+    fun flushHeldTokenUiEvents() {
+        if (!uiReadyForTokenUiEvents) return
+        flushPendingTokenUiEvents()
+    }
+
+    fun heldTokenUiEventCount(): Int = pendingTokenUiEvents.size
+
+    /** Returns whether the UI is ready to receive/enqueue token UI events. */
+    fun isPayloadUiReady(): Boolean = uiReadyForTokenUiEvents
+
+    /** Suspends until persisted token history has been merged into the in-memory map (cold start). */
+    suspend fun awaitHistoryLoaded(timeoutMs: Long = 30_000L) {
+        if (isHistoryLoaded) return
+        withTimeoutOrNull(timeoutMs) {
+            while (!isHistoryLoaded) {
+                delay(50L)
+            }
+        }
+    }
 
     /**
      * Deduplicate rapid MQTT messages. Returns true if announced within the last 2 seconds.
@@ -379,6 +616,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Updates the “announced recently” timestamp for [counterKey] + [token]. */
     fun markAsAnnounced(counterKey: String, token: String) {
         val key = "${counterKey.trim()}_${token.trim()}"
         announcedTokenTimestamps[key] = System.currentTimeMillis()
@@ -390,10 +628,17 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Publishes current token history map into the UI channel (`tokenUpdateChannel`). */
     fun publishTokensSnapshot() {
         _tokensPerCounter.postValue(internalTokenMap.toMap())
     }
 
+    /**
+     * Loads persisted token history from repositories and merges it into the in-memory map.
+     *
+     * Also restores VIP/emergency tokens from prefs and applies the currently configured
+     * token history retention limit.
+     */
     fun loadPersistedHistory() {
         viewModelScope.launch(Dispatchers.IO) {
             val customerId = run {
@@ -444,6 +689,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Kicks off async clearing of in-memory and persisted token history. */
     fun clearTokenHistory() {
         viewModelScope.launch(Dispatchers.IO) {
             clearTokenHistorySync()
@@ -477,201 +723,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private suspend fun clearTokensForResolvedCounter(serial: String, routeIndex: String) {
-        val trimmedRoute = routeIndex.trim()
-        val resolved =
-            if (trimmedRoute.isNotEmpty()) resolveCounterIdentityFromSerial(serial, trimmedRoute) else null
-        val storageKey = resolved?.storageKey?.trim().orEmpty()
-        val counterLabel = resolved?.counterLabel?.trim().orEmpty()
-        val aliasKeys =
-            if (trimmedRoute.isNotEmpty()) resolveClrInternalMapAliasKeys(serial, trimmedRoute) else emptySet()
-        val keypadKeys = collectTokenMapKeysForClrKeypad(serial, trimmedRoute)
-        val keysToClear = linkedSetOf<String>().apply {
-            add(storageKey)
-            add(counterLabel)
-            if (trimmedRoute.isNotEmpty()) add(trimmedRoute)
-            addAll(aliasKeys)
-            addAll(keypadKeys)
-        }.map { it.trim() }.filter { it.isNotBlank() }.distinct()
-
-        if (keysToClear.isEmpty()) {
-            android.util.Log.d(
-                "MqttViewModel",
-                "CLR: no token map keys for serial='$serial' route='$trimmedRoute' (check tv_config keypads for this SN)"
-            )
-            return
-        }
-
-        stateMutex.withLock {
-            var changed = false
-            keysToClear.forEach { key ->
-                changed = internalTokenMap.remove(key) != null || changed
-                announcedTokenTimestamps.entries.removeIf { it.key.startsWith("${key}_") }
-                queuedTokenTimestamps.entries.removeIf { it.key.startsWith("${key}_") }
-                vipEmergencyTokensByKey.remove(key)
-            }
-            postVipEmergencyTokensSnapshot()
-            tokenHistoryRepo.clearCounterKeys(keysToClear)
-            clearQueuedPayloadsForCounter(serial, trimmedRoute)
-
-            if (!changed) {
-                android.util.Log.w(
-                    "MqttViewModel",
-                    "CLR cleared DB/history for keys=$keysToClear but no in-memory token map entries matched " +
-                        "(serial=$serial route='$trimmedRoute')"
-                )
-            }
-            _tokensPerCounter.postValue(internalTokenMap.toMap())
-        }
-    }
-
-    /**
-     * Builds every [internalTokenMap] key that may hold tokens for counters mapped to [serial] in
-     * [TvConfigEntity.keypadsJson]. Uses [routeIndex] when it matches `keypad_index` on a counter entry
-     * (payload route still selects the row); cleared keys include `button_index` and legacy aliases.
-     * If nothing matches (or [routeIndex] is blank), every counter under that keypad is included.
-     */
-    private suspend fun collectTokenMapKeysForClrKeypad(serial: String, routeIndex: String): Set<String> {
-        return withContext(Dispatchers.IO) {
-            try {
-                val app = getApplication<Application>()
-                val authPrefs = app.getSharedPreferences(
-                    com.softland.callqtv.data.local.AppSharedPreferences.AUTHENTICATION,
-                    Context.MODE_PRIVATE
-                )
-                val customerId = String.format(
-                    java.util.Locale.ROOT,
-                    "%04d",
-                    authPrefs.getInt(com.softland.callqtv.utils.PreferenceHelper.customer_id, 0)
-                )
-                val macAddress = com.softland.callqtv.utils.Variables.getMacId(app)
-                val counters = counterDao.getByMacAndCustomer(macAddress, customerId)
-                val cfg = tvConfigDao.getByMacAndCustomer(macAddress, customerId)
-                val keypads = cfg?.keypadsJson?.let { json ->
-                    val type = object : TypeToken<List<KeypadConfig>>() {}.type
-                    gson.fromJson<List<KeypadConfig>>(json, type) ?: emptyList()
-                }.orEmpty()
-
-                val keypad = keypads.firstOrNull {
-                    it.keypadSn?.trim().equals(serial.trim(), ignoreCase = true)
-                } ?: return@withContext emptySet()
-
-                val configs = keypad.counters.orEmpty()
-                if (configs.isEmpty()) return@withContext emptySet()
-
-                val route = routeIndex.trim()
-                val matching = when {
-                    route.isEmpty() -> configs
-                    else -> configs.filter { counterConfigMatchesRoute(it, route) }
-                }
-
-                val keys = linkedSetOf<String>()
-                matching.forEach { cc -> keys.addAll(counterConfigToInternalMapKeys(cc, counters)) }
-                keys
-            } catch (_: Exception) {
-                emptySet()
-            }
-        }
-    }
-
-    private fun counterConfigToInternalMapKeys(cc: CounterConfig, counters: List<CounterEntity>): Set<String> {
-        val entity = counters.firstOrNull { counter ->
-            counterEntityMatchesKeypadCounter(counter, cc)
-        }
-        return buildSet {
-            cc.buttonIndex?.let { add(it.toString()) }
-            entity?.buttonIndex?.let { add(it.toString()) }
-            cc.keypadIndex?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
-            entity?.keypadIndex?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
-            entity?.counterId?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
-            cc.counterId?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
-        }
-    }
-
-    /**
-     * All [internalTokenMap] key variants for the counter targeted by a CLR (same order as token UI storage).
-     */
-    private suspend fun resolveClrInternalMapAliasKeys(serial: String, routeIndex: String): Set<String> {
-        return withContext(Dispatchers.IO) {
-            try {
-                val app = getApplication<Application>()
-                val authPrefs = app.getSharedPreferences(
-                    com.softland.callqtv.data.local.AppSharedPreferences.AUTHENTICATION,
-                    android.content.Context.MODE_PRIVATE
-                )
-                val customerId = String.format(
-                    java.util.Locale.ROOT,
-                    "%04d",
-                    authPrefs.getInt(com.softland.callqtv.utils.PreferenceHelper.customer_id, 0)
-                )
-                val macAddress = com.softland.callqtv.utils.Variables.getMacId(app)
-                val counters = counterDao.getByMacAndCustomer(macAddress, customerId)
-                val cfg = tvConfigDao.getByMacAndCustomer(macAddress, customerId)
-                val keypads = cfg?.keypadsJson?.let { json ->
-                    val type = object : TypeToken<List<KeypadConfig>>() {}.type
-                    gson.fromJson<List<KeypadConfig>>(json, type) ?: emptyList()
-                }.orEmpty()
-
-                val keypadCounter = keypads
-                    .firstOrNull { it.keypadSn?.trim().equals(serial.trim(), ignoreCase = true) }
-                    ?.counters
-                    ?.firstOrNull { counterConfigMatchesRoute(it, routeIndex) }
-
-                val matched = keypadCounter?.let { cc ->
-                    counters.firstOrNull { counter -> counterEntityMatchesKeypadCounter(counter, cc) }
-                } ?: counters.firstOrNull { counterEntityMatchesRoute(it, routeIndex) }
-
-                if (matched == null) return@withContext emptySet()
-
-                buildSet {
-                    matched.buttonIndex?.let { add(it.toString()) }
-                    keypadCounter?.buttonIndex?.let { add(it.toString()) }
-                    matched.keypadIndex?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
-                    keypadCounter?.keypadIndex?.trim()?.takeIf { it.isNotBlank() }?.let { add(it) }
-                    if (routeIndex.isNotBlank()) add(routeIndex.trim())
-                }
-            } catch (_: Exception) {
-                emptySet()
-            }
-        }
-    }
-
-    private fun clearQueuedPayloadsForCounter(serial: String, routeIndex: String) {
-        val route = routeIndex.trim()
-        queuedPayloadTimestamps.entries.removeIf { entry ->
-            val payloadSerial = KeypadPayloadParser.extractKeypadSerial(entry.key) ?: return@removeIf false
-            if (!payloadSerial.trim().equals(serial.trim(), ignoreCase = true)) return@removeIf false
-            if (route.isEmpty()) return@removeIf true
-            payloadMatchesResolvedCounter(
-                payload = entry.key,
-                serial = serial,
-                routeIndex = route,
-            )
-        }
-    }
-
-    private fun payloadMatchesResolvedCounter(
-        payload: String,
-        serial: String,
-        routeIndex: String
-    ): Boolean {
-        val payloadSerial = KeypadPayloadParser.extractKeypadSerial(payload) ?: return false
-        if (!payloadSerial.trim().equals(serial.trim(), ignoreCase = true)) return false
-
-        KeypadPayloadParser.extractClearPayloadInfo(payload)?.let { clearInfo ->
-            return routeMatches(clearInfo.routeIndex, routeIndex)
-        }
-
-        // Fixed frames route by keypad SN only; once serial matches, include in CLR dedupe reset.
-        if (SemanticMqttParser.parseFixedPayload(payload) != null) {
-            return true
-        }
-
-        // Legacy payloads do not consistently expose a separate route index, so once the
-        // serial matches we allow them through again after a CLR-triggered reset.
-        return true
-    }
-
+    /** Runs daily cleanup for persisted token record storage (best-effort). */
     private fun performRecordsCleanup() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -755,6 +807,12 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Initializes MQTT for the given broker and starts connecting/subscribing.
+     *
+     * Called after config sync/reconcile to ensure each broker uses the right
+     * host/topic/credentials/clientId/qos, and to start the retry/reachability/watchdog logic.
+     */
     fun initAndConnect(
         serverUri: String,
         clientId: String,
@@ -762,201 +820,40 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         password: String?,
         topic: String,
         qos: Int,
-        context: android.content.Context
+        context: android.content.Context,
     ) {
         val newDetails = MqttConnectionDetails(serverUri, clientId, username, password, topic, qos)
         val previousDetails = connectionDetailsMap[serverUri]
         connectionDetailsMap[serverUri] = newDetails
 
-        val existing = managers[serverUri]
-        if (existing != null) {
-            if (existing.clientId == clientId && previousDetails == newDetails) {
-                existing.subscribe(topic, qos)
-                if (existing.isConnected()) {
-                    // Already connected: make sure UI does NOT show "connecting..."
-                    stopConnectTimer()
-                    updateStatus(serverUri, true)
-                } else {
-                    // Not connected yet: trigger a new connect attempt and timer
-                    startConnectTimer()
-                    if (!existing.isConnectingNow()) {
-                        existing.connect(username, password)
-                    }
-                }
-                return
-            }
-            detachBrokerSync(serverUri)
+        val reconnectHost = object : MqttBrokerConnector.ReconnectHost {
+            override fun stopConnectTimer() = this@MqttViewModel.stopConnectTimer()
+            override fun startConnectTimer() = this@MqttViewModel.startConnectTimer()
+            override fun updateStatus(connected: Boolean) = updateStatus(serverUri, connected)
+            override fun detachBroker() = detachBrokerSync(serverUri)
+        }
+        when (
+            MqttBrokerConnector.handleExistingManager(
+                existing = managers[serverUri],
+                clientId = clientId,
+                previousDetails = previousDetails,
+                newDetails = newDetails,
+                topic = topic,
+                qos = qos,
+                username = username,
+                password = password,
+                host = reconnectHost,
+            )
+        ) {
+            MqttBrokerConnector.ExistingManagerResult.Reattached -> return
+            MqttBrokerConnector.ExistingManagerResult.MustReplace -> Unit
         }
 
         val manager = MqttClientManager(context.applicationContext, serverUri, clientId).apply {
-            setMqttListener(object : MqttClientManager.MqttListener {
-                override fun onAnyIncomingMqttTraffic() {
-                    lastMessageAtByServerUri[serverUri] = System.currentTimeMillis()
-                    staleTrafficStrikeByServerUri[serverUri] = 0
-                }
-
-                override fun onMessageReceived(topic: String, message: String) {
-                    // Treat any payload traffic on subscribed topic as broker liveness.
-                    // This prevents false "disconnected" flips when payload is non-business.
-                    lastMessageAtByServerUri[serverUri] = System.currentTimeMillis()
-                    staleTrafficStrikeByServerUri[serverUri] = 0
-                    val trimmed = message.trim()
-                    android.util.Log.i("MQTT_PAYLOAD_IN", trimmed)
-                    logMqttToFileThrottled(
-                        key = "MQTT_PAYLOAD_IN:$serverUri",
-                        tag = "MQTT_PAYLOAD_IN",
-                        message = trimmed,
-                        minIntervalMs = 0L
-                    )
-
-                    if (isLicenseExpired) return
-                    // Enqueue ALL raw payloads first, without any filtering.
-                    rawMessageQueue.add(trimmed)
-                    // Simple bound to avoid unbounded growth in extreme cases.
-                    while (rawMessageQueue.size > 2000) {
-                        rawMessageQueue.poll()
-                    }
-
-                    // Offload validation/processing to background so MQTT callback stays fast.
-                    viewModelScope.launch(Dispatchers.Default) {
-                        // Business filters operate on the queued payload content, but serial matching
-                        // itself must remain dynamic and come from the keypad records in local storage.
-                        if (!trimmed.startsWith("$")) return@launch
-                        val extractedKeypadSerial = KeypadPayloadParser.extractKeypadSerial(trimmed)
-                        val clearInfo = KeypadPayloadParser.extractClearPayloadInfo(trimmed)
-                        val containsClr = trimmed.contains("CLR", ignoreCase = true)
-                        // Accept both the newer fixed payloads and the older short keypad format.
-                        if (trimmed.length < 24 && extractedKeypadSerial == null && !containsClr) return@launch
-                        val isValidKeypadPayload = isValidKeypadMessage(trimmed)
-
-                        // CLR-triggered config refresh path:
-                        // e.g. "$02026bCAL0K0007001CLR0*"
-                        // Only trigger when keypad serial is valid for this device/customer.
-                        if (containsClr) {
-                            if (!isValidKeypadPayload) {
-                                android.util.Log.d(
-                                    "MQTT_PAYLOAD_IN",
-                                    "Ignored CLR refresh trigger: Keypad serial mismatch or device not found $trimmed"
-                                )
-                                return@launch
-                            }
-                            // Refresh-only payloads are still valid keypad messages and must be audited.
-                            saveIncomingMqttPayload(trimmed)
-                            _receivedMessage.postValue(trimmed)
-                            _lastPayload.postValue(trimmed)
-                            val clrSerial = clearInfo?.serial ?: extractedKeypadSerial
-                            if (!clrSerial.isNullOrBlank()) {
-                                // Route digit matches button_index or keypad_index; only that counter's tokens are cleared.
-                                clearTokensForResolvedCounter(
-                                    clrSerial,
-                                    clearInfo?.routeIndex.orEmpty(),
-                                )
-                            } else {
-                                android.util.Log.w(
-                                    "MQTT_PAYLOAD_IN",
-                                    "CLR accepted but could not extract keypad serial from payload: $trimmed"
-                                )
-                            }
-                            markPayloadDisplayed(trimmed)
-                            requestConfigRefresh(
-                                "MQTT refresh trigger detected (payload contains CLR)",
-                                forceImmediate = true,
-                            )
-                            return@launch
-                        }
-
-                        // Business rule: ignore responses where the 17th character is '0'
-                        if (trimmed[16] == '0') {
-                            if (isValidKeypadPayload) {
-                                // Keep payload-log behavior aligned with the SRS even when the message exits early.
-                                saveIncomingMqttPayload(trimmed)
-                            }
-                            requestConfigRefresh("MQTT refresh trigger detected (17th char '0')")
-                            return@launch
-                        }
-
-                        // Validate against Keypad Serial Number (runs on IO dispatcher internally)
-                        if (!isValidKeypadPayload) {
-                            android.util.Log.d(
-                                "MQTT_PAYLOAD_IN",
-                                "Ignored message: Keypad serial mismatch or device not found $trimmed"
-                            )
-                            return@launch
-                        }
-
-                        // Save only keypad-validated payloads (received timestamp is stored here).
-                        saveIncomingMqttPayload(trimmed)
-
-                        android.util.Log.i(
-                            "MQTT_PAYLOAD_IN",
-                            "!!! VERIFIED MQTT MESSAGE !!! Topic: [$topic], Payload: $trimmed"
-                        )
-
-                        _receivedMessage.postValue(trimmed)
-                        _lastPayload.postValue(trimmed)
-
-                        // Parse and route token in the same coroutine to avoid extra launches
-                        parseMqttMessage(topic, trimmed)
-                    }
-                }
-
-                override fun onConnectionStatus(isConnected: Boolean) {
-                    updateStatus(serverUri, isConnected)
-                    if (isConnected) {
-                        // Grace period until first PING/token: treat connect time as last activity.
-                        lastMessageAtByServerUri[serverUri] = System.currentTimeMillis()
-                        staleReconnectInFlight.remove(serverUri)
-                        startMessageLivenessWatchdog()
-                        everConnected[serverUri] = true
-                        
-                        // Check if we can stop the global timer
-                        stopConnectTimer()
-
-                        _isAutoRetryExhausted.postValue(false)
-                        _errorMessage.postValue("")
-                        // Connection success: reset backoff for this broker; UI shows max of others still failing.
-                        retryAttempts[serverUri] = 0
-                        retryJobs[serverUri]?.cancel()
-                        _mqttRetryAttempt.postValue(retryAttempts.values.maxOrNull() ?: 0)
-
-                        startContinuousPublishLoop()
-                    } else {
-                        // Keep timer running as long as at least one broker is out.
-                        startConnectTimer()
-                        stopContinuousPublishLoop()
-                        scheduleReconnect(serverUri)
-                    }
-                }
-
-                override fun onError(error: String, code: Int?) {
-                    // Log the error to a date-wise file instead of showing it in the UI.
-                    val logTag = "MQTT_ERROR"
-                    val logMessage = if (code != null) "[$serverUri] $error (Code: $code)" else "[$serverUri] $error"
-                    logMqttToFileThrottled(
-                        key = "$logTag:$serverUri",
-                        tag = logTag,
-                        message = logMessage,
-                        minIntervalMs = 15_000L
-                    )
-
-                    // Stop surfacing specific MQTT errors to the UI per user request.
-                    // We keep the LiveData for state if needed, but we clear it or just don't update it.
-                    _errorMessage.postValue("")
-
-                    incrementMqttRetryAttemptCounter(serverUri)
-                    scheduleReconnect(serverUri)
-                }
-
-                override fun onAutoRetryExhausted() {
-                    stopConnectTimer()
-                    _isAutoRetryExhausted.postValue(true)
-                }
-            })
+            setMqttListener(MqttBrokerListenerFactory.create(createBrokerCallbacks(serverUri)))
         }
 
-        // Start/ensure a reachability monitor for this broker host/port.
         startReachabilityMonitor(serverUri)
-
         startConnectTimer()
         managers[serverUri] = manager
         manager.subscribe(topic, qos)
@@ -964,138 +861,99 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Extracts the keypad serial number from a raw MQTT message.
+     * Factory for per-broker callbacks that forward MQTT events into this ViewModel.
      *
-     * Expected format (example): "$02026bCAL0K00071100030*"
-     * After removing '$' and '*', we get: "02026bCAL0K00071100030"
-     * The actual serial is characters 1..15 (Kotlin endIndex exclusive): "2026bCAL0K0007"
+     * These callbacks update connection status, enqueue raw payloads, and process inbound
+     * payloads in the background pipeline.
      */
-    private fun extractKeypadSerial(message: String): String? {
-        return KeypadPayloadParser.extractKeypadSerial(message)
-    }
+    private fun createBrokerCallbacks(serverUri: String): MqttBrokerCallbacks =
+        object : MqttBrokerCallbacks {
+            override val serverUri: String = serverUri
 
-    private fun normalizeKeypadSerial(serial: String): String =
-        MqttCounterRouteKeys.normalizeKeypadSerial(serial)
+            override fun isLicenseExpired(): Boolean = this@MqttViewModel.isLicenseExpired
 
-    /**
-     * True only when [serial] is registered for this TV (MAC + customer) in local DB:
-     * `connected_devices` KEYPAD rows and `tv_config.keypadsJson` → `keypad_sn`.
-     */
-    private suspend fun isRegisteredKeypadSerial(serial: String): Boolean {
-        val normalized = normalizeKeypadSerial(serial)
-        if (normalized.isBlank()) return false
-        return withContext(Dispatchers.IO) {
-            ensureKeypadSerialCache()
-            stateMutex.withLock { keypadSerials.contains(normalized) }
-        }
-    }
+            override fun onAnyIncomingTraffic() {
+                lastMessageAtByServerUri[serverUri] = System.currentTimeMillis()
+                staleTrafficStrikeByServerUri[serverUri] = 0
+            }
 
-    /**
-     * Payload is processed only when its extracted keypad serial matches the database.
-     * All UI updates, token history, payload logs, and token_records go through this gate.
-     */
-    private suspend fun isValidKeypadMessage(message: String): Boolean {
-        val serialInMessage = extractKeypadSerial(message) ?: return false
-        val valid = isRegisteredKeypadSerial(serialInMessage)
-        if (!valid) {
-            android.util.Log.d(
-                "MqttViewModel",
-                "Keypad serial not in database: ${normalizeKeypadSerial(serialInMessage)} payload=${message.take(80)}"
-            )
-        }
-        return valid
-    }
-
-    /**
-     * Populates the in-memory keypad serial cache from the connected_devices table.
-     * Called on-demand from the IO dispatcher; safe to call repeatedly.
-     */
-    private suspend fun ensureKeypadSerialCache() {
-        if (keypadSerialsLoaded) return
-
-        stateMutex.withLock {
-            if (keypadSerialsLoaded) return
-
-            try {
-                val app = getApplication<Application>()
-                val authPrefs = app.getSharedPreferences(
-                    com.softland.callqtv.data.local.AppSharedPreferences.AUTHENTICATION,
-                    android.content.Context.MODE_PRIVATE
-                )
-                val customerId = String.format(
-                    java.util.Locale.ROOT,
-                    "%04d",
-                    authPrefs.getInt(com.softland.callqtv.utils.PreferenceHelper.customer_id, 0)
-                )
-                val macAddress = com.softland.callqtv.utils.Variables.getMacId(app)
-
-                val devices = connectedDeviceDao.getByMacAndCustomer(macAddress, customerId)
-                val tvConfig = tvConfigDao.getByMacAndCustomer(macAddress, customerId)
-
-                keypadSerials.clear()
-                devices.forEach { device ->
-                    if (device.deviceType?.trim().equals("KEYPAD", ignoreCase = true)) {
-                        device.serialNumber
-                            ?.trim()
-                            ?.takeIf { it.isNotEmpty() }
-                            ?.let { keypadSerials.add(normalizeKeypadSerial(it)) }
-
-                        // Also inspect configJson once to capture any additional embedded serials.
-                        val cfg = device.configJson
-                        if (!cfg.isNullOrBlank()) {
-                            // Very lightweight scan: look for CAL0K-style serials and cache them.
-                            val regex = "20[0-9A-Za-z]{11}".toRegex()
-                            regex.findAll(cfg).forEach { m ->
-                                keypadSerials.add(normalizeKeypadSerial(m.value))
-                            }
-                        }
-                    }
-                }
-
-                tvConfig?.keypadsJson?.let { json ->
-                    val type = object : TypeToken<List<KeypadConfig>>() {}.type
-                    val keypads = gson.fromJson<List<KeypadConfig>>(json, type) ?: emptyList()
-                    keypads.forEach { keypad ->
-                        keypad.keypadSn
-                            ?.trim()
-                            ?.takeIf { it.isNotEmpty() }
-                            ?.let { keypadSerials.add(normalizeKeypadSerial(it)) }
-                    }
-                }
-
-                keypadSerialsLoaded = true
-                android.util.Log.i(
-                    "MqttViewModel",
-                    "Keypad serial cache loaded (${keypadSerials.size} SNs) for MAC=$macAddress customer=$customerId"
-                )
-            } catch (e: Exception) {
-                android.util.Log.w(
-                    "MqttViewModel",
-                    "Failed to build keypad serial cache: ${e.message}"
+            override fun logPayloadIn(trimmed: String) {
+                logMqttToFileThrottled(
+                    key = "MQTT_PAYLOAD_IN:$serverUri",
+                    tag = "MQTT_PAYLOAD_IN",
+                    message = trimmed,
+                    minIntervalMs = 0L,
                 )
             }
+
+            override fun enqueueRawPayload(trimmed: String) {
+                rawMessageQueue.add(trimmed)
+                while (rawMessageQueue.size > 2000) {
+                    rawMessageQueue.poll()
+                }
+            }
+
+            override fun launchBackground(block: suspend () -> Unit) {
+                viewModelScope.launch(Dispatchers.Default) { block() }
+            }
+
+            override suspend fun processInboundPayload(topic: String, trimmed: String) {
+                processInboundMqttPayload(topic, trimmed)
+            }
+
+            override fun onConnectionStatus(isConnected: Boolean) {
+                updateStatus(serverUri, isConnected)
+                if (isConnected) {
+                    lastMessageAtByServerUri[serverUri] = System.currentTimeMillis()
+                    staleReconnectInFlight.remove(serverUri)
+                    startMessageLivenessWatchdog()
+                    everConnected[serverUri] = true
+                    stopConnectTimer()
+                    _isAutoRetryExhausted.postValue(false)
+                    _errorMessage.postValue("")
+                    retryAttempts[serverUri] = 0
+                    retryJobs[serverUri]?.cancel()
+                    _mqttRetryAttempt.postValue(retryAttempts.values.maxOrNull() ?: 0)
+                    startContinuousPublishLoop()
+                } else {
+                    startConnectTimer()
+                    stopContinuousPublishLoop()
+                    if (managers[serverUri]?.isConnectingNow() != true) {
+                        scheduleReconnect(serverUri)
+                    }
+                }
+            }
+
+            override fun onBrokerError(error: String, code: Int?) {
+                val logMessage = if (code != null) "[$serverUri] $error (Code: $code)" else "[$serverUri] $error"
+                logMqttToFileThrottled(
+                    key = "MQTT_ERROR:$serverUri",
+                    tag = "MQTT_ERROR",
+                    message = logMessage,
+                    minIntervalMs = 15_000L,
+                )
+                _errorMessage.postValue("")
+                incrementMqttRetryAttemptCounter(serverUri)
+                if (managers[serverUri]?.isConnectingNow() != true) {
+                    scheduleReconnect(serverUri)
+                }
+            }
+
+            override fun onAutoRetryExhausted() {
+                stopConnectTimer()
+                _isAutoRetryExhausted.postValue(true)
+            }
         }
+
+    /** Routes an inbound MQTT payload (already verified by the MQTT layer) into the payload router. */
+    private suspend fun processInboundMqttPayload(topic: String, trimmed: String) {
+        inboundPayloadRouter.process(topic, trimmed)
     }
 
-    /**
-     * Allows other parts of the app (e.g., after TV config refresh) to invalidate the
-     * keypad serial cache so it will be rebuilt on the next keypad message.
-     */
+    /** Clears keypad serial registration cache so subsequent routing re-reads DB/config. */
     fun invalidateKeypadSerialCache() {
         invalidateCounterRoutingCache()
-        stateMutex.tryLock()?.let { lockAcquired ->
-            try {
-                if (lockAcquired) {
-                    keypadSerials.clear()
-                    keypadSerialsLoaded = false
-                }
-            } finally {
-                if (lockAcquired) stateMutex.unlock()
-            }
-        } ?: run {
-            // If mutex is busy, fall back to simple volatile flag reset; cache will be refilled later.
-            keypadSerialsLoaded = false
-        }
+        keypadSerialRegistry.invalidate()
     }
 
     /** Clears serial+route → counter resolution cache (e.g. after TV config sync). */
@@ -1103,6 +961,11 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         counterRouteCache.invalidate()
     }
 
+    /**
+     * Triggers a manual MQTT reconnect attempt.
+     *
+     * If [resetAttempts] is true, it resets per-broker retry counters before reconnecting.
+     */
     fun retryConnect(resetAttempts: Boolean = false) {
         _errorMessage.postValue("")
         _isAutoRetryExhausted.postValue(false)
@@ -1146,6 +1009,13 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Updates connection/liveness state for a specific broker.
+     *
+     * Besides the per-broker connection map, it derives:
+     * - aggregated BLUCON connected state (connected OR recent traffic)
+     * - reachability flag used by the UI header icon
+     */
     private fun updateStatus(serverUri: String, isConnected: Boolean) {
         viewModelScope.launch {
             stateMutex.withLock {
@@ -1160,6 +1030,9 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 // BLUCON should be considered connected if ANY configured broker is connected
                 // or if we are still receiving recent MQTT traffic.
                 _connectionStatus.postValue(current.values.any { it } || hasRecentTraffic)
+                // Header BLUCON icon: update immediately on connect/disconnect (not only on 5s poll).
+                reachabilityStatusMap[serverUri] = isConnected
+                _isBrokerReachable.postValue(reachabilityStatusMap.values.any { it })
             }
         }
     }
@@ -1179,6 +1052,13 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
     private fun scheduleReconnect(serverUri: String, immediate: Boolean = false) {
         if (connectionDetailsMap[serverUri] == null) return
         if (managers[serverUri]?.isConnected() == true) return
+        if (managers[serverUri]?.isConnectingNow() == true) {
+            android.util.Log.d(
+                "MqttViewModel",
+                "Skipping reconnect schedule for $serverUri: connect already in progress.",
+            )
+            return
+        }
         retryJobs[serverUri]?.cancel()
         val attempt = retryAttempts[serverUri] ?: 0
         val delayMs = if (immediate) {
@@ -1227,36 +1107,14 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun reconnectDelayMs(attempt: Int, afterFirstSuccess: Boolean): Long {
-        val lowNetwork = isLowBandwidthNetwork()
-        return if (afterFirstSuccess) {
-            when {
-                attempt <= 0 -> 0L
-                attempt == 1 -> 500L
-                attempt == 2 -> 1_500L
-                attempt == 3 -> 3_000L
-                else -> 5_000L
-            }
-        } else if (lowNetwork) {
-            when {
-                attempt <= 0 -> 0L
-                attempt == 1 -> 2_000L
-                attempt == 2 -> 5_000L
-                attempt == 3 -> 10_000L
-                attempt == 4 -> 15_000L
-                else -> 20_000L
-            }
-        } else {
-            when {
-                attempt <= 0 -> 0L
-                attempt == 1 -> 1_000L
-                attempt == 2 -> 2_000L
-                attempt == 3 -> 4_000L
-                attempt == 4 -> 6_000L
-                else -> 8_000L
-            }
-        }
-    }
+    /**
+     * Returns a reconnect backoff delay for the given retry stage.
+     *
+     * The value comes from [MqttReconnectPolicy] and is adjusted for the current network
+     * bandwidth tier.
+     */
+    private fun reconnectDelayMs(attempt: Int, afterFirstSuccess: Boolean): Long =
+        MqttReconnectPolicy.reconnectDelayMs(attempt, afterFirstSuccess, isLowBandwidthNetwork())
 
     /**
      * Updates broker reachability from MQTT connection status only.
@@ -1295,8 +1153,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
 
         continuousPublishJob = viewModelScope.launch(Dispatchers.IO) {
             while (isActive) {
-                    ensureKeypadSerialCache()
-                    val serials = stateMutex.withLock { keypadSerials.toList() }
+                    val serials = keypadSerialRegistry.registeredSerialsSnapshot()
 
                     if (serials.isNotEmpty()) {
                         managers.forEach { (serverUri, manager) ->
@@ -1334,6 +1191,12 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Removes a broker manager from this ViewModel.
+     *
+     * This is a thin wrapper that detaches broker state while holding the internal
+     * state mutex to keep connection/job maps consistent.
+     */
     private fun removeManager(serverUri: String) {
         viewModelScope.launch {
             stateMutex.withLock {
@@ -1342,6 +1205,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Detaches all MQTT state for the given broker and cancels scheduled jobs. */
     private fun detachBrokerSync(serverUri: String) {
         retryJobs[serverUri]?.cancel()
         retryJobs.remove(serverUri)
@@ -1367,13 +1231,21 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         _connectionStatus.postValue(anyConnected || hasRecentTraffic)
     }
 
+    /** Detaches broker while holding stateMutex (safe internal helper). */
     private fun detachBrokerLocked(serverUri: String) {
         detachBrokerSync(serverUri)
     }
 
+    /** Converts a broker endpoint into runtime MQTT connection details for the client. */
     private fun BrokerEndpoint.toMqttConnectionDetails(): MqttConnectionDetails =
         MqttConnectionDetails(serverUri, clientId, username, password, topic, qos)
 
+    /**
+     * Inserts/moves a token to the top of the history list for [counter].
+     *
+     * Returns `true` when the UI layer should announce/play cues (e.g. when the token
+     * becomes the new top token and passes suppression rules).
+     */
     suspend fun processTokenUpdate(counter: String, token: String): Boolean {
         val trimmedCounter = counter.trim()
         val trimmedToken = token.trim()
@@ -1458,13 +1330,11 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 list.removeAll { it.contains("__MSG__", ignoreCase = false) }
                 val existingPosition = list.indexOf(trimmedToken)
 
-                // If it's already the most recent for this key
+                // Already at top: still announce when this counter's UI event is processed
+                // (sequential queue handles one full chime + speech cycle per MQTT event).
                 if (existingPosition == 0) {
                     if (key == trimmedPrimary) {
-                        val lastTime = announcedTokenTimestamps["${key}_$trimmedToken"] ?: 0L
-                        if (System.currentTimeMillis() - lastTime > 10000L) {
-                            shouldAnnounce = true
-                        }
+                        shouldAnnounce = true
                     }
                     if (list != priorStored) {
                         internalTokenMap[key] = trimTokenHistory(list)
@@ -1562,6 +1432,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Persists the given token to the token history repository asynchronously. */
     private fun persistToken(key: String, token: String) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -1572,112 +1443,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * Parses a verified MQTT message and enqueues token updates for processing.
-     * Runs on a background dispatcher (caller responsibility).
-     */
-    private suspend fun parseMqttMessage(topic: String, message: String) {
-        try {
-            val payloadSerial = extractKeypadSerial(message)?.let { normalizeKeypadSerial(it) }
-            if (payloadSerial.isNullOrBlank() || !isRegisteredKeypadSerial(payloadSerial)) {
-                android.util.Log.d(
-                    "MQTT_PAYLOAD_IN",
-                    "parseMqttMessage skipped: keypad serial not registered (${payloadSerial ?: "missing"})"
-                )
-                return
-            }
-
-            val fixed = SemanticMqttParser.parseFixedPayload(message)
-            if (fixed != null) {
-                val fixedSerial = normalizeKeypadSerial(fixed.serial)
-                if (fixedSerial != payloadSerial || !isRegisteredKeypadSerial(fixedSerial)) {
-                    android.util.Log.w(
-                        "MQTT_PAYLOAD_IN",
-                        "parseMqttMessage skipped: fixed-protocol serial mismatch payload=$payloadSerial fixed=$fixedSerial"
-                    )
-                    return
-                }
-                val identity = resolveCounterIdentityFromSerial(fixed.serial)
-                if (identity == null) {
-                    android.util.Log.w(
-                        "MQTT_PAYLOAD_IN",
-                        "No counter for keypad_sn=${normalizeKeypadSerial(fixed.serial)} — UI not updated"
-                    )
-                    return
-                }
-                val routedCounter = identity.storageKey
-                val token = if (fixed.action == SemanticMqttParser.PayloadAction.REPLACE_COUNTER) {
-                    resolveButtonStringValue(fixed.serial, fixed.buttonStringId, fixed.token) ?: fixed.token
-                } else {
-                    fixed.token
-                }
-
-                // Keep detailed log for all valid fixed-protocol payloads.
-                saveTokenRecord(message, identity.counterLabel, token)
-
-                when (fixed.action) {
-                    SemanticMqttParser.PayloadAction.DB_ONLY -> return
-                    SemanticMqttParser.PayloadAction.REPLACE_COUNTER -> {
-                        if (shouldSuppressRepeatedPayload(message)) return
-                        enqueueTokenUiEvent(
-                            tokenReplaceChannel,
-                            TokenUiEvent(routedCounter, token, message),
-                        )
-                        return
-                    }
-                    SemanticMqttParser.PayloadAction.NORMAL -> {
-                        if (shouldSuppressRepeatedPayload(message)) return
-                        enqueueTokenUiEvent(
-                            tokenUpdateChannel,
-                            TokenUiEvent(
-                                routedCounter,
-                                token,
-                                message,
-                                isVipEmergency = fixed.isVipEmergency,
-                            ),
-                        )
-                        return
-                    }
-                }
-            }
-
-            // Semantic parsing is pure/CPU-bound; keep it on Default.
-            val result = SemanticMqttParser.parse(message, topic)
-            if (result != null) {
-                val (_, token) = result
-                if (token == "0" || token.isBlank()) return
-                val identity = resolveCounterIdentityFromSerial(payloadSerial)
-                    ?: return
-                markKeypadSeen(identity.storageKey)
-                markDispenseSeen(identity.storageKey)
-                val key = "${identity.storageKey.trim()}_${token.trim()}"
-                val now = System.currentTimeMillis()
-                val lastQueued = queuedTokenTimestamps[key] ?: 0L
-                if (now - lastQueued < 10000L) return
-                queuedTokenTimestamps[key] = now
-                if (queuedTokenTimestamps.size > 500) {
-                    queuedTokenTimestamps.entries.removeIf { now - it.value > 60000L }
-                }
-                saveTokenRecord(message, identity.counterLabel, token)
-                if (shouldSuppressRepeatedPayload(message)) return
-                enqueueTokenUiEvent(
-                    tokenUpdateChannel,
-                    TokenUiEvent(
-                        counter = identity.storageKey,
-                        token = token,
-                        payload = message,
-                    ),
-                )
-            }
-        } catch (e: Exception) {
-            // Swallow and log – a bad payload should never break the stream.
-            android.util.Log.w(
-                "MQTT_PAYLOAD_IN",
-                "Failed to parse MQTT message '$message' on topic '$topic': ${e.message}"
-            )
-        }
-    }
-
+    /** Normalizes counter identifiers into a stable numeric string key when possible. */
     private fun normalizeButtonKey(counter: String?): String? {
         val raw = counter?.trim().orEmpty()
         if (raw.isEmpty()) return null
@@ -1708,222 +1474,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         return false
     }
 
-    private suspend fun resolveCounterRouteFromSerial(serial: String, routeIndex: String): String? {
-        return resolveCounterIdentityFromSerial(serial, routeIndex)?.storageKey
-    }
-
-    /**
-     * Resolves the TV counter for token / special-message UI using [serial] only.
-     * Fixed-protocol index 18 (0-based 17) is part of the keypad SN, not `keypad_index`.
-     */
-    private suspend fun resolveCounterIdentityFromSerial(serial: String): ResolvedCounterIdentity? {
-        return resolveCounterIdentityFromSerial(serial, routeIndex = "")
-    }
-
-    private suspend fun resolveCounterIdentityFromSerial(
-        serial: String,
-        routeIndex: String,
-    ): ResolvedCounterIdentity? {
-        if (serial.isBlank()) return null
-        val scope = routingCacheScope()
-        val cacheKey = MqttCounterRouteKeys.routeCacheKey(serial, routeIndex)
-        when (val cached = counterRouteCache.lookup(scope, cacheKey)) {
-            is RouteCacheLookup.Hit -> return cached.value
-            is RouteCacheLookup.Miss -> Unit
-        }
-        val resolved = resolveCounterIdentityFromSerialUncached(serial, routeIndex)
-        counterRouteCache.store(scope, cacheKey, resolved)
-        return resolved
-    }
-
-    private suspend fun resolveCounterIdentityFromSerialUncached(
-        serial: String,
-        routeIndex: String,
-    ): ResolvedCounterIdentity? {
-        return withContext(Dispatchers.IO) {
-            try {
-                val app = getApplication<Application>()
-                val authPrefs = app.getSharedPreferences(
-                    com.softland.callqtv.data.local.AppSharedPreferences.AUTHENTICATION,
-                    android.content.Context.MODE_PRIVATE
-                )
-                val customerId = String.format(
-                    java.util.Locale.ROOT,
-                    "%04d",
-                    authPrefs.getInt(com.softland.callqtv.utils.PreferenceHelper.customer_id, 0)
-                )
-                val macAddress = com.softland.callqtv.utils.Variables.getMacId(app)
-                val counters = counterDao.getByMacAndCustomer(macAddress, customerId)
-                val cfg = tvConfigDao.getByMacAndCustomer(macAddress, customerId)
-                val keypads = cfg?.keypadsJson?.let { json ->
-                    val type = object : TypeToken<List<KeypadConfig>>() {}.type
-                    gson.fromJson<List<KeypadConfig>>(json, type) ?: emptyList()
-                }.orEmpty()
-
-                val keypad = keypads.firstOrNull {
-                    it.keypadSn?.trim().equals(serial.trim(), ignoreCase = true)
-                } ?: run {
-                    android.util.Log.d(
-                        "MqttViewModel",
-                        "resolveCounter: no keypadsJson entry for keypad_sn=${normalizeKeypadSerial(serial)}"
-                    )
-                    return@withContext null
-                }
-
-                val configs = keypad.counters.orEmpty()
-                if (configs.isEmpty()) {
-                    android.util.Log.d(
-                        "MqttViewModel",
-                        "resolveCounter: no counters[] under keypad_sn=${normalizeKeypadSerial(serial)}"
-                    )
-                    return@withContext null
-                }
-
-                val route = routeIndex.trim()
-                val keypadCounter = if (route.isNotEmpty()) {
-                    configs.firstOrNull { counterConfigMatchesRoute(it, route) }
-                } else {
-                    configs.singleOrNull()
-                        ?: configs.firstOrNull { cc ->
-                            counters.any { counterEntityMatchesKeypadCounter(it, cc) }
-                        }
-                        ?: configs.firstOrNull()
-                } ?: run {
-                    android.util.Log.d(
-                        "MqttViewModel",
-                        if (route.isNotEmpty()) {
-                            "resolveCounter: no counter with keypad_index=$route under keypad_sn=${normalizeKeypadSerial(serial)}"
-                        } else {
-                            "resolveCounter: no counter row for keypad_sn=${normalizeKeypadSerial(serial)}"
-                        }
-                    )
-                    return@withContext null
-                }
-
-                val matched = counters.firstOrNull { counter ->
-                    counterEntityMatchesKeypadCounter(counter, keypadCounter)
-                } ?: run {
-                    android.util.Log.d(
-                        "MqttViewModel",
-                        "resolveCounter: counters[] row missing for keypad_sn=${normalizeKeypadSerial(serial)}"
-                    )
-                    return@withContext null
-                }
-
-                val storageKey =
-                    (keypadCounter.buttonIndex ?: matched.buttonIndex)?.toString()?.trim()
-                        ?.takeIf { it.isNotBlank() }
-                        ?: matched.keypadIndex?.trim()?.takeIf { it.isNotBlank() }
-                        ?: keypadCounter.keypadIndex?.trim()?.takeIf { it.isNotBlank() }
-                        ?: return@withContext null
-
-                val counterLabel = matched.counterId?.trim()?.takeIf { it.isNotBlank() }
-                    ?: matched.name?.trim()?.takeIf { it.isNotBlank() }
-                    ?: matched.defaultName?.trim()?.takeIf { it.isNotBlank() }
-                    ?: keypadCounter.counterId?.trim()?.takeIf { it.isNotBlank() }
-                    ?: storageKey
-
-                android.util.Log.i(
-                    "MqttViewModel",
-                    "resolveCounter: SN=${normalizeKeypadSerial(serial)}" +
-                        (if (route.isNotEmpty()) " route=$route" else "") +
-                        " UI key(button_index)=$storageKey -> counter=$counterLabel"
-                )
-
-                ResolvedCounterIdentity(
-                    storageKey = storageKey,
-                    counterLabel = counterLabel,
-                )
-            } catch (_: Exception) {
-                null
-            }
-        }
-    }
-
-    private fun counterMatchesLabel(counter: CounterEntity, label: String): Boolean {
-        val key = label.trim()
-        if (key.isEmpty()) return false
-        return listOfNotNull(
-            counter.counterId,
-            counter.name,
-            counter.defaultName,
-            counter.code,
-            counter.defaultCode,
-        ).any { it.trim().equals(key, ignoreCase = true) }
-    }
-
-    private fun counterEntityMatchesKeypadCounter(
-        counter: CounterEntity,
-        keypadCounter: CounterConfig,
-    ): Boolean {
-        if (routeMatches(counter.keypadIndex, keypadCounter.keypadIndex.orEmpty())) return true
-        return counter.counterId?.trim().equals(keypadCounter.counterId?.trim(), ignoreCase = true) == true ||
-            counter.name?.trim().equals(keypadCounter.name?.trim(), ignoreCase = true) == true ||
-            counter.defaultName?.trim().equals(keypadCounter.defaultName?.trim(), ignoreCase = true) == true
-    }
-
-    private fun routeMatches(candidate: String?, routeIndex: String): Boolean {
-        val left = candidate?.trim().orEmpty()
-        val right = routeIndex.trim()
-        if (left.isBlank() || right.isBlank()) return false
-        if (left.equals(right, ignoreCase = true)) return true
-
-        val leftNumber = left.toIntOrNull()
-        val rightNumber = right.toIntOrNull()
-        return leftNumber != null && rightNumber != null && leftNumber == rightNumber
-    }
-
-    /** CLR route digit from payload (char before `CLR`) — matches TV config `button_index` or `keypad_index`. */
-    private fun counterConfigMatchesRoute(cc: CounterConfig, route: String): Boolean {
-        if (routeMatches(cc.keypadIndex, route)) return true
-        return routeMatches(cc.buttonIndex?.toString(), route)
-    }
-
-    private fun counterEntityMatchesRoute(counter: CounterEntity, route: String): Boolean {
-        if (routeMatches(counter.keypadIndex, route)) return true
-        return routeMatches(counter.buttonIndex?.toString(), route)
-    }
-
-    private suspend fun resolveButtonStringValue(
-        serial: String,
-        buttonStringId: String,
-        tokenFallback: String
-    ): String? {
-        if (serial.isBlank() || buttonStringId.isBlank()) return null
-        return withContext(Dispatchers.IO) {
-            try {
-                val app = getApplication<Application>()
-                val authPrefs = app.getSharedPreferences(
-                    com.softland.callqtv.data.local.AppSharedPreferences.AUTHENTICATION,
-                    android.content.Context.MODE_PRIVATE
-                )
-                val customerId = String.format(
-                    java.util.Locale.ROOT,
-                    "%04d",
-                    authPrefs.getInt(com.softland.callqtv.utils.PreferenceHelper.customer_id, 0)
-                )
-                val macAddress = com.softland.callqtv.utils.Variables.getMacId(app)
-                val cfg = tvConfigDao.getByMacAndCustomer(macAddress, customerId) ?: return@withContext null
-                val json = cfg.keypadsJson ?: return@withContext null
-                val type = object : TypeToken<List<KeypadConfig>>() {}.type
-                val keypads: List<KeypadConfig> = gson.fromJson(json, type) ?: emptyList()
-                val keypad = keypads.firstOrNull {
-                    it.keypadSn?.trim().equals(serial.trim(), ignoreCase = true)
-                } ?: return@withContext null
-
-                val value = keypad.buttonStrings
-                    ?.firstOrNull {
-                        it.id?.trim() == buttonStringId.trim() || it.id?.trim() == tokenFallback.trim()
-                    }
-                    ?.value
-                    ?.trim()
-                value?.takeIf { it.isNotBlank() }
-            } catch (_: Exception) {
-                null
-            }
-        }
-    }
-
+    /** Marks the given MQTT payload as displayed/handled (used for throttling). */
     fun markPayloadDisplayed(payload: String) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -1934,6 +1485,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Marks a dispense button route as seen/connected and posts per-button state. */
     private fun markDispenseSeen(buttonKey: String) {
         val now = System.currentTimeMillis()
         lastDispenseSeenAtByButton[buttonKey] = now
@@ -1945,6 +1497,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         startIndicatorWatchdog()
     }
 
+    /** Marks a keypad button route as seen/connected and posts per-button state. */
     private fun markKeypadSeen(buttonKey: String) {
         val now = System.currentTimeMillis()
         lastKeypadSeenAtByButton[buttonKey] = now
@@ -1956,6 +1509,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         startIndicatorWatchdog()
     }
 
+    /** Periodically updates BLUCON header indicator flags based on last-seen timestamps. */
     private fun startIndicatorWatchdog() {
         if (indicatorWatchdogJob?.isActive == true) return
         indicatorWatchdogJob = viewModelScope.launch(Dispatchers.Default) {
@@ -1982,11 +1536,18 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Saves a detailed audit record for a token call to the local token-record repository.
+     *
+     * Extracts keypad serial from the payload and derives customer/counter fields needed for reports.
+     * Also triggers MQTT payload log sync.
+     */
     private fun saveTokenRecord(message: String, counterKey: String, token: String) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val serial = extractKeypadSerial(message)?.let { normalizeKeypadSerial(it) }
-                if (serial.isNullOrBlank() || !isRegisteredKeypadSerial(serial)) {
+                val serial = KeypadPayloadParser.extractKeypadSerial(message)
+                    ?.let { MqttCounterRouteKeys.normalizeKeypadSerial(it) }
+                if (serial.isNullOrBlank() || !keypadSerialRegistry.isRegistered(serial)) {
                     android.util.Log.d(
                         "MqttViewModel",
                         "saveTokenRecord skipped: keypad serial not registered ($serial)"
@@ -2007,7 +1568,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
                 
                 // Find counter details for ID and Name
                 val counters = AppDatabase.getInstance(app).counterDao().getByMacAndCustomer(macAddress, customerId)
-                val matchingCounter = counters.find { counterMatchesLabel(it, counterKey) }
+                val matchingCounter = counters.find { counterIdentityResolver.counterMatchesLabel(it, counterKey) }
                 
                 val counterId = matchingCounter?.counterId?.toIntOrNull() ?: 0
                 val counterName = matchingCounter?.name ?: matchingCounter?.defaultName ?: counterKey
@@ -2035,6 +1596,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Persists the raw incoming MQTT payload to local logs (for later sync). */
     private fun saveIncomingMqttPayload(payload: String) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -2107,6 +1669,11 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Forces broker reconnection when no MQTT messages have been received for too long.
+     *
+     * Uses liveness timeouts and a strike threshold to avoid aggressive reconnect loops.
+     */
     private fun forceReconnectDueToStaleTraffic(serverUri: String) {
         val details = connectionDetailsMap[serverUri] ?: return
         if (!staleReconnectInFlight.add(serverUri)) return
@@ -2159,6 +1726,11 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Writes MQTT logs with per-key throttling so repeated events don't spam the error log.
+     *
+     * [minIntervalMs] controls the minimum delay between two writes of the same [key].
+     */
     private fun logMqttToFileThrottled(
         key: String,
         tag: String,
@@ -2177,6 +1749,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Formats a raw MQTT payload into a short, log-safe preview string. */
     private fun buildMqttPayloadPreview(payload: String): String {
         if (payload.isBlank()) return "<empty>"
         val singleLine = payload
@@ -2189,6 +1762,12 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Creates a buffered channel for token UI events.
+     *
+     * When the channel is full, it drops the oldest pending event and decrements the shared
+     * announcement queue size counter.
+     */
     private fun createTokenUiChannel(name: String): Channel<TokenUiEvent> =
         Channel(
             capacity = MqttCounterRouteKeys.TOKEN_UI_CHANNEL_CAPACITY,
@@ -2205,7 +1784,32 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
             },
         )
 
+    /** Enqueues a token UI event, or buffers it in-memory until UI gating is enabled. */
     private fun enqueueTokenUiEvent(channel: Channel<TokenUiEvent>, event: TokenUiEvent) {
+        if (!uiReadyForTokenUiEvents) {
+            if (pendingTokenUiEvents.size >= MqttCounterRouteKeys.TOKEN_UI_CHANNEL_CAPACITY) {
+                pendingTokenUiEvents.poll()
+                android.util.Log.w(
+                    "MqttViewModel",
+                    "Pending token UI queue full; dropped oldest held event",
+                )
+            }
+            pendingTokenUiEvents.add(PendingTokenUiEvent(channel, event))
+            return
+        }
+        sendTokenUiEvent(channel, event)
+    }
+
+    /** Flushes all queued token UI events in FIFO order once the UI becomes ready. */
+    private fun flushPendingTokenUiEvents() {
+        while (true) {
+            val pending = pendingTokenUiEvents.poll() ?: break
+            sendTokenUiEvent(pending.channel, pending.event)
+        }
+    }
+
+    /** Sends a token UI event into the channel and tracks announcement queue size. */
+    private fun sendTokenUiEvent(channel: Channel<TokenUiEvent>, event: TokenUiEvent) {
         announcementQueueSize.incrementAndGet()
         if (!channel.trySend(event).isSuccess) {
             announcementQueueSize.decrementAndGet()
@@ -2213,6 +1817,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Builds the per-device cache scope key for routing/identity operations. */
     private fun routingCacheScope(): String {
         val app = getApplication<Application>()
         val authPrefs = app.getSharedPreferences(
@@ -2240,9 +1845,11 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         private const val MQTT_PAYLOAD_SYNC_DEBOUNCE_MS = 15_000L
     }
 
+    /** Returns whether the device is on a low-bandwidth tier (used by MQTT policies). */
     private fun isLowBandwidthNetwork(): Boolean =
         com.softland.callqtv.utils.NetworkCompat.isLowBandwidthNetwork(getApplication())
 
+    /** Returns the silence timeout used by message liveness watchdog logic. */
     private fun getMqttLivenessTimeoutMs(): Long {
         return if (isLowBandwidthNetwork()) {
             MQTT_MESSAGE_LIVENESS_TIMEOUT_MS_LOW_NETWORK
@@ -2251,6 +1858,7 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Returns the number of stale watchdog “strikes” required before forcing reconnect. */
     private fun getMqttStaleStrikeThreshold(): Int {
         return if (isLowBandwidthNetwork()) {
             MQTT_LIVENESS_STALE_STRIKES_BEFORE_RECONNECT_LOW_NETWORK
@@ -2259,6 +1867,11 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Requests a TV config refresh, debounced unless [forceImmediate] is true.
+     *
+     * When immediate, it bypasses debounce and sends a CLR-trigger-like refresh signal.
+     */
     private fun requestConfigRefresh(reason: String, forceImmediate: Boolean = false) {
         if (forceImmediate) {
             lastConfigRefreshAtMs = System.currentTimeMillis()
@@ -2296,6 +1909,8 @@ class MqttViewModel(application: Application) : AndroidViewModel(application) {
         _connectionStatusMap.postValue(emptyMap())
         _isConnectingToMqtt.postValue(false)
         announcementQueueSize.set(0)
+        uiReadyForTokenUiEvents = false
+        pendingTokenUiEvents.clear()
         viewModelScope.launch(Dispatchers.IO) {
             toClose.forEach { runCatching { it.close() } }
         }

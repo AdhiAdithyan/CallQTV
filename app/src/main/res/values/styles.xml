@@ -23,7 +23,7 @@
         <item name="android:layout_columnWeight">1</item>
         <item name="android:layout_rowWeight">1</item>
         <item name="android:layout_margin">1dp</item>
-        <item name="android:textSize">16dp</item>
+        <item name="android:textSize">16sp</item>
         <item name="android:textColor">@android:color/white</item>
         <item name="android:backgroundTint">@android:color/transparent</item>
     </style>
@@ -33,7 +33,7 @@
         <item name="android:layout_columnWeight">1</item>
         <item name="android:layout_rowWeight">1</item>
         <item name="android:layout_margin">1dp</item>
-        <item name="android:textSize">18dp</item>
+        <item name="android:textSize">18sp</item>
         <item name="android:textColor">@android:color/white</item>
         <item name="android:backgroundTint">@android:color/black</item>
     </style>
@@ -44,7 +44,7 @@
         <item name="android:layout_columnWeight">1</item>
         <item name="android:layout_rowWeight">1</item>
         <item name="android:layout_margin">5dp</item>
-        <item name="android:textSize">16dp</item>
+        <item name="android:textSize">16sp</item>
         <item name="android:textColor">@android:color/white</item>
         <item name="android:backgroundTint">@android:color/holo_red_dark</item>
     </style>
@@ -55,7 +55,7 @@
         <item name="android:layout_columnWeight">1</item>
         <item name="android:layout_rowWeight">1</item>
         <item name="android:layout_margin">5dp</item>
-        <item name="android:textSize">16dp</item>
+        <item name="android:textSize">16sp</item>
         <item name="android:textColor">@android:color/white</item>
         <item name="android:backgroundTint">@android:color/black</item>
     </style>
@@ -63,7 +63,7 @@
     <style name="ChipStyle">
         <item name="android:layout_marginEnd">1dp</item>
         <item name="android:textColor">@android:color/white</item>
-        <item name="android:textSize">12dp</item>
+        <item name="android:textSize">12sp</item>
         <item name="android:padding">5dp</item>
         <item name="android:paddingLeft">5dp</item>
         <item name="android:paddingRight">5dp</item>

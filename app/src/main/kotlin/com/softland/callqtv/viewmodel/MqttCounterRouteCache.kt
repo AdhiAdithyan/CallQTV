@@ -15,14 +15,17 @@ internal object MqttCounterRouteKeys {
     const val TOKEN_UI_CHANNEL_CAPACITY = 128
     const val CONFIG_REFRESH_CHANNEL_CAPACITY = 16
 
+    /** Normalizes keypad serial for case-insensitive cache keys. */
     fun normalizeKeypadSerial(serial: String): String =
         serial.trim().uppercase(Locale.ROOT)
 
+    /** Builds cache key from normalized serial and route index. */
     fun routeCacheKey(serial: String, routeIndex: String): String {
         val route = routeIndex.trim()
         return "${normalizeKeypadSerial(serial)}|$route"
     }
 
+    /** Builds per-device scope key so cache invalidates when context changes. */
     fun deviceScope(macAddress: String, customerId: String): String =
         "${macAddress.trim()}|${customerId.trim()}"
 }
@@ -46,17 +49,20 @@ internal class CounterRouteLookupCache<T>(
     @Volatile
     private var activeScope: String = ""
 
+    /** Clears all entries and resets active scope. */
     fun invalidate() {
         entries.clear()
         activeScope = ""
     }
 
+    /** Ensures cache entries belong to the current device scope. */
     fun ensureScope(scope: String) {
         if (scope == activeScope) return
         entries.clear()
         activeScope = scope
     }
 
+    /** Returns cached value (including cached null), or miss when absent/expired. */
     fun lookup(scope: String, key: String): RouteCacheLookup<T> {
         ensureScope(scope)
         val entry = entries[key] ?: return RouteCacheLookup.Miss
@@ -68,6 +74,7 @@ internal class CounterRouteLookupCache<T>(
         return RouteCacheLookup.Hit(entry.value)
     }
 
+    /** Stores a cached value for a scope/key pair with TTL expiry. */
     fun store(scope: String, key: String, value: T?) {
         ensureScope(scope)
         entries[key] = Entry(value, nowMs() + ttlMs)

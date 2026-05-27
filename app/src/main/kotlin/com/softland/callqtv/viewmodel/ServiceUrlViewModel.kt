@@ -15,6 +15,7 @@ class ServiceUrlViewModel(application: Application) : AndroidViewModel(applicati
     private val _serviceUrlResponse = MutableLiveData<ServiceUrlResponse?>()
     val serviceUrlResponse: LiveData<ServiceUrlResponse?> = _serviceUrlResponse
 
+    /** Retrieves service URL metadata and publishes response to observers. */
     fun fetchServiceUrl(loginUrl: String, loginId: String) {
         viewModelScope.launch {
             val response = repository.getServiceUrl(loginUrl, loginId)

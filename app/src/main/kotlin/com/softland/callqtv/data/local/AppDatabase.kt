@@ -83,7 +83,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "callqtv.db"
                 )
                     .addMigrations(MIGRATION_10_11, MIGRATION_13_14, MIGRATION_15_16, MIGRATION_16_17)
-                    .fallbackToDestructiveMigration() // For development; use proper migration in production
+                    .fallbackToDestructiveMigration(dropAllTables = true) // For development; use proper migration in production
                     .build().also { INSTANCE = it }
             }
         }

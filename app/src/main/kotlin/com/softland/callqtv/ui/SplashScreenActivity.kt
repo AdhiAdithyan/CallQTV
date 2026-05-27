@@ -191,6 +191,7 @@ class SplashScreenActivity : AppCompatActivity() {
                 }
             }
             startActivity(intent)
+            @Suppress("DEPRECATION")
             overridePendingTransition(
                 com.softland.callqtv.R.anim.fade_in,
                 com.softland.callqtv.R.anim.fade_in
@@ -206,6 +207,7 @@ class SplashScreenActivity : AppCompatActivity() {
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
         startActivity(mainIntent)
+        @Suppress("DEPRECATION")
         overridePendingTransition(
             com.softland.callqtv.R.anim.fade_in,
             com.softland.callqtv.R.anim.fade_in

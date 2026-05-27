@@ -62,4 +62,13 @@ object LicenseDateUtils {
         val days = daysUntilExpiry(raw) ?: return false
         return days >= 0
     }
+
+    /** User-facing end date for settings (matches TV clock format). */
+    fun formatLicenseEndDateForDisplay(
+        raw: String?,
+        pattern: String = "dd-MM-yyyy",
+    ): String? {
+        val end = parseLicenseEndDate(raw) ?: return null
+        return end.format(DateTimeFormatter.ofPattern(pattern, Locale.ROOT))
+    }
 }

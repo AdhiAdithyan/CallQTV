@@ -30,6 +30,7 @@ class LicenseCheckViewModel(application: Application) : AndroidViewModel(applica
         startCheck()
     }
 
+    /** Starts periodic in-app license validation checks. */
     private fun startCheck() {
         viewModelScope.launch {
             while (true) {
@@ -47,9 +48,7 @@ class LicenseCheckViewModel(application: Application) : AndroidViewModel(applica
         checkLicenseValidity(rawEnd)
     }
 
-    /**
-     * Public method matching SplashScreenActivity usage.
-     */
+    /** Evaluates raw end-date and updates remaining-days, expired flag, and compatibility flag. */
     fun checkLicenseValidity(rawEnd: String) {
         val days = LicenseDateUtils.daysUntilExpiry(rawEnd)
         if (days == null) {

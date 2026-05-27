@@ -180,7 +180,7 @@ Manifest permissions: `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, `
 
 ## 12) MQTT → UI (reference)
 
-- Incoming message → `rawMessageQueue` (max **2000**) → coroutine → `parseMqttMessage` → **`resolveCounterIdentityFromSerial`** (`CounterRouteLookupCache`, 5 min TTL) → **`tokenUpdateChannel`** / **`tokenReplaceChannel`** (capacity **128**, drop-oldest) → Compose **`collect`** + **`announcementMutex`** → chime → **`publishTokensSnapshot()`** (cue start) → TTS → next event → **`tokensPerCounter`** → **`getTokensForCounter`** in grid.
+- Incoming message → `rawMessageQueue` (max **2000**) → coroutine → **`MqttInboundPayloadRouter`** / **`MqttVerifiedMessageParser`** → **`MqttCounterIdentityResolver.resolve`** (`CounterRouteLookupCache`, 5 min TTL) → **`tokenUpdateChannel`** / **`tokenReplaceChannel`** (capacity **128**, drop-oldest) → Compose **`collect`** + **`announcementMutex`** → chime → **`publishTokensSnapshot()`** (cue start) → TTS → next event → **`tokensPerCounter`** → **`getTokensForCounter`** in grid.
 - **`configRefreshRequests`**: capacity **16**, drop-oldest; CLR uses `forceImmediate`.
 
 ---

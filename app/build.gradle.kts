@@ -105,12 +105,17 @@ android {
             manifestPlaceholders["appName"] = "CallQTV"
         }
     }
+
+    lint {
+        lintConfig = file("lint.xml")
+        warningsAsErrors = false
+    }
 }
 
 base.archivesName.set("CallQTV_v${android.defaultConfig.versionName}")
 
 dependencies {
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 
     implementation("org.jetbrains.kotlin:kotlin-stdlib:2.1.0")
 

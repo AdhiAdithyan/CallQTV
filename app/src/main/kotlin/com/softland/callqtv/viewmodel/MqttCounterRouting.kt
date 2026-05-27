@@ -17,16 +17,16 @@ internal fun findCounterEntityForMqttRoute(
 }
 
 internal fun mqttRouteMatchesButtonIndex(candidate: Int?, routeIndex: String): Boolean {
-    if (candidate == null) return false
-    val right = routeIndex.trim()
-    if (right.isBlank()) return false
-    if (candidate.toString() == right) return true
-    val rightNumber = right.toIntOrNull()
-    return rightNumber != null && candidate == rightNumber
+    return mqttRouteMatchesString(candidate?.toString(), routeIndex)
 }
 
 /** For legacy token map keys that still use `keypad_index` strings. */
 internal fun mqttRouteMatchesKeypadIndex(candidate: String?, routeIndex: String): Boolean {
+    return mqttRouteMatchesString(candidate, routeIndex)
+}
+
+/** Shared route equality for keypad_index, button_index strings, and CLR route digits. */
+internal fun mqttRouteMatchesString(candidate: String?, routeIndex: String): Boolean {
     val left = candidate?.trim().orEmpty()
     val right = routeIndex.trim()
     if (left.isBlank() || right.isBlank()) return false

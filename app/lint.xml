@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!-- Dependency versions are pinned and upgraded deliberately. -->
+    <issue id="GradleDependency" severity="ignore" />
+    <issue id="NewerVersionAvailable" severity="ignore" />
+    <issue id="OldTargetApi" severity="ignore" />
+    <issue id="KaptUsageInsteadOfKsp" severity="ignore" />
+
+    <!-- TV splash handles storage permissions before main UI; not replacing with Android 12+ system splash. -->
+    <issue id="CustomSplashScreen" severity="ignore" />
+
+    <!-- App uses broad storage / downloads export, not photo-picker partial access. -->
+    <issue id="SelectedPhotoAccess" severity="ignore" />
+
+    <!-- Required for YouTube ad WebView playback. -->
+    <issue id="SetJavaScriptEnabled" severity="ignore" />
+
+    <!-- MAC-based device registration is required by the Call-Q portal workflow. -->
+    <issue id="HardwareIds" severity="ignore" />
+
+    <!-- Legacy TLS for customer-hosted ad / config endpoints on TV hardware. -->
+    <issue id="TrustAllX509TrustManager" severity="ignore" />
+    <issue id="CustomX509TrustManager" severity="ignore" />
+
+    <!-- Legacy drawables/colors kept for XML layouts and future branding. -->
+    <issue id="UnusedResources" severity="ignore" />
+    <issue id="VectorRaster" severity="ignore" />
+
+    <!-- Prefer explicit Uri.parse / Color.parseColor for minSdk 21 clarity over KTX sugar. -->
+    <issue id="UseKtx" severity="ignore" />
+
+    <!-- Ad WebView consumes touches so TV focus stays on token UI; not a click action. -->
+    <issue id="ClickableViewAccessibility" severity="ignore" />
+
+    <!-- TV build uses densityless launcher/branding assets by design. -->
+    <issue id="IconLocation" severity="ignore" />
+    <issue id="IconDuplicates" severity="ignore" />
+</lint>

@@ -59,6 +59,7 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
     private val _state = MutableLiveData<RegistrationState>(RegistrationState.Idle)
     val state: LiveData<RegistrationState> = _state
 
+    /** Updates entered customer id and clears validation errors once length is valid. */
     fun setCustomerId(id: String) {
         _customerId.value = id
         if (id.length == 4) {
@@ -66,10 +67,12 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
+    /** Resets registration UI state back to idle. */
     fun resetState() {
         _state.value = RegistrationState.Idle
     }
 
+    /** Pushes an explicit update-available state (used by post-login checks). */
     fun presentUpdateAvailable(
         apkVersion: String,
         downloadURL: String,
@@ -84,6 +87,7 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
         )
     }
 
+    /** Executes product auth -> device registration -> status check workflow. */
     fun startRegistrationFlow() {
         if (_state.value is RegistrationState.Loading) return
 
@@ -135,6 +139,7 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
+    /** Registers the device after successful product authentication. */
     private suspend fun performDeviceRegistration(macAddress: String, customerId: Int, authRes: com.softland.callqtv.data.model.ProductAuthenticationRes) {
         _state.value = RegistrationState.Loading("Registering device...")
         try {
@@ -181,6 +186,7 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
+    /** Verifies registration status, persists auth info, and advances to update/service checks. */
     private suspend fun checkDeviceStatus(
         macAddress: String,
         customerId: Int,
@@ -242,6 +248,7 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
+    /** Retries from the most recent failed registration stage using cached API responses. */
     fun retryRegistrationFlow() {
         val macAddress = Variables.getMacId(getApplication())
         val id = _customerId.value ?: ""
@@ -261,6 +268,7 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
+    /** Fetches tenant service URL and stores it for subsequent API calls. */
     fun fetchServiceUrl(projectCode: String) {
         if (projectCode.isEmpty()) {
             _state.value = RegistrationState.NavigateToMain
@@ -293,6 +301,7 @@ class RegistrationViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
+    /** Persists registration/authentication identifiers and license metadata in preferences. */
     private fun saveAuthDetails(
         customerId: Int,
         res: com.softland.callqtv.data.model.CheckDeviceStatusResponse,

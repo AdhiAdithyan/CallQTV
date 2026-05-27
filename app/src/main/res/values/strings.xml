@@ -6,7 +6,7 @@
     <string name="app_version">v1.0.1</string>
     <string name="license_valid">License valid until %s</string>
     <string name="license_invalid">License not found</string>
-    <string name="enter_customer_id">Welcome...</string>
+    <string name="enter_customer_id">Welcome…</string>
     <string name="enter_valid_customer_id">Enter Valid Customer ID</string>
     <string name="customer_id_hint">Customer ID</string>
     <string name="check_license">Check License</string>
@@ -14,7 +14,7 @@
     <string name="contact_support_message">Contact Support</string>
     <string name="invalid_id">Invalid ID</string>
     <string name="numbers_only">Numbers Only</string>
-    <string name="search_by_order_number">Search by order number...</string>
+    <string name="search_by_order_number">Search by order number…</string>
 
     <!-- strings.xml -->
     <string name="base_url">https://webtest.softlandindia.co.in/food_flash</string>

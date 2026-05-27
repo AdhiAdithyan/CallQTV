@@ -38,7 +38,8 @@ Technical architecture, component responsibilities, MQTT semantics, and data flo
 | Class | Responsibility |
 |-------|----------------|
 | `TokenDisplayViewModel` | Cache-first `loadData`, ads, `configRefreshRequests` consumer; `forceImmediate` bypasses 30s MQTT refresh throttle when true |
-| `MqttViewModel` | Multi-broker MQTT, validation, `parseMqttMessage`, CLR, `TokenUiProcessResult`, bounded token channels (128), `resolveCounterIdentityFromSerial` + route cache |
+| `MqttViewModel` | Multi-broker lifecycle, token map, channels, `TokenUiProcessResult`; delegates parse/route/CLR to `viewmodel/mqtt/*` |
+| `mqtt/*` helpers | `MqttInboundPayloadRouter`, `MqttVerifiedMessageParser`, `MqttCounterIdentityResolver`, `MqttClrTokenOperations`, `MqttKeypadSerialRegistry` |
 | `MqttCounterRouteCache.kt` | `CounterRouteLookupCache`, `MqttCounterRouteKeys`, `ResolvedCounterIdentity` |
 | `MqttCounterRouting.kt` | `findCounterEntityForMqttRoute` (button_index, then keypad_index) |
 | `KeypadPayloadParser` | Serial extraction (fixed, CLR, short wrapper) |
@@ -102,10 +103,10 @@ Main surface: counter grid, ads, scrolling footer, overlays (reconnect, pending 
 ```
 MqttClientManager.onMessageReceived
   → rawMessageQueue (bounded)
-  → Default dispatcher: validate serial, CLR, parseMqttMessage
+  → Default dispatcher: `MqttInboundPayloadRouter` → CLR / refresh / `MqttVerifiedMessageParser`
   → SemanticMqttParser
   → tokenUpdateChannel | tokenReplaceChannel (bounded 128, drop-oldest if UI lags)
-  → resolveCounterIdentityFromSerial (CounterRouteLookupCache, else Room on IO)
+  → `MqttCounterIdentityResolver.resolve` (CounterRouteLookupCache, else Room on IO)
   → TokenDisplayScreen LaunchedEffect (announcementMutex)
   → resolveCounterIdentityFromSerial(keypad SN; CLR may use route-before-CLR)
   → findCounterEntityForMqttRoute (button_index, then keypad_index)
@@ -167,6 +168,10 @@ If route does not match any `counters[]` row, clear **all** counters under that 
 - User changes theme/counter/token hex in `PresetColorDialog` → `ThemePrefs` → `MaterialTheme` / brushes / footer strip update.
 - `getBackgroundBrush` (vertical) for counters/tokens; `getTickerStripBackgroundBrush` (horizontal) for footer.
 - Footer **`SeamlessTickerView`**: continuous marquee (no loop pause). Counter **`CounterNameTickerView`**: 3s pause at loop start for readability.
+- Settings dialog TV-focus orchestration:
+  - First actionable content control is focused per tab (not default `Close`)
+  - Portal + Help details use explicit focusable tiles with focus ring
+  - Details grids use adaptive columns (`GridCells.Adaptive(minSize = 220.dp)`) so large screens show 3+ columns when space allows
 
 ---
 

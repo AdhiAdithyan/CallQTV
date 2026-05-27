@@ -47,6 +47,12 @@ import com.softland.callqtv.utils.KeyboardUtils
 import com.softland.callqtv.utils.NetworkUtil
 import com.softland.callqtv.utils.PreferenceHelper
 import com.softland.callqtv.utils.StoragePermissionHelper
+import com.softland.callqtv.ui.settings.AppearanceSettingsLauncher
+import com.softland.callqtv.ui.settings.SettingsIconButton
+import com.softland.callqtv.ui.settings.RegistrationStatusDialog
+import com.softland.callqtv.utils.LicenseDateUtils
+import com.softland.callqtv.utils.TokenBlinkMode
+import com.softland.callqtv.ui.theme.CallQtvOverlayColors
 import com.softland.callqtv.utils.ThemeColorManager
 import com.softland.callqtv.utils.Variables
 import com.softland.callqtv.viewmodel.DownloadViewModel
@@ -133,7 +139,13 @@ class CustomerIdActivity : AppCompatActivity() {
                 }
             }
             val colorScheme = ThemeColorManager.createDarkColorScheme(currentThemeColor)
-            var showThemeDialog by remember { mutableStateOf(false) }
+            var showSettingsDialog by remember { mutableStateOf(false) }
+            var tokenBlinkMode by remember {
+                mutableStateOf(ThemeColorManager.getTokenBlinkMode(this@CustomerIdActivity))
+            }
+            val daysUntilExpiry = remember(licenseEnd) {
+                LicenseDateUtils.daysUntilExpiry(licenseEnd)
+            }
 
             MaterialTheme(colorScheme = colorScheme) {
                 val customerId by registrationViewModel.customerId.observeAsState("")
@@ -162,7 +174,6 @@ class CustomerIdActivity : AppCompatActivity() {
                     isChecking = registrationState is RegistrationState.Loading,
                     appVersionText = getString(R.string.app_version),
                     isTv = isTv,
-                    isFirstInstall = custId == 0, // Only true on first install
                     deviceId = deviceId,
                     isNetworkAvailable = isNetworkAvailable,
                     onCustomerIdChange = { registrationViewModel.setCustomerId(it) },
@@ -170,22 +181,34 @@ class CustomerIdActivity : AppCompatActivity() {
                         KeyboardUtils.hideKeyboard(this)
                         registrationViewModel.startRegistrationFlow()
                     },
-                    onThemeChangeClick = { showThemeDialog = true }
+                    onSettingsClick = { showSettingsDialog = true },
                 )
 
                 HandleRegistrationState(registrationState, deviceId)
 
-                if (showThemeDialog) {
-                    ThemeSelectionComposeDialog(
-                        onDismiss = { showThemeDialog = false },
-                        onThemeSelected = { hexCode ->
-                            ThemeColorManager.setThemeColor(this@CustomerIdActivity, hexCode)
-                            // Update reactive state, avoids disruptive activity recreation
-                            currentThemeColor = ThemeColorManager.getSelectedThemeColor(this@CustomerIdActivity)
-                            showThemeDialog = false
-                        }
-                    )
-                }
+                AppearanceSettingsLauncher(
+                    visible = showSettingsDialog,
+                    context = LocalContext.current,
+                    macAddress = deviceId,
+                    appVersion = getString(R.string.app_version),
+                    companyName = "CallQ TV",
+                    onDismiss = { showSettingsDialog = false },
+                    onThemeSelected = { hexCode ->
+                        ThemeColorManager.setThemeColor(this@CustomerIdActivity, hexCode)
+                        currentThemeColor = ThemeColorManager.getSelectedThemeColor(this@CustomerIdActivity)
+                    },
+                    onCounterBgChange = { hexCode ->
+                        ThemeColorManager.setCounterBackgroundColor(this@CustomerIdActivity, hexCode)
+                    },
+                    onTokenBgChange = { hexCode ->
+                        ThemeColorManager.setTokenBackgroundColor(this@CustomerIdActivity, hexCode)
+                    },
+                    onClearTokenHistoryAndRefresh = {},
+                    tokenBlinkMode = tokenBlinkMode,
+                    onTokenBlinkModeChange = { tokenBlinkMode = it },
+                    tvConfig = null,
+                    daysUntilExpiry = daysUntilExpiry,
+                )
             }
         }
         
@@ -219,144 +242,69 @@ class CustomerIdActivity : AppCompatActivity() {
                 AnimatedLoadingOverlay(message = state.message, isVisible = true)
             }
             is RegistrationState.Error -> {
-                AlertDialog(
-                    modifier = Modifier.widthIn(min = 280.dp, max = 900.dp),
+                RegistrationStatusDialog(
+                    title = "Device License Registration error",
+                    message = state.message,
+                    deviceId = deviceId,
+                    confirmLabel = "Retry",
+                    onConfirm = { registrationViewModel.retryRegistrationFlow() },
+                    dismissLabel = "Close",
+                    onDismiss = { registrationViewModel.resetState() },
                     onDismissRequest = { registrationViewModel.resetState() },
-                    properties = DialogProperties(usePlatformDefaultWidth = false),
-                    title = { Text("Device License Registration error") },
-                    text = {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = state.message,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Device ID: $deviceId",
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { registrationViewModel.retryRegistrationFlow() }) { Text("Retry") }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { registrationViewModel.resetState() }) { Text("Close") }
-                    }
                 )
             }
             is RegistrationState.ProductAuthRequired -> {
-                AlertDialog(
-                    modifier = Modifier.widthIn(min = 280.dp, max = 900.dp),
+                RegistrationStatusDialog(
+                    title = "License status",
+                    message = state.status,
+                    deviceId = deviceId,
+                    confirmLabel = "Refresh",
+                    onConfirm = { registrationViewModel.startRegistrationFlow() },
+                    dismissLabel = "Cancel",
+                    onDismiss = { registrationViewModel.resetState() },
                     onDismissRequest = { registrationViewModel.resetState() },
-                    properties = DialogProperties(usePlatformDefaultWidth = false),
-                    title = { Text("License status") },
-                    text = {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = state.status,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Device ID: $deviceId",
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { registrationViewModel.startRegistrationFlow() }) { Text("Refresh") }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { registrationViewModel.resetState() }) { Text("Cancel") }
-                    }
                 )
             }
             is RegistrationState.DeviceApprovalRequired -> {
-                AlertDialog(
-                    modifier = Modifier.widthIn(min = 280.dp, max = 900.dp),
+                RegistrationStatusDialog(
+                    title = "Device approval required",
+                    message = state.status,
+                    deviceId = deviceId,
+                    confirmLabel = "Refresh",
+                    onConfirm = { registrationViewModel.startRegistrationFlow() },
+                    dismissLabel = "Cancel",
+                    onDismiss = { registrationViewModel.resetState() },
                     onDismissRequest = { registrationViewModel.resetState() },
-                    properties = DialogProperties(usePlatformDefaultWidth = false),
-                    title = { Text("Device approval required") },
-                    text = {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = state.status,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Device ID: $deviceId",
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { registrationViewModel.startRegistrationFlow() }) { Text("Refresh") }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { registrationViewModel.resetState() }) { Text("Cancel") }
-                    }
                 )
             }
             is RegistrationState.LicenseExpired -> {
-                AlertDialog(
-                    modifier = Modifier.widthIn(min = 280.dp, max = 900.dp),
+                RegistrationStatusDialog(
+                    title = "License expired",
+                    message = state.status,
+                    deviceId = deviceId,
+                    confirmLabel = "Refresh",
+                    onConfirm = { registrationViewModel.startRegistrationFlow() },
+                    dismissLabel = "Cancel",
+                    onDismiss = { registrationViewModel.resetState() },
                     onDismissRequest = { registrationViewModel.resetState() },
-                    properties = DialogProperties(usePlatformDefaultWidth = false),
-                    title = { Text("License expired") },
-                    text = {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = state.status,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Device ID: $deviceId",
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { registrationViewModel.startRegistrationFlow() }) { Text("Refresh") }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { registrationViewModel.resetState() }) { Text("Cancel") }
-                    }
                 )
             }
             is RegistrationState.UpdateAvailable -> {
-                AlertDialog(
-                    modifier = Modifier.widthIn(min = 280.dp, max = 900.dp),
+                RegistrationStatusDialog(
+                    title = "Update available",
+                    message = "A new version is available. Please update to continue.",
+                    deviceId = deviceId,
+                    confirmLabel = "Update",
+                    onConfirm = {
+                        downloadViewModel.downloadApk(this, state.downloadURL, state.apkVersion)
+                    },
+                    dismissLabel = if (state.isMandatoryUpdate == 0) "Later" else null,
+                    onDismiss = if (state.isMandatoryUpdate == 0) {
+                        { registrationViewModel.fetchServiceUrl(state.projectCode) }
+                    } else {
+                        null
+                    },
                     onDismissRequest = { },
-                    properties = DialogProperties(usePlatformDefaultWidth = false),
-                    title = { Text("Update available") },
-                    text = {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = "A new version is available. Please update to continue.",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Device ID: $deviceId",
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            downloadViewModel.downloadApk(this, state.downloadURL, state.apkVersion)
-                        }) { Text("Update") }
-                    },
-                    dismissButton = if (state.isMandatoryUpdate == 0) {
-                        {
-                            TextButton(onClick = {
-                                registrationViewModel.fetchServiceUrl(state.projectCode)
-                            }) { Text("Later") }
-                        }
-                    } else null
                 )
             }
             is RegistrationState.NavigateToMain -> {
@@ -456,12 +404,11 @@ private fun CustomerIdScreen(
     isChecking: Boolean,
     appVersionText: String,
     isTv: Boolean,
-    isFirstInstall: Boolean,
     deviceId: String,
     isNetworkAvailable: Boolean,
     onCustomerIdChange: (String) -> Unit,
     onCheckLicenseClick: () -> Unit,
-    onThemeChangeClick: () -> Unit
+    onSettingsClick: () -> Unit,
 ) {
     var localCustomerId by rememberSaveable { mutableStateOf(customerId) }
 
@@ -496,7 +443,7 @@ private fun CustomerIdScreen(
         val bgIntensity = remember { ThemeColorManager.getBackgroundIntensity(context) }
         val backgroundBrush = Brush.verticalGradient(
             colors = listOf(
-                ComposeColor(0xFF121212),
+                CallQtvOverlayColors.ScreenBackground,
                 primary.copy(alpha = bgIntensity)
             )
         )
@@ -510,6 +457,15 @@ private fun CustomerIdScreen(
             val networkIconSize = if (isTv) (28.dp * scale).coerceAtLeast(20.dp) else 24.dp
             val networkIconRes = if (isNetworkAvailable) R.drawable.ic_network_available else R.drawable.ic_network_unavailable
             val networkIconColor = if (isNetworkAvailable) ComposeColor(0xFF2E7D32) else ComposeColor(0xFFB71C1C)
+            SettingsIconButton(
+                onClick = onSettingsClick,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(top = 4.dp, start = 4.dp),
+                size = networkIconSize,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -561,7 +517,7 @@ private fun CustomerIdScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(maxContentWidthFraction),
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = ComposeColor(0xFF121212)),
+                    colors = CardDefaults.cardColors(containerColor = CallQtvOverlayColors.ScreenBackground),
                     elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                 ) {
                     val digitStates = remember {
@@ -691,76 +647,17 @@ private fun CustomerIdScreen(
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
                 )
 
-                if (isTv && isFirstInstall) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(onClick = onThemeChangeClick, shape = RoundedCornerShape(10.dp)) {
-                        Text(text = "Change Theme")
-                    }
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedButton(onClick = onSettingsClick, shape = RoundedCornerShape(10.dp)) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_settings),
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = "Display & audio settings")
                 }
             }
         }
     }
-}
-
-@Composable
-private fun ThemeSelectionComposeDialog(
-    onDismiss: () -> Unit,
-    onThemeSelected: (String) -> Unit
-) {
-    val context = LocalContext.current
-    val currentHex = remember { ThemeColorManager.getSelectedThemeColorHex(context) }
-    val options = ThemeColorManager.themeColorOptions
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Select Theme Color") },
-        text = {
-            // Use a scrollable grid to handle many color options on TV screens
-            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-                columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
-                modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp),
-                contentPadding = PaddingValues(8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(options.size) { index ->
-                    val option = options[index]
-                    val isSelected = option.hexCode == currentHex
-                    val optionColor = ComposeColor(android.graphics.Color.parseColor(option.hexCode))
-
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onThemeSelected(option.hexCode) },
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .background(optionColor, androidx.compose.foundation.shape.CircleShape)
-                            )
-                            Text(
-                                text = option.name,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    )
 }
